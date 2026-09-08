@@ -189,6 +189,27 @@ function getUserByUsername(username) {
   return db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username) || null;
 }
 
+function listPlayers(search = '', limit = 50) {
+  const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 50)));
+  const term = String(search || '').trim().slice(0, 20);
+  const escaped = term.replace(/[\\%_]/g, '\\$&');
+  const rows = db.prepare(`
+    SELECT id, username, rating, wins, losses, draws
+    FROM users
+    WHERE username LIKE ? ESCAPE '\\'
+    ORDER BY rating DESC, username ASC
+    LIMIT ?
+  `).all('%' + escaped + '%', boundedLimit);
+  return rows.map((row) => ({
+    id: row.id,
+    username: row.username,
+    rating: Math.round(row.rating),
+    wins: row.wins,
+    losses: row.losses,
+    draws: row.draws,
+  }));
+}
+
 function verifyCredentials(username, password) {
   if (typeof username !== 'string' || typeof password !== 'string') return null;
   const u = getUserByUsername(username);
@@ -376,6 +397,7 @@ module.exports = {
   createUser,
   getUserById,
   getUserByUsername,
+  listPlayers,
   verifyCredentials,
   createSession,
   getSessionUser,

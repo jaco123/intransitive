@@ -267,8 +267,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 .sq.goal-red { background-image: linear-gradient(rgba(239, 106, 106, 0.55), rgba(239, 106, 106, 0.55)); }
 .sq.drag-source { background-image: linear-gradient(rgba(100, 150, 100, 0.38), rgba(100, 150, 100, 0.38)); }
 
-.piece { width: 82%; height: 82%; position: relative; cursor: grab; z-index: 2; }
-.piece:active { cursor: grabbing; }
+.piece { width: 82%; height: 82%; position: relative; cursor: default; z-index: 2; }
 .piece svg { width: 100%; height: 100%; display: block; }
 
 .coord-file {
@@ -492,8 +491,8 @@ h1 span { color: var(--muted); font-weight: 400; }
 --------------------------------------------------------------------------- */
 #nav {
   background: linear-gradient(to bottom, hsl(37, 9%, 25%), var(--c-bg-page));
-  border-bottom: 1px solid var(--c-border);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  border-bottom: none;
+  box-shadow: none;
 }
 .nav-inner {
   max-width: 1400px;
@@ -625,18 +624,39 @@ h1 span { color: var(--muted); font-weight: 400; }
 .checkbox-label input { width: 16px; height: 16px; accent-color: var(--primary); }
 .position-preview { width: min(100%, 250px); margin-top: var(--s3); }
 .position-preview .board { box-shadow: 0 3px 12px rgba(0, 0, 0, .35); }
-#editor .players-col { width: min(calc(100vh - 230px), 600px); }
+#editor .players-col { width: min(calc(100vh - 310px), 500px); }
+#editor .screen-head { justify-content: flex-start; margin-bottom: 8px; }
 #editor .board-wrap { flex-direction: column; }
 #editor .board { order: 2; }
 #editor #editorPaletteTop { order: 1; }
 #editor #editorPaletteBottom { order: 3; }
-#editor .actions { flex-direction: column; width: 100%; }
-#editor .actions .btn { flex: none; width: 100%; border: 0; border-color: transparent; outline: 0; }
-#editor .side > .btn { border: 0; border-color: transparent; outline: 0; }
+#editor .side { gap: 8px; }
+#editor .actions { flex-direction: column; width: 100%; margin-top: 0; gap: 8px; }
+#editor .actions .btn, #editor .side > .btn { flex: none; width: 100%; border: 0; border-color: transparent; outline: 0; background: transparent; text-align: left; padding: 8px 4px; }
 #editor .actions .btn:focus-visible, #editor > .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #editor .side > .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-#editor #editorToAnalysis { background: var(--surface-3); }
-#editor #editorToAnalysis:hover { background: #3f3d39; }
+#editor .actions .btn:hover, #editor .side > .btn:hover { background: var(--surface-3); }
+#editor #editorToAnalysis { background: transparent; }
+#editor #editorToAnalysis:hover { background: var(--surface-3); }
+
+.home-featured, .directory-panel { max-width: 920px; margin: var(--s4) auto 0; }
+.directory-panel { background: var(--surface); border-radius: var(--r-md); padding: var(--s5); }
+.directory-panel h2 { margin: 0 0 var(--s3); color: var(--text-bright); font-size: 20px; }
+.watch-list, .players-list { display: flex; flex-direction: column; gap: var(--s2); }
+.watch-game { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
+.watch-game:hover, .watch-game:focus-visible { background: var(--surface-3); color: var(--text-bright); }
+.watch-game-players { font-weight: 600; }
+.watch-game-status { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.directory-rating { color: var(--muted); font-family: var(--font-mono); font-size: 12px; margin-left: 4px; }
+.featured-label { display: block; color: var(--muted); font-size: 13px; margin-bottom: var(--s2); }
+.featured-game-button { border-color: var(--primary); }
+.player-directory-row { display: grid; grid-template-columns: 1fr 70px 100px; gap: var(--s3); padding: 10px 12px; background: var(--surface-2); border-radius: var(--r-sm); }
+.player-directory-name { color: var(--text-bright); font-weight: 600; }
+.player-record { color: var(--muted); font-size: 12px; text-align: right; }
+
+@media (min-width: 1000px) {
+  #home { width: 100%; max-width: none; }
+}
 
 /* ---------------------------------------------------------------------------
    History list

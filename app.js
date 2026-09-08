@@ -12,6 +12,8 @@
   const historyEl = $('history');
   const replayEl = $('replay');
   const editorEl = $('editor');
+  const watchEl = $('watch');
+  const playersEl = $('players');
 
   // Nav
   const navGuestEl = $('navGuest');
@@ -23,6 +25,8 @@
   const analysisBtn = $('analysisBtn');
   const editorBtn = $('editorBtn');
   const playBtn = $('playBtn');
+  const watchBtn = $('watchBtn');
+  const playersBtn = $('playersBtn');
 
   // Auth modal
   const authModalEl = $('authModal');
@@ -102,6 +106,15 @@
   const gameMoveNavEl = $('gameMoveNav');
   const replayMoveNavEl = $('replayMoveNav');
   const replayMoveSettingsEl = $('replayMoveSettings');
+  const watchBackEl = $('watchBack');
+  const watchListEl = $('watchList');
+  const watchEmptyEl = $('watchEmpty');
+  const featuredGameEl = $('featuredGame');
+  const homeFeaturedGameEl = $('homeFeaturedGame');
+  const playersBackEl = $('playersBack');
+  const playersSearchEl = $('playersSearch');
+  const playersListEl = $('playersList');
+  const playersEmptyEl = $('playersEmpty');
 
   // Queue & explorer
   const queueBtn = $('queueBtn');
@@ -173,6 +186,8 @@
   let explorerArrows = [];   // board arrows drawn on the analysis board
   let arrowDrag = null;      // in-progress right-click-drag arrow
   let queueStatusTimer = null;
+  let activeGamesTimer = null;
+  let playersSearchTimer = null;
 
   let explorer = {        // analysis / opening explorer state
     baseBoard: null,      // custom start board (null = standard initial position)
@@ -941,7 +956,13 @@
         if (config.canStartEmpty && config.canStartEmpty(sq, e)) beginPieceDrag(config, sq, null, null, e, 'square');
         return;
       }
-      if (!config.canStart(piece, sq, e)) return;
+      if (!config.canStart(piece, sq, e)) {
+        if (config.canClickTarget && config.canClickTarget(sq, piece, e)) {
+          beginPieceDrag(config, sq, piece,
+            config.boardEl.querySelector(`.sq[data-c="${sq.c}"][data-r="${sq.r}"]`), e, 'target');
+        }
+        return;
+      }
     beginPieceDrag(config, sq, piece, config.boardEl.querySelector(`.sq[data-c="${sq.c}"][data-r="${sq.r}"]`), e, 'board');
       if (config.onStart) config.onStart(sq, piece);
     });
@@ -1202,9 +1223,89 @@
   // ---------------------------------------------------------------------------
   // UI helpers
   // ---------------------------------------------------------------------------
+  function activePlayerLabel(player) {
+    if (!player) return 'Waiting for player';
+    return escapeHtml(player.name) + (player.rating == null ? '' : ' <span class="directory-rating">' + player.rating + '</span>');
+  }
+
+  function activeGameButton(game, featured = false) {
+    const label = (game.players.blue && game.players.blue.name || 'Blue') + ' vs ' + (game.players.red && game.players.red.name || 'Red');
+    return '<button type="button" class="watch-game' + (featured ? ' featured-game-button' : '') + '" data-game-id="' + escapeHtml(game.id) + '" aria-label="Watch ' + escapeHtml(label) + '">' +
+      '<span class="watch-game-players"><span>' + activePlayerLabel(game.players.blue) + '</span><span> vs </span><span>' + activePlayerLabel(game.players.red) + '</span></span>' +
+      '<span class="watch-game-status">' + (game.status === 'playing' ? 'Playing' : 'Waiting') + (game.rated ? ' · Rated' : ' · Casual') + '</span>' +
+      '</button>';
+  }
+
+  function renderActiveGames(data) {
+    const games = Array.isArray(data.games) ? data.games : [];
+    watchListEl.innerHTML = games.map((game) => activeGameButton(game)).join('');
+    watchEmptyEl.classList.toggle('hidden', games.length > 0);
+    if (data.featured) {
+      featuredGameEl.innerHTML = '<span class="featured-label">Highest-rated ongoing game</span>' + activeGameButton(data.featured, true);
+      featuredGameEl.classList.remove('hidden');
+      homeFeaturedGameEl.innerHTML = '<span class="featured-label">Highest-rated ongoing game</span>' + activeGameButton(data.featured, true);
+      homeFeaturedGameEl.classList.remove('hidden');
+    } else {
+      featuredGameEl.classList.add('hidden');
+      homeFeaturedGameEl.classList.add('hidden');
+      homeFeaturedGameEl.innerHTML = '';
+    }
+  }
+
+  async function refreshActiveGames() {
+    try {
+      const response = await fetch('/api/watch', { cache: 'no-store' });
+      if (response.ok) renderActiveGames(await response.json());
+    } catch (e) { /* transient directory failures do not interrupt the game UI */ }
+  }
+
+  function startActiveGamesRefresh() {
+    clearInterval(activeGamesTimer);
+    refreshActiveGames();
+    activeGamesTimer = setInterval(refreshActiveGames, 5000);
+  }
+
+  function stopActiveGamesRefresh() {
+    clearInterval(activeGamesTimer);
+    activeGamesTimer = null;
+  }
+
+  function spectateGame(id) {
+    if (!id) return;
+    clearTimeout(reconnectTimer);
+    if (ws) ws.close();
+    ws = null;
+    gameId = null;
+    myToken = null;
+    myColor = null;
+    state = null;
+    pending = { type: 'spectate', gameId: id };
+    history.pushState({ rpsScreen: 'game' }, '', '?spectate=' + encodeURIComponent(id));
+    showGame();
+    gameStatusEl.textContent = 'Connecting…';
+    connect();
+  }
+
+  function renderPlayersDirectory(players) {
+    playersListEl.innerHTML = players.map((player) =>
+      '<div class="player-directory-row"><span class="player-directory-name">' + escapeHtml(player.username) + '</span>' +
+      '<span class="directory-rating">' + player.rating + '</span><span class="player-record">' + player.wins + 'W ' + player.losses + 'L ' + player.draws + 'D</span></div>'
+    ).join('');
+    playersEmptyEl.classList.toggle('hidden', players.length > 0);
+  }
+
+  async function refreshPlayers(search = '') {
+    try {
+      const response = await fetch('/api/players?search=' + encodeURIComponent(search), { cache: 'no-store' });
+      if (response.ok) renderPlayersDirectory((await response.json()).players || []);
+    } catch (e) { /* keep the last directory state on a transient network failure */ }
+  }
+
   function showScreen(el) {
-    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl].forEach((s) => s.classList.add('hidden'));
+    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl, watchEl, playersEl].forEach((s) => s.classList.add('hidden'));
     el.classList.remove('hidden');
+    if (el === homeEl || el === watchEl) startActiveGamesRefresh();
+    else stopActiveGamesRefresh();
   }
 
   function showGame() {
@@ -2238,12 +2339,32 @@
   // Analysis (opening explorer) + board editor events
   analysisBtn.addEventListener('click', () => openAnalysis(null, 'blue'));
   editorBtn.addEventListener('click', () => openEditor());
+  watchBtn.addEventListener('click', () => {
+    history.pushState({ rpsScreen: 'watch' }, '', '?view=watch');
+    showScreen(watchEl);
+    refreshActiveGames();
+  });
+  playersBtn.addEventListener('click', () => {
+    history.pushState({ rpsScreen: 'players' }, '', '?view=players');
+    showScreen(playersEl);
+    refreshPlayers(playersSearchEl.value);
+  });
   playBtn.addEventListener('click', () => {
     history.pushState({ rpsScreen: 'home' }, '', '?');
     showHome();
   });
 
   explorerBackEl.addEventListener('click', () => showHome());
+  watchBackEl.addEventListener('click', () => showHome());
+  playersBackEl.addEventListener('click', () => showHome());
+  [watchListEl, featuredGameEl, homeFeaturedGameEl].forEach((root) => root.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-game-id]');
+    if (button) spectateGame(button.dataset.gameId);
+  }));
+  playersSearchEl.addEventListener('input', () => {
+    clearTimeout(playersSearchTimer);
+    playersSearchTimer = setTimeout(() => refreshPlayers(playersSearchEl.value), 180);
+  });
   explorerPathMovesEl.addEventListener('click', (e) => {
     const s = e.target.closest('.move[data-step]');
     if (!s) return;
@@ -2295,6 +2416,7 @@
     orientationFn: () => myColor || 'blue',
     getPiece: (sq) => state && state.board[sq.r][sq.c],
     canStart: (piece) => !!state && state.status === 'playing' && !state.spectating && piece.color === myColor && (canMoveNow() || premoveAllowed()),
+    canClickTarget: () => !!selected || !!premove,
     canStartEmpty: () => !!state && state.status === 'playing' && !state.spectating && (canMoveNow() || premoveAllowed()),
     getWasSelected: (sq) => !!(selected && selected.c === sq.c && selected.r === sq.r),
     onClick: (sq, piece, sourceKind, wasSelected) => handleClick(sq.c, sq.r, sq.c, sq.r, wasSelected),
@@ -2387,6 +2509,8 @@
   window.addEventListener('popstate', (e) => {
     if (e.state && e.state.rpsScreen === 'editor') openEditor(false);
     else if (e.state && e.state.rpsScreen === 'analysis') openAnalysis(null, 'blue', false);
+    else if (e.state && e.state.rpsScreen === 'watch') { showScreen(watchEl); refreshActiveGames(); }
+    else if (e.state && e.state.rpsScreen === 'players') { showScreen(playersEl); refreshPlayers(playersSearchEl.value); }
     else showHome();
   });
 
@@ -2426,6 +2550,13 @@
       connect();
     } else if (view === 'editor') {
       openEditor(false);
+      connect();
+    } else if (view === 'watch') {
+      showScreen(watchEl);
+      connect();
+    } else if (view === 'players') {
+      showScreen(playersEl);
+      refreshPlayers('');
       connect();
     } else {
       showHome();

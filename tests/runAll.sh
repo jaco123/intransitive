@@ -30,6 +30,12 @@ if ! node "$project_dir/tests/latest-ui.js"; then
   failed=1
 fi
 
+printf '\n===== latest UI2 directory/capture regression test =====\n'
+if ! node "$project_dir/tests/latest-ui2.js"; then
+  printf 'FAILED: latest UI2 directory/capture regression test\n'
+  failed=1
+fi
+
 printf '\n===== live deployment browser test =====\n'
 if ! node "$project_dir/tests/live-deployment.js"; then
   printf 'FAILED: live deployment browser test\n'

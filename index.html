@@ -17,6 +17,8 @@
           <button id="playBtn" class="nav-link-btn">Play</button>
           <button id="analysisBtn" class="nav-link-btn">Analysis</button>
           <button id="editorBtn" class="nav-link-btn">Board editor</button>
+          <button id="watchBtn" class="nav-link-btn">Watch</button>
+          <button id="playersBtn" class="nav-link-btn">Players</button>
         </nav>
       </div>
       <div id="navAuth">
@@ -138,6 +140,35 @@
         <div class="lobby__counters"><span id="lobbyCount" class="lobby-count"></span></div>
       </div>
     </main>
+    <section id="homeFeaturedGame" class="home-featured hidden" aria-label="Featured ongoing game"></section>
+  </div>
+
+  <!-- Active games -->
+  <div id="watch" class="screen hidden">
+    <div class="screen-head">
+      <button id="watchBack" class="btn small">‹ Back</button>
+      <h1>Watch</h1>
+    </div>
+    <section class="directory-panel">
+      <h2>Active games</h2>
+      <div id="featuredGame" class="featured-game hidden"></div>
+      <div id="watchList" class="watch-list"></div>
+      <p id="watchEmpty" class="history-empty">No active games right now.</p>
+    </section>
+  </div>
+
+  <!-- Players -->
+  <div id="players" class="screen hidden">
+    <div class="screen-head">
+      <button id="playersBack" class="btn small">‹ Back</button>
+      <h1>Players</h1>
+    </div>
+    <section class="directory-panel">
+      <label class="field-label" for="playersSearch">Search players</label>
+      <input id="playersSearch" class="input" type="search" placeholder="Username" autocomplete="off" />
+      <div id="playersList" class="players-list"></div>
+      <p id="playersEmpty" class="history-empty hidden">No players found.</p>
+    </section>
   </div>
 
   <!-- Game -->

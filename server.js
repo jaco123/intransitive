@@ -840,6 +840,41 @@ function broadcastLobby() {
   for (const c of clients) send(c, msg);
 }
 
+function activeGameInfo(g) {
+  return {
+    id: g.id,
+    status: g.status,
+    rated: !!g.rated,
+    casual: !!g.casual,
+    createdAt: g.createdAt,
+    players: {
+      blue: playerInfo(g, 'blue'),
+      red: playerInfo(g, 'red'),
+    },
+    spectators: g.spectators.size,
+  };
+}
+
+function activeGames() {
+  return Array.from(games.values())
+    .filter((g) => g.status === 'waiting' || g.status === 'playing')
+    .sort((a, b) => (b.createdAt - a.createdAt) || a.id.localeCompare(b.id))
+    .slice(0, 100)
+    .map(activeGameInfo);
+}
+
+function featuredGame() {
+  const playing = Array.from(games.values()).filter((g) => g.status === 'playing');
+  playing.sort((a, b) => {
+    const rating = (g) => Math.max(...['blue', 'red'].map((color) => {
+      const value = g[color] && g[color].rating;
+      return Number.isFinite(value) ? value : -1;
+    }));
+    return (rating(b) - rating(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id);
+  });
+  return playing[0] ? activeGameInfo(playing[0]) : null;
+}
+
 // ---------------------------------------------------------------------------
 // Public chat
 // ---------------------------------------------------------------------------
@@ -1044,6 +1079,17 @@ async function handleApi(req, res, urlPath, query) {
         return;
       }
       sendJson(res, 200, { user: db.publicUser(user) });
+      return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/watch') {
+      sendJson(res, 200, { games: activeGames(), featured: featuredGame() });
+      return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/players') {
+      const search = query ? query.get('search') || '' : '';
+      sendJson(res, 200, { players: db.listPlayers(search, 50) });
       return;
     }
 
