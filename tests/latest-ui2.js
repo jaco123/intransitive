@@ -105,6 +105,11 @@ async function createCustomCaptureGame(page, joinPage) {
       assert.strictEqual(await gamePage.locator('#board .sq[data-c="2"][data-r="4"] .piece[data-color="blue"]').count(), 1, 'capture should move the blue piece onto target');
     } catch (error) { failures.push('normal click capture/cursor: ' + error.message); }
 
+    const activeCreator = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    const activeOpponent = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+    try { await joinCreatedGame(activeCreator, activeOpponent); }
+    catch (error) { failures.push('active game setup for Watch: ' + error.message); }
+
     try {
       assert.strictEqual(await page.getByRole('button', { name: /Highest-rated|Ongoing game|Watch/i }).count() > 0, true,
         'home should expose a clickable highest-rated ongoing game');
@@ -114,11 +119,16 @@ async function createCustomCaptureGame(page, joinPage) {
       await page.getByRole('button', { name: 'Watch', exact: true }).click();
       await page.getByRole('heading', { name: 'Watch', exact: true }).waitFor();
       assert.strictEqual(await page.locator('link[rel="icon"]').count(), 1, 'Watch should retain the favicon');
-      assert.ok(await page.locator('[data-game-id], .active-game, .watch-game').count() > 0, 'Watch should list active games');
-      await page.locator('[data-game-id], .active-game, .watch-game').first().click();
+      assert.ok(await page.locator('#watch [data-game-id]').count() > 0, 'Watch should list active games');
+      const activeGameId = new URL(activeCreator.url()).searchParams.get('game');
+      await page.locator('#watch [data-game-id="' + activeGameId + '"]').click();
       await page.locator('#game').waitFor();
       assert.strictEqual(await page.locator('#gameChatInput').count(), 1, 'spectator chat input missing');
       assert.strictEqual(await page.locator('#resign').isVisible(), false, 'spectator must not have player controls');
+      await page.locator('#gameChatInput').fill('spectator hello');
+      await page.locator('#gameChatSend').click();
+      await page.getByText('spectator hello', { exact: true }).waitFor();
+      await activeCreator.getByText('spectator hello', { exact: true }).waitFor();
     } catch (error) { failures.push('Watch active-game spectator flow: ' + error.message); }
 
     try {
@@ -126,7 +136,7 @@ async function createCustomCaptureGame(page, joinPage) {
       await page.getByRole('button', { name: 'Players', exact: true }).click();
       await page.getByRole('heading', { name: 'Players', exact: true }).waitFor();
       assert.strictEqual(await page.locator('link[rel="icon"]').count(), 1, 'Players should retain the favicon');
-      const search = page.getByRole('textbox', { name: /search/i });
+      const search = page.locator('#playersSearch');
       await search.fill('definitely-no-such-player');
       await page.waitForTimeout(250);
       assert.match(await page.locator('body').innerText(), /no players|no results/i, 'Players should show a no-result state');
