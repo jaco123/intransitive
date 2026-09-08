@@ -14,5 +14,8 @@
     "better-sqlite3": "^11.9.1",
     "glicko2": "^1.2.2",
     "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "playwright": "^1.55.1"
   }
 }
