@@ -114,9 +114,6 @@
   const explorerPathEl = $('explorerPath');
   const explorerPathMovesEl = $('explorerPathMoves');
   const explorerBackEl = $('explorerBack');
-  const explorerPrevEl = $('explorerPrev');
-  const explorerNextEl = $('explorerNext');
-  const explorerResetEl = $('explorerReset');
   const explorerMoveNavEl = $('explorerMoveNav');
   const explorerMoveSettingsEl = $('explorerMoveSettings');
 
@@ -1711,8 +1708,6 @@
     explorerStatusEl.textContent = CAP[pos.turn] + ' to move · ' + explorer.totalGames + ' games';
     explorerStatusEl.className = 'gamestatus';
 
-    explorerPrevEl.disabled = explorer.step <= 0;
-    explorerNextEl.disabled = explorer.step >= explorer.path.length;
     updateMoveNavigation(explorerMoveNavEl, explorer.step, explorer.path.length);
 
     renderExplorerPath();
@@ -2249,17 +2244,6 @@
   });
 
   explorerBackEl.addEventListener('click', () => showHome());
-  explorerPrevEl.addEventListener('click', () => {
-    if (explorer.step > 0) { explorer.step--; loadExplorer(); }
-  });
-  explorerNextEl.addEventListener('click', () => {
-    if (explorer.step < explorer.path.length) { explorer.step++; loadExplorer(); }
-  });
-  explorerResetEl.addEventListener('click', () => {
-    explorer.path = [];
-    explorer.step = 0;
-    loadExplorer();
-  });
   explorerPathMovesEl.addEventListener('click', (e) => {
     const s = e.target.closest('.move[data-step]');
     if (!s) return;

@@ -131,6 +131,9 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
       for (const label of ['Jump to first move', 'Previous move', 'Next move', 'Jump to last move', 'Settings']) {
         assert.strictEqual(await page.getByRole('button', { name: label, exact: true }).count(), 1, label + ' control missing');
       }
+      assert.strictEqual(await page.locator('#explorer .move-nav').count(), 1, 'Analysis should have one navigation set');
+      assert.strictEqual(await page.locator('#explorerPrev, #explorerNext, #explorerReset').count(), 0,
+        'legacy Analysis navigation buttons should be absent');
       await page.getByRole('button', { name: 'Settings', exact: true }).click();
       assert.strictEqual(await page.locator('#explorerMoveSettings').isVisible(), true, 'analysis settings should open a real panel');
       await page.getByRole('checkbox', { name: 'Show coordinates' }).uncheck();
