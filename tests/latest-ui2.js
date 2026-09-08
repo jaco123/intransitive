@@ -97,7 +97,9 @@ async function createCustomCaptureGame(page, joinPage) {
       await createCustomCaptureGame(gamePage, opponentPage);
       const source = gamePage.locator('#board .piece[data-c="1"][data-r="4"]');
       const target = gamePage.locator('#board .sq[data-c="2"][data-r="4"]');
-      assert.ok(!/grab|grabbing|pointer/.test(await source.evaluate((el) => getComputedStyle(el).cursor)), 'ordinary move should use a regular cursor');
+      try {
+        assert.ok(!/grab|grabbing|pointer/.test(await source.evaluate((el) => getComputedStyle(el).cursor)), 'ordinary move should use a regular cursor');
+      } catch (error) { failures.push('ordinary move cursor: ' + error.message); }
       await source.click();
       await target.click();
       await gamePage.locator('#moves .move[data-step="0"]').waitFor({ timeout: 3000 });
