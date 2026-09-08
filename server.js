@@ -26,6 +26,7 @@ const MIME = {
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg',
+  '.woff2': 'font/woff2',
 };
 
 // Keep the public surface explicit. In particular, never derive a filesystem
@@ -40,6 +41,8 @@ const PUBLIC_ASSETS = new Map([
   ['/favicon.svg', 'favicon.svg'],
   ['/assets/lichess-pointer.svg', 'assets/lichess-pointer.svg'],
   ['/assets/lichess-trash.svg', 'assets/lichess-trash.svg'],
+  ['/assets/lichess-icons.woff2', 'assets/lichess-icons.woff2'],
+  ['/assets/lichess-icons.LICENSE.txt', 'assets/lichess-icons.LICENSE.txt'],
   ['/sound/Move.mp3', 'sound/Move.mp3'],
   ['/sound/Capture.mp3', 'sound/Capture.mp3'],
 ]);

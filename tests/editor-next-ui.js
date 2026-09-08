@@ -27,18 +27,20 @@ async function analysis(page) {
     page.setDefaultTimeout(3000);
     page.setDefaultNavigationTimeout(5000);
     await editor(page);
-    const icons = {
-      'Starting position': '\ue078',
-      'Clear board': '\ue04f',
-      'Flip board': '\ue020',
-      'Analysis board': '\ue01f',
-      // Lichess deliberately renders Continue from here without a data-icon.
-      'Continue from here': null,
-    };
-    for (const [label, icon] of Object.entries(icons)) {
+    const icons = ['Starting position', 'Clear board', 'Flip board', 'Analysis board', 'Continue from here'];
+    for (const label of icons) {
       try {
         const button = page.getByRole('button', { name: new RegExp(label) });
-        assert.strictEqual(await button.getAttribute('data-icon'), icon, `${label} should use the reference icon glyph`);
+        const icon = button.locator('.editor-action-icon');
+        assert.strictEqual(await icon.count(), 1, `${label} should have one visible action icon`);
+        assert.ok(await icon.isVisible(), `${label} action icon should be visible`);
+        const iconStyle = await icon.evaluate((el) => ({
+          family: getComputedStyle(el).fontFamily,
+          content: getComputedStyle(el, '::before').content,
+        }));
+        assert.match(iconStyle.family, /lichess-icons/, `${label} should use the Lichess icon font`);
+        assert.notStrictEqual(iconStyle.content, 'none', `${label} icon should render a visible glyph`);
+        assert.doesNotMatch(await button.textContent(), /[↺🗑⇄⌕▶]/, `${label} should not use a literal Unicode fallback glyph`);
       } catch (error) { failures.push(error.message); }
     }
     for (const palette of ['#editorPaletteTop', '#editorPaletteBottom']) {

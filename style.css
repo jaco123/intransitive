@@ -83,6 +83,13 @@
   --c-link: var(--c-primary);
 }
 
+/* Lichess icon font: see assets/lichess-icons.LICENSE.txt. */
+@font-face {
+  font-family: "lichess-icons";
+  src: url("/assets/lichess-icons.woff2") format("woff2");
+  font-display: block;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -589,6 +596,17 @@ h1 span { color: var(--muted); font-weight: 400; }
 .editor-palette .editor-piece-tool svg { width: 34px; height: 34px; }
 .editor-palette .editor-tool { font-size: 24px; line-height: 1; }
 .editor-palette .editor-tool img { width: 28px; height: 28px; display: block; filter: invert(80%); }
+.editor-action-icon {
+  display: inline-block;
+  width: 1.25em;
+  margin-right: .45em;
+  text-align: center;
+  font-family: "lichess-icons";
+  font-size: 1.15em;
+  line-height: 1;
+  color: currentColor;
+}
+.editor-action-icon::before { content: attr(data-icon); }
 
 .play-position-setting { margin-top: var(--s3); }
 .checkbox-label { display: flex; align-items: center; gap: var(--s2); font-size: 13px; font-weight: 600; color: var(--c-font-dim); cursor: pointer; }

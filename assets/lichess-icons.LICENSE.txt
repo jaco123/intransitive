@@ -1,0 +1,11 @@
+Lichess icon font attribution
+
+This font is the Lichess icon font, downloaded from:
+https://lichess1.org/assets/hashed/lichess.0261ffe4.woff2
+
+It is distributed under the GNU Affero General Public License, version 3 or
+later, consistent with the Lichess source repository:
+https://github.com/lichess-org/lila/blob/master/LICENSE
+
+The glyphs used by this project are the Lichess editor glyphs U+E078,
+U+E04F, U+E020, U+E01F, and U+E033.
