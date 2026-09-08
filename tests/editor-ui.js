@@ -67,6 +67,7 @@ async function pageHealth(page) {
     await assertFavicon(page);
     await page.getByRole('button', { name: 'Board editor', exact: true }).click();
     await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible' });
+    await assertFavicon(page);
     await page.goBack();
     await page.getByText(/to move · .* games/).waitFor({ state: 'visible' });
     assert.strictEqual(await page.getByRole('heading', { name: 'Board editor', exact: true }).isVisible(), false,
