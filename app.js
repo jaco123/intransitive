@@ -175,7 +175,6 @@
   let liveArrows = [];       // board arrows drawn on the live board
   let explorerArrows = [];   // board arrows drawn on the analysis board
   let arrowDrag = null;      // in-progress right-click-drag arrow
-  let previewPress = null;   // native drag state for the lobby position preview
   let queueStatusTimer = null;
 
   let explorer = {        // analysis / opening explorer state

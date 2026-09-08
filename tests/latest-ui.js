@@ -54,8 +54,8 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
     `${boardSelector}: drag ghost must be centered horizontally`);
   assert.ok(Math.abs(ghostBox.y + ghostBox.height / 2 - (targetBox.y + targetBox.height / 2)) < 2,
     `${boardSelector}: drag ghost must be centered vertically`);
-  const tint = await source.evaluate((el) => getComputedStyle(el.closest('.sq')).backgroundColor);
-  assert.notStrictEqual(tint, '', `${boardSelector}: source square should be visibly tinted during drag`);
+  const tint = await source.evaluate((el) => getComputedStyle(el.closest('.sq')).backgroundImage);
+  assert.notStrictEqual(tint, 'none', `${boardSelector}: source square should be visibly tinted during drag`);
   await page.mouse.up();
 }
 

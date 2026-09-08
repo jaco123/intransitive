@@ -364,8 +364,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 }
 .gamestatus.waiting { background: var(--surface-3); color: var(--muted); }
 .gamestatus.yourturn { background: #23406b; color: #fff; }
-.gamestatus.over { background: #2f4d2f; color: #fff; }
-.gamestatus.over { border: 0; outline: 0; }
+.gamestatus.over { background: #2f4d2f; color: #fff; border: 0; outline: 0; }
 
 .link-block .field-label { margin-top: 0; }
 
