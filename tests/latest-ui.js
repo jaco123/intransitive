@@ -131,7 +131,65 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
       for (const label of ['Jump to first move', 'Previous move', 'Next move', 'Jump to last move', 'Settings']) {
         assert.strictEqual(await page.getByRole('button', { name: label, exact: true }).count(), 1, label + ' control missing');
       }
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
+      assert.strictEqual(await page.locator('#explorerMoveSettings').isVisible(), true, 'analysis settings should open a real panel');
+      await page.getByRole('checkbox', { name: 'Show coordinates' }).uncheck();
+      assert.strictEqual(await page.locator('#explorerBoard').evaluate((el) => el.classList.contains('hide-coordinates')), true,
+        'analysis settings should change the board');
     } catch (error) { failures.push('analysis move navigation/settings: ' + error.message); }
+
+    // Finish a real guest game to cover the game-only actions and live review controls.
+    try {
+      const opponent = await browser.newPage({ viewport: { width: 1366, height: 768 } });
+      await opponent.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await page.locator('#createBtn').click();
+      await page.locator('#gameStatus').filter({ hasText: /Waiting for opponent/ }).waitFor();
+      const gameUrl = page.url();
+      await opponent.locator('#joinInput').fill(gameUrl);
+      await opponent.locator('#joinBtn').click();
+      await page.locator('#gameStatus').filter({ hasText: /Your move/ }).waitFor();
+      const source = page.locator('#board .piece[data-color="blue"]').first();
+      const sourceBox = await source.boundingBox();
+      const target = page.locator('#board .sq[data-c="0"][data-r="5"]');
+      const targetBox = await target.boundingBox();
+      await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 5 });
+      const liveGhost = page.locator('.drag-ghost');
+      await liveGhost.waitFor({ state: 'visible' });
+      const liveGhostBox = await liveGhost.boundingBox();
+      assert.ok(Math.abs(liveGhostBox.x + liveGhostBox.width / 2 - (targetBox.x + targetBox.width / 2)) < 2,
+        'live drag ghost should stay centered horizontally');
+      assert.ok(Math.abs(liveGhostBox.y + liveGhostBox.height / 2 - (targetBox.y + targetBox.height / 2)) < 2,
+        'live drag ghost should stay centered vertically');
+      assert.notStrictEqual(await page.locator('#board .sq[data-c="1"][data-r="4"]').evaluate((el) => getComputedStyle(el).backgroundImage), 'none',
+        'live source square should be tinted during drag');
+      await page.mouse.up();
+      await page.locator('#gameStatus').filter({ hasText: /Red to move/ }).waitFor();
+      await page.getByRole('button', { name: 'Jump to first move', exact: true }).click();
+      assert.strictEqual(await page.getByRole('button', { name: 'Next move', exact: true }).isDisabled(), false,
+        'live review should enable next after jumping to start');
+      await page.getByRole('button', { name: 'Next move', exact: true }).click();
+      await opponent.locator('#resign').click();
+      await opponent.locator('#actionConfirmYes').click();
+      await page.locator('#gameStatus').filter({ hasText: /wins by resignation/ }).waitFor();
+      const actionBoxes = await page.locator('#finishedActions .btn').evaluateAll((els) => els.map((el) => {
+        const s = getComputedStyle(el);
+        return { y: el.getBoundingClientRect().y, border: s.borderColor, outline: s.outlineWidth };
+      }));
+      assert.strictEqual(actionBoxes.length, 3, 'finished game should expose three actions');
+      assert.ok(actionBoxes[0].y < actionBoxes[1].y && actionBoxes[1].y < actionBoxes[2].y, 'finished actions should stack');
+      assert.ok(actionBoxes.every((s) => /rgba\(0, 0, 0, 0\)|transparent/.test(s.border) && s.outline === '0px'),
+        'finished actions should have invisible default outlines');
+      assert.strictEqual(await page.locator('#gameStatus').evaluate((el) => getComputedStyle(el).borderStyle), 'none',
+        'finished result should have no visible border');
+      assert.strictEqual(await page.locator('#moves').evaluate((el) => getComputedStyle(el).borderRadius), '0px',
+        'move list should have sharp corners');
+      await page.locator('#finishedAnalysis').click();
+      await page.locator('#explorerStatus').waitFor();
+      await opponent.close();
+    } catch (error) { failures.push('finished game actions/review: ' + error.message); }
     try { assert.deepStrictEqual(errors, [], 'affected views should have no console/page errors'); }
     catch (error) { failures.push(error.message); }
   } finally { await browser.close(); }
