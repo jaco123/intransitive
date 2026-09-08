@@ -22,6 +22,7 @@
   const profileBtn = $('profileBtn');
   const analysisBtn = $('analysisBtn');
   const editorBtn = $('editorBtn');
+  const playBtn = $('playBtn');
 
   // Auth modal
   const authModalEl = $('authModal');
@@ -112,16 +113,13 @@
 
   // Board editor
   const editorBoardEl = $('editorBoard');
-  const editorColorBlueEl = $('editorColorBlue');
-  const editorColorRedEl = $('editorColorRed');
-  const editorTypeRockEl = $('editorTypeRock');
-  const editorTypePaperEl = $('editorTypePaper');
-  const editorTypeScissorsEl = $('editorTypeScissors');
-  const editorEraserEl = $('editorEraser');
-  const editorTurnBlueEl = $('editorTurnBlue');
-  const editorTurnRedEl = $('editorTurnRed');
+  const editorPaletteTopEl = $('editorPaletteTop');
+  const editorPaletteBottomEl = $('editorPaletteBottom');
+  const editorTurnEl = $('editorTurn');
   const editorClearEl = $('editorClear');
   const editorResetEl = $('editorReset');
+  const editorFlipEl = $('editorFlip');
+  const editorAnalysisEl = $('editorAnalysis');
   const editorToAnalysisEl = $('editorToAnalysis');
   const editorBackEl = $('editorBack');
   const explorerArrowsEl = $('explorerArrows');
@@ -185,8 +183,9 @@
     board: engine.initialBoard(),
     color: 'blue',
     type: 'rock',
-    eraser: false,
     turn: 'blue',
+    orientation: 'blue',
+    tool: { kind: 'piece', color: 'blue', type: 'rock' },
   };
 
   // ---------------------------------------------------------------------------
@@ -239,7 +238,7 @@
   // ---------------------------------------------------------------------------
   // Board rendering (shared between live game and replay)
   // ---------------------------------------------------------------------------
-  function drawBoard(el, board, orientation, lastMove, selectedSq, legalTargetsList, premoveArg) {
+  function drawBoard(el, board, orientation, lastMove, selectedSq, legalTargetsList, premoveArg, editorMode) {
     el.innerHTML = '';
     for (let dr = 0; dr < SIZE; dr++) {
       for (let dc = 0; dc < SIZE; dc++) {
@@ -276,7 +275,8 @@
         const piece = board[r][c];
         if (piece) {
           const p = document.createElement('div');
-          p.className = 'piece';
+          p.className = 'piece' + (editorMode ? ' editor-piece' : '');
+          if (editorMode) p.draggable = true;
           p.dataset.c = c;
           p.dataset.r = r;
           p.dataset.color = piece.color;
@@ -1625,14 +1625,21 @@
     }
   }
 
-  function openAnalysis(baseBoard, turn) {
+  function openAnalysis(baseBoard, turn, pushHistory = true) {
     explorer.baseBoard = baseBoard || null;
     explorer.baseTurn = turn || 'blue';
     explorer.path = [];
     explorer.step = 0;
     explorerArrows.length = 0;
+    if (pushHistory) history.pushState({ rpsScreen: 'analysis' }, '', '?view=analysis');
     showScreen(explorerEl);
     loadExplorer();
+  }
+
+  function openEditor(pushHistory = true) {
+    if (pushHistory) history.pushState({ rpsScreen: 'editor' }, '', '?view=editor');
+    showScreen(editorEl);
+    renderEditor();
   }
 
   function renderExplorer() {
@@ -1774,16 +1781,51 @@
   // ---------------------------------------------------------------------------
   // Board editor
   // ---------------------------------------------------------------------------
+  function editorToolIcon(kind) {
+    if (kind === 'cursor') return '↖';
+    if (kind === 'erase') return '🗑';
+    return '';
+  }
+
+  function renderEditorPalette(el, color) {
+    el.innerHTML = '';
+    const cursor = document.createElement('button');
+    cursor.type = 'button';
+    cursor.className = 'editor-tool';
+    cursor.dataset.tool = 'cursor';
+    cursor.setAttribute('aria-label', 'Select and move pieces');
+    cursor.textContent = editorToolIcon('cursor');
+    cursor.classList.toggle('active', editor.tool.kind === 'cursor');
+    el.appendChild(cursor);
+    for (const type of ['rock', 'paper', 'scissors']) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'editor-piece-tool';
+      button.draggable = true;
+      button.dataset.tool = 'piece';
+      button.dataset.color = color;
+      button.dataset.type = type;
+      button.setAttribute('aria-label', CAP[color] + ' ' + type[0].toUpperCase() + type.slice(1));
+      button.innerHTML = pieceSvg(type, color);
+      button.classList.toggle('active', editor.tool.kind === 'piece' && editor.tool.color === color && editor.tool.type === type);
+      el.appendChild(button);
+    }
+    const erase = document.createElement('button');
+    erase.type = 'button';
+    erase.className = 'editor-tool';
+    erase.dataset.tool = 'erase';
+    erase.setAttribute('aria-label', 'Delete piece');
+    erase.textContent = editorToolIcon('erase');
+    erase.classList.toggle('active', editor.tool.kind === 'erase');
+    el.appendChild(erase);
+  }
+
   function renderEditor() {
-    drawBoard(editorBoardEl, editor.board, 'blue', null, null, null);
-    editorColorBlueEl.classList.toggle('active', editor.color === 'blue' && !editor.eraser);
-    editorColorRedEl.classList.toggle('active', editor.color === 'red' && !editor.eraser);
-    editorTypeRockEl.classList.toggle('active', editor.type === 'rock' && !editor.eraser);
-    editorTypePaperEl.classList.toggle('active', editor.type === 'paper' && !editor.eraser);
-    editorTypeScissorsEl.classList.toggle('active', editor.type === 'scissors' && !editor.eraser);
-    editorEraserEl.classList.toggle('active', !!editor.eraser);
-    editorTurnBlueEl.classList.toggle('active', editor.turn === 'blue');
-    editorTurnRedEl.classList.toggle('active', editor.turn === 'red');
+    drawBoard(editorBoardEl, editor.board, editor.orientation, null, null, null, null, true);
+    renderEditorPalette(editorPaletteTopEl, 'red');
+    renderEditorPalette(editorPaletteBottomEl, 'blue');
+    editorTurnEl.value = editor.turn;
+    editorBoardEl.dataset.orientation = editor.orientation;
   }
 
   // ---------------------------------------------------------------------------
@@ -2105,7 +2147,11 @@
 
   // Analysis (opening explorer) + board editor events
   analysisBtn.addEventListener('click', () => openAnalysis(null, 'blue'));
-  editorBtn.addEventListener('click', () => { showScreen(editorEl); renderEditor(); });
+  editorBtn.addEventListener('click', () => openEditor());
+  playBtn.addEventListener('click', () => {
+    history.pushState({ rpsScreen: 'home' }, '', '?');
+    showHome();
+  });
 
   explorerBackEl.addEventListener('click', () => showHome());
   explorerPrevEl.addEventListener('click', () => {
@@ -2176,27 +2222,89 @@
     if (!sq) return;
     const c = +sq.dataset.c;
     const r = +sq.dataset.r;
-    if (editor.eraser) {
+    if (editor.tool.kind === 'erase') {
       editor.board[r][c] = null;
-    } else {
-      editor.board[r][c] = { color: editor.color, type: editor.type };
+    } else if (editor.tool.kind === 'piece') {
+      editor.board[r][c] = { color: editor.tool.color, type: editor.tool.type };
     }
     renderEditor();
   });
-  editorColorBlueEl.addEventListener('click', () => { editor.color = 'blue'; editor.eraser = false; renderEditor(); });
-  editorColorRedEl.addEventListener('click', () => { editor.color = 'red'; editor.eraser = false; renderEditor(); });
-  editorTypeRockEl.addEventListener('click', () => { editor.type = 'rock'; editor.eraser = false; renderEditor(); });
-  editorTypePaperEl.addEventListener('click', () => { editor.type = 'paper'; editor.eraser = false; renderEditor(); });
-  editorTypeScissorsEl.addEventListener('click', () => { editor.type = 'scissors'; editor.eraser = false; renderEditor(); });
-  editorEraserEl.addEventListener('click', () => { editor.eraser = !editor.eraser; renderEditor(); });
-  editorTurnBlueEl.addEventListener('click', () => { editor.turn = 'blue'; renderEditor(); });
-  editorTurnRedEl.addEventListener('click', () => { editor.turn = 'red'; renderEditor(); });
+  function chooseEditorTool(button) {
+    const kind = button.dataset.tool;
+    if (kind === 'piece') editor.tool = { kind, color: button.dataset.color, type: button.dataset.type };
+    else editor.tool = { kind };
+    renderEditor();
+  }
+  function editorPaletteClick(e) {
+    const button = e.target.closest('button[data-tool]');
+    if (button) chooseEditorTool(button);
+  }
+  editorPaletteTopEl.addEventListener('click', editorPaletteClick);
+  editorPaletteBottomEl.addEventListener('click', editorPaletteClick);
+  function editorDragStart(e) {
+    const piece = e.target.closest('.piece');
+    const palette = e.target.closest('button[data-tool="piece"]');
+    if (palette) {
+      e.dataTransfer.setData('application/x-rps-piece', JSON.stringify({ color: palette.dataset.color, type: palette.dataset.type }));
+      e.dataTransfer.effectAllowed = 'copy';
+      return;
+    }
+    if (!piece) return;
+    e.dataTransfer.setData('application/x-rps-source', JSON.stringify({ c: +piece.dataset.c, r: +piece.dataset.r }));
+    e.dataTransfer.effectAllowed = 'move';
+  }
+  function editorDrop(e) {
+    e.preventDefault();
+    const sq = e.target.closest('.sq');
+    if (!sq) return;
+    const c = +sq.dataset.c;
+    const r = +sq.dataset.r;
+    const pieceData = e.dataTransfer.getData('application/x-rps-piece');
+    const sourceData = e.dataTransfer.getData('application/x-rps-source');
+    if (pieceData) {
+      try { editor.board[r][c] = JSON.parse(pieceData); } catch (error) { return; }
+    } else if (sourceData) {
+      try {
+        const source = JSON.parse(sourceData);
+        const piece = editor.board[source.r] && editor.board[source.r][source.c];
+        if (!piece) return;
+        editor.board[source.r][source.c] = null;
+        editor.board[r][c] = piece;
+      } catch (error) { return; }
+    }
+    renderEditor();
+  }
+  editorBoardEl.addEventListener('dragstart', editorDragStart);
+  editorPaletteTopEl.addEventListener('dragstart', editorDragStart);
+  editorPaletteBottomEl.addEventListener('dragstart', editorDragStart);
+  editorBoardEl.addEventListener('dragover', (e) => e.preventDefault());
+  editorBoardEl.addEventListener('drop', editorDrop);
+  editorBoardEl.addEventListener('dragend', (e) => {
+    if (e.dataTransfer.dropEffect !== 'none') return;
+    const source = e.target.closest('.editor-piece');
+    if (!source) return;
+    const c = +source.dataset.c;
+    const r = +source.dataset.r;
+    if (editor.board[r] && editor.board[r][c]) {
+      editor.board[r][c] = null;
+      renderEditor();
+    }
+  });
+  editorTurnEl.addEventListener('change', () => { editor.turn = editorTurnEl.value; });
   editorClearEl.addEventListener('click', () => {
     editor.board = engine.initialBoard().map((row) => row.map(() => null));
     renderEditor();
   });
   editorResetEl.addEventListener('click', () => { editor.board = engine.initialBoard(); renderEditor(); });
+  editorFlipEl.addEventListener('click', () => { editor.orientation = editor.orientation === 'blue' ? 'red' : 'blue'; renderEditor(); });
+  editorAnalysisEl.addEventListener('click', () => openAnalysis(null, 'blue'));
   editorToAnalysisEl.addEventListener('click', () => openAnalysis(editor.board, editor.turn));
+
+  window.addEventListener('popstate', (e) => {
+    if (e.state && e.state.rpsScreen === 'editor') openEditor(false);
+    else if (e.state && e.state.rpsScreen === 'analysis') openAnalysis(null, 'blue', false);
+    else showHome();
+  });
 
   document.getElementById('navBrand').addEventListener('click', (e) => {
     if (location.search && !location.search.includes('game=')) e.preventDefault();
@@ -2215,6 +2323,7 @@
     const params = new URLSearchParams(location.search);
     const id = params.get('game');
     const spectateId = params.get('spectate');
+    const view = params.get('view');
     if (spectateId) {
       pending = { type: 'spectate', gameId: spectateId };
       showGame();
@@ -2227,6 +2336,12 @@
       if (t) pending.session = t;
       showGame();
       gameStatusEl.textContent = 'Connecting…';
+      connect();
+    } else if (view === 'analysis') {
+      openAnalysis(null, 'blue', false);
+      connect();
+    } else if (view === 'editor') {
+      openEditor(false);
       connect();
     } else {
       showHome();

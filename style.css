@@ -552,6 +552,48 @@ h1 span { color: var(--muted); font-weight: 400; }
 .screen-head h1 { font-size: 24px; margin-right: auto; }
 .profile-logout { flex: 0 0 auto; }
 
+/* Analysis and editor occupy the viewport; long move lists scroll inside the
+ * side panel so the document itself never acquires a page scrollbar. */
+#explorer, #editor { height: calc(100vh - 68px); overflow: hidden; }
+#explorer .game-layout, #editor .game-layout { height: calc(100% - 58px); min-height: 0; }
+#explorer .side, #editor .side { max-height: 100%; overflow-y: auto; }
+
+/* Lichess-style spare-piece trays for the editor. */
+.editor-palette {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  min-height: 42px;
+  padding: 4px;
+  margin: 4px 0;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.editor-palette button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 38px;
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--text);
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+.editor-palette button:hover, .editor-palette button.active { background: var(--surface-3); border-color: var(--accent); }
+.editor-palette .editor-piece-tool svg { width: 34px; height: 34px; }
+.editor-palette .editor-tool { font-size: 24px; line-height: 1; }
+#editor .players-col { width: min(calc(100vh - 230px), 600px); }
+#editor .board-wrap { flex-direction: column; }
+#editor .board { order: 2; }
+#editor #editorPaletteTop { order: 1; }
+#editor #editorPaletteBottom { order: 3; }
+
 /* ---------------------------------------------------------------------------
    History list
 --------------------------------------------------------------------------- */

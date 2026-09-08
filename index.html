@@ -14,6 +14,7 @@
       <div class="nav-left">
         <a id="navBrand" class="nav-brand" href="?">RPS2</a>
         <nav class="nav-links">
+          <button id="playBtn" class="nav-link-btn">Play</button>
           <button id="analysisBtn" class="nav-link-btn">Analysis</button>
           <button id="editorBtn" class="nav-link-btn">Board editor</button>
         </nav>
@@ -293,43 +294,26 @@
     <div class="game-layout">
       <div class="players-col">
         <div class="board-wrap">
+          <div id="editorPaletteTop" class="editor-palette" aria-label="Red pieces"></div>
           <div id="editorBoard" class="board"></div>
+          <div id="editorPaletteBottom" class="editor-palette" aria-label="Blue pieces"></div>
         </div>
       </div>
       <aside class="side">
         <div class="editor-group">
-          <div class="movelist-label">Side to place</div>
-          <div class="mode-toggle">
-            <button id="editorColorBlue" class="mode-btn active">Blue</button>
-            <button id="editorColorRed" class="mode-btn">Red</button>
-          </div>
-        </div>
-        <div class="editor-group">
-          <div class="movelist-label">Piece</div>
-          <div class="editor-toggle">
-            <button id="editorTypeRock" class="mode-btn active">Rock</button>
-            <button id="editorTypePaper" class="mode-btn">Paper</button>
-            <button id="editorTypeScissors" class="mode-btn">Scissors</button>
-          </div>
-        </div>
-        <div class="editor-group">
-          <div class="movelist-label">Tools</div>
-          <div class="mode-toggle">
-            <button id="editorEraser" class="mode-btn">Erase</button>
-          </div>
-        </div>
-        <div class="editor-group">
           <div class="movelist-label">Side to move</div>
-          <div class="mode-toggle">
-            <button id="editorTurnBlue" class="mode-btn active">Blue</button>
-            <button id="editorTurnRed" class="mode-btn">Red</button>
-          </div>
+          <select id="editorTurn" class="select" aria-label="Side to move">
+            <option value="blue">Blue to play</option>
+            <option value="red">Red to play</option>
+          </select>
         </div>
         <div class="actions">
-          <button id="editorClear" class="btn">Clear board</button>
-          <button id="editorReset" class="btn">Start position</button>
+          <button id="editorReset" class="btn">↺ <span>Starting position</span></button>
+          <button id="editorClear" class="btn">🗑 <span>Clear board</span></button>
+          <button id="editorFlip" class="btn">⇄ <span>Flip board</span></button>
         </div>
-        <button id="editorToAnalysis" class="btn primary" style="width:100%">Analysis board</button>
+        <button id="editorAnalysis" class="btn" style="width:100%">⌕ <span>Analysis board</span></button>
+        <button id="editorToAnalysis" class="btn primary" style="width:100%">▶ <span>Continue from here</span></button>
       </aside>
     </div>
   </div>
