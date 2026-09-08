@@ -420,7 +420,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 .actions { display: flex; gap: var(--s2); margin-top: auto; }
 .actions .btn { flex: 1; }
 #finishedActions { flex-direction: column; }
-#finishedActions .btn { border: 0; outline: 0; }
+#finishedActions .btn { border: 0; border-color: transparent; outline: 0; }
 #finishedActions .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .game-actions {
   display: flex;
@@ -632,7 +632,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 #editor #editorPaletteTop { order: 1; }
 #editor #editorPaletteBottom { order: 3; }
 #editor .actions { flex-direction: column; width: 100%; }
-#editor .actions .btn { flex: none; width: 100%; border: 0; outline: 0; }
+#editor .actions .btn { flex: none; width: 100%; border: 0; border-color: transparent; outline: 0; }
 #editor .actions .btn:focus-visible, #editor > .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #editor #editorToAnalysis { background: var(--surface-3); }
 #editor #editorToAnalysis:hover { background: #3f3d39; }

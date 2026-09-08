@@ -37,7 +37,7 @@ async function gotoEditor(page) {
 }
 
 async function dragWithPointer(page, boardSelector, sourceSelector, targetSelector) {
-  const source = page.locator(sourceSelector);
+  const source = page.locator(sourceSelector).first();
   const sourceBox = await source.boundingBox();
   assert.ok(sourceBox, 'drag source should be visible');
   await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
@@ -65,6 +65,10 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
   try {
     assert.notStrictEqual(ratedResponse.type, 'created', 'crafted rated custom create must be rejected or explicitly unrated');
   } catch (error) { failures.push('rated custom protocol guard: ' + error.message); }
+  const ratedQueueResponse = await wsMessages({ type: 'queue', timeControl: { initial: 60, increment: 0 }, rated: true, board: customBoard(), turn: 'red' });
+  try {
+    assert.strictEqual(ratedQueueResponse.type, 'error', 'crafted rated custom queue must be rejected');
+  } catch (error) { failures.push('rated custom queue guard: ' + error.message); }
 
   const browser = await firefox.launch({ headless: true });
   try {
