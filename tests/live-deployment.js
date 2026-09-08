@@ -34,6 +34,15 @@ const BASE = (process.env.RPS_LIVE_BASE || 'http://141.95.142.131').replace(/\/$
   assert.strictEqual(iconResponse.status(), 200);
   assert.match(await iconResponse.text(), /<svg/);
 
+  for (const pathname of [
+    '/server.js', '/db.js', '/package.json', '/.git/config',
+    '/data/rps.db', '/rps.db', '/../server.js', '/%2e%2e/server.js',
+    '/%2e%2e%2fserver.js', '/%252e%252e%252fserver.js',
+  ]) {
+    const response = await page.request.get(BASE + pathname);
+    assert.strictEqual(response.status(), 404, pathname + ' must not be public');
+  }
+
   // Exercise a second UI view and its API-backed rendering on the deployed URL.
   await page.locator('#analysisBtn').click();
   await page.waitForFunction(() => {

@@ -28,6 +28,20 @@ const MIME = {
   '.mp3': 'audio/mpeg',
 };
 
+// Keep the public surface explicit. In particular, never derive a filesystem
+// path from a request URL: the checkout contains source, tests, and database
+// files that must remain private.
+const PUBLIC_ASSETS = new Map([
+  ['/', 'index.html'],
+  ['/index.html', 'index.html'],
+  ['/engine.js', 'engine.js'],
+  ['/app.js', 'app.js'],
+  ['/style.css', 'style.css'],
+  ['/favicon.svg', 'favicon.svg'],
+  ['/sound/Move.mp3', 'sound/Move.mp3'],
+  ['/sound/Capture.mp3', 'sound/Capture.mp3'],
+]);
+
 const DEFAULT_TIMECONTROL = { initial: 300, increment: 3 }; // 5+3, in seconds
 const OTHER = { blue: 'red', red: 'blue' };
 const CAP = { blue: 'Blue', red: 'Red' };
@@ -1062,29 +1076,36 @@ async function handleApi(req, res, urlPath, query) {
 }
 
 function serveStatic(req, res, urlPath) {
-  let filePath = path.normalize(path.join(ROOT, urlPath === '/' ? 'index.html' : urlPath));
-
-  const relativePath = path.relative(ROOT, filePath);
-  if (relativePath.startsWith('..' + path.sep) || path.isAbsolute(relativePath)) {
-    res.writeHead(403);
-    res.end('Forbidden');
+  const relativeAsset = PUBLIC_ASSETS.get(urlPath);
+  if (!relativeAsset) {
+    res.writeHead(404);
+    res.end('Not found');
     return;
   }
 
-  fs.readFile(filePath, (err, data) => {
-    if (err) {
+  const filePath = path.join(ROOT, relativeAsset);
+
+  fs.lstat(filePath, (statErr, stat) => {
+    if (statErr || !stat.isFile()) {
       res.writeHead(404);
       res.end('Not found');
       return;
     }
-    const ext = path.extname(filePath).toLowerCase();
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
-      Pragma: 'no-cache',
-      Expires: '0',
+    fs.readFile(filePath, (err, data) => {
+      if (err) {
+        res.writeHead(404);
+        res.end('Not found');
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      res.writeHead(200, {
+        'Content-Type': MIME[ext] || 'application/octet-stream',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        Pragma: 'no-cache',
+        Expires: '0',
+      });
+      res.end(data);
     });
-    res.end(data);
   });
 }
 

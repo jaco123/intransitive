@@ -21,6 +21,11 @@ function pass(name) {
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+async function assertPrivatePath(base, pathname) {
+  const response = await fetch(base + pathname);
+  assert.strictEqual(response.status, 404, pathname + ' must not be publicly served');
+}
+
 function mkClient() {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_BASE);
@@ -92,6 +97,13 @@ async function main() {
   assert.strictEqual(icon.status, 200);
   assert.match(await icon.text(), /<svg/);
   pass('favicon is served');
+
+  for (const pathname of [
+    '/server.js', '/db.js', '/package.json', '/.git/config',
+    '/data/rps.db', '/rps.db', '/../server.js', '/%2e%2e/server.js',
+    '/%2e%2e%2fserver.js', '/%252e%252e%252fserver.js',
+  ]) await assertPrivatePath(TARGET_BASE, pathname);
+  pass('source, repository, database, and traversal paths are not public');
 
   const badBoard = await fetch(TARGET_BASE + '/api/openings?board=' + 'Z'.repeat(81));
   assert.strictEqual(badBoard.status, 400);
