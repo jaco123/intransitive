@@ -80,6 +80,7 @@
   const declineDrawBtn = $('declineDraw');
   const abortBtn = $('abort');
   const rematchBtn = $('rematch');
+  const finishedAnalysisBtn = $('finishedAnalysis');
   const gameActionsEl = $('gameActions');
   const actionConfirmEl = $('actionConfirm');
   const actionConfirmTextEl = $('actionConfirmText');
@@ -98,6 +99,9 @@
   const replayBackEl = $('replayBack');
   const replayPrevEl = $('replayPrev');
   const replayNextEl = $('replayNext');
+  const gameMoveNavEl = $('gameMoveNav');
+  const replayMoveNavEl = $('replayMoveNav');
+  const replayMoveSettingsEl = $('replayMoveSettings');
 
   // Queue & explorer
   const queueBtn = $('queueBtn');
@@ -113,6 +117,8 @@
   const explorerPrevEl = $('explorerPrev');
   const explorerNextEl = $('explorerNext');
   const explorerResetEl = $('explorerReset');
+  const explorerMoveNavEl = $('explorerMoveNav');
+  const explorerMoveSettingsEl = $('explorerMoveSettings');
 
   // Board editor
   const editorBoardEl = $('editorBoard');
@@ -153,7 +159,6 @@
 
   let selected = null;    // { c, r } in board coordinates
   let legalTargets = [];  // board-coordinate moves from selected
-  let press = null;       // pointer interaction state
   let premove = null;     // { fromC, fromR, toC, toR } queued while it's not our turn
   let lowTimePlayed = { blue: false, red: false }; // low-time beep dedupe per color
   let audioCtx = null;
@@ -170,8 +175,8 @@
   let liveArrows = [];       // board arrows drawn on the live board
   let explorerArrows = [];   // board arrows drawn on the analysis board
   let arrowDrag = null;      // in-progress right-click-drag arrow
-  let explorerPress = null;  // pointer drag state for analysis moves
   let previewPress = null;   // native drag state for the lobby position preview
+  let queueStatusTimer = null;
 
   let explorer = {        // analysis / opening explorer state
     baseBoard: null,      // custom start board (null = standard initial position)
@@ -673,6 +678,7 @@
     if (!state) return;
     const currentIndex = reviewStep == null ? state.history.length - 1 : reviewStep - 1;
     renderMovesList(movesEl, state.history, currentIndex);
+    updateMoveNavigation(gameMoveNavEl, viewPos(), state.history.length);
   }
 
   // Number of moves applied in the displayed position (0..history.length).
@@ -687,6 +693,35 @@
     pos = Math.max(0, Math.min(len, pos));
     reviewStep = pos >= len ? null : pos;
     render();
+  }
+
+  function updateMoveNavigation(nav, position, length) {
+    if (!nav) return;
+    for (const button of nav.querySelectorAll('[data-move-action]')) {
+      const action = button.dataset.moveAction;
+      button.disabled = action === 'first' || action === 'prev' ? position <= 0 : position >= length;
+    }
+  }
+
+  function bindMoveNavigation(nav, getState, setPosition) {
+    if (!nav) return;
+    nav.addEventListener('click', (e) => {
+      const settingsButton = e.target.closest('[data-settings-target]');
+      if (settingsButton) {
+        const panel = document.getElementById(settingsButton.dataset.settingsTarget);
+        if (panel) panel.classList.toggle('hidden');
+        return;
+      }
+      const button = e.target.closest('[data-move-action]');
+      if (!button) return;
+      const current = getState();
+      if (!current) return;
+      const { position, length } = current;
+      const action = button.dataset.moveAction;
+      const next = action === 'first' ? 0 : action === 'prev' ? Math.max(0, position - 1)
+        : action === 'next' ? Math.min(length, position + 1) : length;
+      setPosition(next);
+    });
   }
 
   function formatPlayer(p, suffix) {
@@ -740,6 +775,7 @@
     abortBtn.classList.toggle('hidden', !canAbort);
     rematchBtn.classList.toggle('hidden', !finished);
     newGameBtn.classList.toggle('hidden', !finished);
+    finishedAnalysisBtn.classList.toggle('hidden', !finished);
 
     actionConfirmEl.classList.toggle('hidden', !confirmAction);
     if (confirmAction) {
@@ -887,33 +923,50 @@
     }
   }
 
-  boardEl.addEventListener('pointerdown', (e) => {
-    if (e.button === 2) return; // right-click is reserved for drawing arrows
-    if (!state || state.status !== 'playing' || state.spectating) return;
-    if (!canMoveNow() && !premoveAllowed()) return;
-    const sq = squareFromEvent(e);
-    if (!sq) return;
+  let activePieceDrag = null;
 
-    const piece = state.board[sq.r][sq.c];
+  function beginPieceDrag(config, sq, piece, sourceEl, e, sourceKind) {
+    e.preventDefault();
+    if (sourceEl) sourceEl.classList.add('drag-source');
+    activePieceDrag = {
+      config, sq, piece, sourceEl, sourceKind,
+      wasSelected: config.getWasSelected ? config.getWasSelected(sq) : false,
+      startX: e.clientX, startY: e.clientY, moved: false, ghost: null,
+    };
+  }
 
-    if (piece && piece.color === myColor) {
-      const wasSelected = !!(selected && selected.c === sq.c && selected.r === sq.r);
-      selectPiece(sq.c, sq.r);
-      render();
-      press = {
-        kind: 'piece',
-        c: sq.c,
-        r: sq.r,
-        wasSelected,
-        startX: e.clientX,
-        startY: e.clientY,
-        moved: false,
-        ghost: null,
-      };
-    } else {
-      press = { kind: 'square', c: sq.c, r: sq.r };
-    }
-  });
+  function setupPieceDragging(config) {
+    config.boardEl.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) return;
+      const sq = squareFromBoardPoint(e.clientX, e.clientY, config.boardEl, config.orientationFn());
+      if (!sq) return;
+      const piece = config.getPiece(sq);
+      if (!piece) {
+        if (config.canStartEmpty && config.canStartEmpty(sq, e)) beginPieceDrag(config, sq, null, null, e, 'square');
+        return;
+      }
+      if (!config.canStart(piece, sq, e)) return;
+    beginPieceDrag(config, sq, piece, config.boardEl.querySelector(`.sq[data-c="${sq.c}"][data-r="${sq.r}"]`), e, 'board');
+      if (config.onStart) config.onStart(sq, piece);
+    });
+  }
+
+  function setupPaletteDragging(root, config) {
+    root.addEventListener('pointerdown', (e) => {
+      if (e.button === 2) return;
+      const toolButton = e.target.closest('button[data-tool]:not([data-piece-color][data-piece-type])');
+      if (toolButton) {
+        e.preventDefault();
+        if (config.onToolClick) config.onToolClick(toolButton);
+        return;
+      }
+      const button = e.target.closest('[data-piece-color][data-piece-type]');
+      if (!button) return;
+      const piece = { color: button.dataset.pieceColor, type: button.dataset.pieceType };
+      beginPieceDrag(config, null, piece, button, e, 'palette');
+      if (config.onStart) config.onStart(null, piece, button);
+    });
+  }
 
   window.addEventListener('pointermove', (e) => {
     if (arrowDrag) {
@@ -926,40 +979,16 @@
       }
       return;
     }
-    if (explorerPress) {
-      const dx = e.clientX - explorerPress.startX;
-      const dy = e.clientY - explorerPress.startY;
-      if (!explorerPress.moved && Math.hypot(dx, dy) > 5) {
-        explorerPress.moved = true;
-        const piece = explorer.position && explorer.position.board[explorerPress.r][explorerPress.c];
-        if (piece) {
-          explorerPress.ghost = document.createElement('div');
-          explorerPress.ghost.className = 'drag-ghost';
-          explorerPress.ghost.innerHTML = pieceSvg(piece.type, piece.color);
-          document.body.appendChild(explorerPress.ghost);
-        }
-      }
-      if (explorerPress.ghost) updateDragGhost(explorerPress.ghost, e.clientX, e.clientY, explorerBoardEl);
-      return;
+    const d = activePieceDrag;
+    if (!d) return;
+    if (!d.moved && d.piece && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 5) {
+      d.moved = true;
+      d.ghost = document.createElement('div');
+      d.ghost.className = 'drag-ghost';
+      d.ghost.innerHTML = pieceSvg(d.piece.type, d.piece.color);
+      document.body.appendChild(d.ghost);
     }
-    if (!press || press.kind !== 'piece') return;
-    const dx = e.clientX - press.startX;
-    const dy = e.clientY - press.startY;
-
-    if (!press.moved && Math.hypot(dx, dy) > 5) {
-      press.moved = true;
-      const piece = state.board[press.r][press.c];
-      if (piece) {
-        press.ghost = document.createElement('div');
-        press.ghost.className = 'drag-ghost';
-        press.ghost.innerHTML = pieceSvg(piece.type, piece.color);
-        document.body.appendChild(press.ghost);
-      }
-    }
-
-    if (press.ghost) {
-      updateDragGhost(press.ghost, e.clientX, e.clientY, boardEl);
-    }
+    if (d.ghost) updateDragGhost(d.ghost, e.clientX, e.clientY, d.config.boardEl);
   });
 
   window.addEventListener('pointerup', (e) => {
@@ -974,55 +1003,14 @@
       renderArrows(d.svgEl, d.arrows, d.orientationFn());
       return;
     }
-    if (explorerPress) {
-      const d = explorerPress;
-      explorerPress = null;
-      if (d.ghost) d.ghost.remove();
-      if (d.moved) {
-        const target = squareFromBoardPoint(e.clientX, e.clientY, explorerBoardEl, 'blue');
-        if (target && explorer.position) {
-          const legal = engine.legalMovesFrom(explorer.position.board, explorer.position.turn, d.c, d.r);
-          const move = legal.find((m) => m.toC === target.c && m.toR === target.r);
-          if (move) descendExplorer(moveStringFor(move));
-        }
-        explorer.selected = null;
-        return;
-      }
-      return;
-    }
-    if (!press) return;
-
-    if (press.kind === 'piece') {
-      const fromC = press.c;
-      const fromR = press.r;
-      const moved = press.moved;
-      const wasSelected = press.wasSelected;
-      if (press.ghost) press.ghost.remove();
-      press = null;
-
-      if (moved) {
-        const sq = squareAtPoint(e.clientX, e.clientY);
-        if (sq) {
-          tryPlayMove(fromC, fromR, sq.c, sq.r);
-        } else {
-          clearSelection();
-          render();
-        }
-        return;
-      }
-
-      const sq = squareAtPoint(e.clientX, e.clientY);
-      if (sq) {
-        handleClick(sq.c, sq.r, fromC, fromR, wasSelected);
-      } else {
-        render();
-      }
-    } else {
-      const c = press.c;
-      const r = press.r;
-      press = null;
-      handleClick(c, r, c, r, false);
-    }
+    const d = activePieceDrag;
+    if (!d) return;
+    activePieceDrag = null;
+    if (d.sourceEl) d.sourceEl.classList.remove('drag-source');
+    if (d.ghost) d.ghost.remove();
+    const target = squareFromBoardPoint(e.clientX, e.clientY, d.config.boardEl, d.config.orientationFn());
+    if (d.moved) d.config.onDrop(d.sq, target, d.piece, d.sourceKind);
+    else d.config.onClick(d.sq, d.piece, d.sourceKind, d.wasSelected);
   });
 
   window.addEventListener('pointercancel', () => {
@@ -1030,8 +1018,11 @@
       renderArrows(arrowDrag.svgEl, arrowDrag.arrows, arrowDrag.orientationFn());
       arrowDrag = null;
     }
-    if (press && press.ghost) press.ghost.remove();
-    press = null;
+    if (activePieceDrag) {
+      if (activePieceDrag.sourceEl) activePieceDrag.sourceEl.classList.remove('drag-source');
+      if (activePieceDrag.ghost) activePieceDrag.ghost.remove();
+    }
+    activePieceDrag = null;
   });
 
   // ---------------------------------------------------------------------------
@@ -1096,8 +1087,7 @@
 
       case 'queued':
         queued = true;
-        queueStatus.textContent = 'Waiting for an opponent…';
-        queueStatus.classList.remove('hidden');
+        showQueueStatus('Waiting for an opponent…');
         queueBtn.disabled = true;
         break;
 
@@ -1106,22 +1096,19 @@
         queued = true;
         queueBtnLabel.textContent = 'Cancel seek';
         queueBtn.disabled = false;
-        queueStatus.textContent = 'Waiting for an opponent…';
-        queueStatus.classList.remove('hidden');
+        showQueueStatus('Waiting for an opponent…');
         renderLobby();
         break;
 
       case 'seekCancelled':
         clearSeek();
-        queueStatus.textContent = 'Seek cancelled.';
-        queueStatus.classList.remove('hidden');
+        showQueueStatus('Seek cancelled.', 3500);
         renderLobby();
         break;
 
       case 'queueCancelled':
         clearSeek();
-        queueStatus.textContent = 'Pairing cancelled.';
-        queueStatus.classList.remove('hidden');
+        showQueueStatus('Pairing cancelled.', 3500);
         queueBtn.disabled = false;
         break;
 
@@ -1254,6 +1241,9 @@
   function renderPositionPreview() {
     if (!playFromPositionEl || !playFromPositionPreviewEl || !playPositionBoardEl) return;
     const enabled = playFromPositionEl.checked;
+    modeRatedEl.disabled = enabled;
+    modeRatedEl.setAttribute('aria-disabled', String(enabled));
+    if (enabled && ratedMode) setRatedMode(false);
     playFromPositionPreviewEl.classList.toggle('hidden', !enabled);
     if (!enabled) return;
     if (!playPosition) playPosition = { board: engine.initialBoard(), turn: 'blue' };
@@ -1287,9 +1277,11 @@
   }
 
   function setRatedMode(rated) {
-    ratedMode = rated;
-    modeRatedEl.classList.toggle('active', rated);
-    modeCasualEl.classList.toggle('active', !rated);
+    ratedMode = playFromPositionEl.checked ? false : rated;
+    modeRatedEl.classList.toggle('active', ratedMode);
+    modeRatedEl.disabled = playFromPositionEl.checked;
+    modeRatedEl.setAttribute('aria-disabled', String(playFromPositionEl.checked));
+    modeCasualEl.classList.toggle('active', !ratedMode);
   }
 
   function extractGameId(input) {
@@ -1625,6 +1617,7 @@
 
     replayPrevEl.disabled = step <= 0;
     replayNextEl.disabled = step >= history.length;
+    updateMoveNavigation(replayMoveNavEl, step, history.length);
   }
 
   // ---------------------------------------------------------------------------
@@ -1721,6 +1714,7 @@
 
     explorerPrevEl.disabled = explorer.step <= 0;
     explorerNextEl.disabled = explorer.step >= explorer.path.length;
+    updateMoveNavigation(explorerMoveNavEl, explorer.step, explorer.path.length);
 
     renderExplorerPath();
     renderExplorerMoves();
@@ -1865,6 +1859,8 @@
       button.dataset.tool = 'piece';
       button.dataset.color = color;
       button.dataset.type = type;
+      button.dataset.pieceColor = color;
+      button.dataset.pieceType = type;
       button.setAttribute('aria-label', CAP[color] + ' ' + type[0].toUpperCase() + type.slice(1));
       button.innerHTML = pieceSvg(type, color);
       button.classList.toggle('active', editor.tool.kind === 'piece' && editor.tool.color === color && editor.tool.type === type);
@@ -1898,11 +1894,26 @@
   }
 
   function clearSeek() {
+    clearTimeout(queueStatusTimer);
+    queueStatusTimer = null;
     mySeekId = null;
     queued = false;
     queueBtnLabel.textContent = 'Create lobby game';
     queueBtn.disabled = false;
     queueStatus.classList.add('hidden');
+  }
+
+  function showQueueStatus(text, autoHideMs = 0) {
+    clearTimeout(queueStatusTimer);
+    queueStatusTimer = null;
+    queueStatus.textContent = text;
+    queueStatus.classList.remove('hidden');
+    if (autoHideMs > 0) {
+      queueStatusTimer = setTimeout(() => {
+        queueStatus.classList.add('hidden');
+        queueStatusTimer = null;
+      }, autoHideMs);
+    }
   }
 
   function renderLobby() {
@@ -1948,8 +1959,7 @@
   function startQueue(timeControl, casual) {
     homeErrorEl.classList.add('hidden');
     pending = null;
-    queueStatus.textContent = 'Waiting for an opponent…';
-    queueStatus.classList.remove('hidden');
+    showQueueStatus('Waiting for an opponent…');
     queued = true;
     queueBtnLabel.textContent = 'Cancel seek';
 
@@ -1982,27 +1992,7 @@
     }
     if (!playFromPositionEl.checked) playPosition = null;
     renderPositionPreview();
-  });
-
-  playPositionBoardEl.addEventListener('dragstart', (e) => {
-    const piece = e.target.closest('.piece');
-    if (!piece) return;
-    e.dataTransfer.setData('application/x-rps-preview-source', JSON.stringify({ c: +piece.dataset.c, r: +piece.dataset.r }));
-    e.dataTransfer.effectAllowed = 'move';
-  });
-  playPositionBoardEl.addEventListener('dragover', (e) => e.preventDefault());
-  playPositionBoardEl.addEventListener('drop', (e) => {
-    e.preventDefault();
-    const sq = e.target.closest('.sq');
-    if (!sq || !playPosition) return;
-    try {
-      const source = JSON.parse(e.dataTransfer.getData('application/x-rps-preview-source'));
-      const piece = playPosition.board[source.r] && playPosition.board[source.r][source.c];
-      if (!piece) return;
-      playPosition.board[source.r][source.c] = null;
-      playPosition.board[+sq.dataset.r][+sq.dataset.c] = piece;
-      renderPositionPreview();
-    } catch (error) { /* Ignore drops that did not originate in the preview. */ }
+    setRatedMode(playFromPositionEl.checked ? false : ratedMode);
   });
 
   createBtn.addEventListener('click', () => {
@@ -2039,8 +2029,7 @@
         ws.send(JSON.stringify({ type: 'queueCancel' }));
       }
       clearSeek();
-      queueStatus.textContent = 'Seek cancelled.';
-      queueStatus.classList.remove('hidden');
+      showQueueStatus('Seek cancelled.', 3500);
       renderLobby();
       return;
     }
@@ -2057,8 +2046,7 @@
         ws.send(JSON.stringify({ type: 'queueCancel' }));
       }
       clearSeek();
-      queueStatus.textContent = 'Seek cancelled.';
-      queueStatus.classList.remove('hidden');
+      showQueueStatus('Seek cancelled.', 3500);
       renderLobby();
     } else {
       acceptSeek(seekId);
@@ -2145,6 +2133,11 @@
     startQueue(tc, casual);
   });
 
+  finishedAnalysisBtn.addEventListener('click', () => {
+    if (!state || state.status !== 'finished') return;
+    openAnalysis(state.board, state.turn);
+  });
+
   copyLinkBtn.addEventListener('click', () => {
     const text = gameLinkEl.value;
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -2182,6 +2175,21 @@
   });
   replayNextEl.addEventListener('click', () => {
     if (replay && replay.step < replay.game.history.length) { replay.step++; renderReplay(); }
+  });
+  bindMoveNavigation(gameMoveNavEl,
+    () => state ? { position: viewPos(), length: state.history.length } : null,
+    (position) => setViewPos(position));
+  bindMoveNavigation(replayMoveNavEl,
+    () => replay ? { position: replay.step, length: replay.game.history.length } : null,
+    (position) => { if (replay) { replay.step = position; renderReplay(); } });
+  bindMoveNavigation(explorerMoveNavEl,
+    () => ({ position: explorer.step, length: explorer.path.length }),
+    (position) => { explorer.step = position; loadExplorer(); });
+  document.querySelectorAll('[data-coordinates-board]').forEach((input) => {
+    input.addEventListener('change', () => {
+      const board = document.getElementById(input.dataset.coordinatesBoard);
+      if (board) board.classList.toggle('hide-coordinates', !input.checked);
+    });
   });
   replayMovesEl.addEventListener('click', (e) => {
     const s = e.target.closest('.move[data-step]');
@@ -2264,44 +2272,6 @@
     if (!li) return;
     descendExplorer(li.dataset.move);
   });
-  explorerBoardEl.addEventListener('pointerdown', (e) => {
-    if (e.button === 2 || !explorer.position) return;
-    const sq = squareFromBoardPoint(e.clientX, e.clientY, explorerBoardEl, 'blue');
-    if (!sq) return;
-    const piece = explorer.position.board[sq.r][sq.c];
-    if (!piece || piece.color !== explorer.position.turn) return;
-    e.preventDefault();
-    explorer.selected = { c: sq.c, r: sq.r };
-    renderExplorer();
-    explorerPress = { c: sq.c, r: sq.r, startX: e.clientX, startY: e.clientY, moved: false, ghost: null };
-  });
-  explorerBoardEl.addEventListener('click', (e) => {
-    const sq = e.target.closest('.sq');
-    if (!sq || !explorer.position) return;
-    const c = +sq.dataset.c;
-    const r = +sq.dataset.r;
-    const pos = explorer.position;
-    const piece = pos.board[r][c];
-
-    if (piece && piece.color === pos.turn) {
-      explorer.selected = explorer.selected && explorer.selected.c === c && explorer.selected.r === r ? null : { c, r };
-      renderExplorer();
-      return;
-    }
-
-    if (explorer.selected) {
-      const legal = engine.legalMovesFrom(pos.board, pos.turn, explorer.selected.c, explorer.selected.r);
-      const target = legal.find((m) => m.toC === c && m.toR === r);
-      if (target) {
-        const s = moveStringFor(target);
-        explorer.selected = null;
-        descendExplorer(s);
-      } else {
-        explorer.selected = null;
-        renderExplorer();
-      }
-    }
-  });
   explorerBoardEl.addEventListener('wheel', (e) => {
     if (!explorer.position) return;
     e.preventDefault();
@@ -2316,79 +2286,12 @@
 
   // Board editor events
   editorBackEl.addEventListener('click', () => showHome());
-  editorBoardEl.addEventListener('click', (e) => {
-    const sq = e.target.closest('.sq');
-    if (!sq) return;
-    const c = +sq.dataset.c;
-    const r = +sq.dataset.r;
-    if (editor.tool.kind === 'erase') {
-      editor.board[r][c] = null;
-    } else if (editor.tool.kind === 'piece') {
-      editor.board[r][c] = { color: editor.tool.color, type: editor.tool.type };
-    }
-    renderEditor();
-  });
   function chooseEditorTool(button) {
     const kind = button.dataset.tool;
     if (kind === 'piece') editor.tool = { kind, color: button.dataset.color, type: button.dataset.type };
     else editor.tool = { kind };
     renderEditor();
   }
-  function editorPaletteClick(e) {
-    const button = e.target.closest('button[data-tool]');
-    if (button) chooseEditorTool(button);
-  }
-  editorPaletteTopEl.addEventListener('click', editorPaletteClick);
-  editorPaletteBottomEl.addEventListener('click', editorPaletteClick);
-  function editorDragStart(e) {
-    const piece = e.target.closest('.piece');
-    const palette = e.target.closest('button[data-tool="piece"]');
-    if (palette) {
-      e.dataTransfer.setData('application/x-rps-piece', JSON.stringify({ color: palette.dataset.color, type: palette.dataset.type }));
-      e.dataTransfer.effectAllowed = 'copy';
-      return;
-    }
-    if (!piece) return;
-    e.dataTransfer.setData('application/x-rps-source', JSON.stringify({ c: +piece.dataset.c, r: +piece.dataset.r }));
-    e.dataTransfer.effectAllowed = 'move';
-  }
-  function editorDrop(e) {
-    e.preventDefault();
-    const sq = e.target.closest('.sq');
-    if (!sq) return;
-    const c = +sq.dataset.c;
-    const r = +sq.dataset.r;
-    const pieceData = e.dataTransfer.getData('application/x-rps-piece');
-    const sourceData = e.dataTransfer.getData('application/x-rps-source');
-    if (pieceData) {
-      try { editor.board[r][c] = JSON.parse(pieceData); } catch (error) { return; }
-    } else if (sourceData) {
-      try {
-        const source = JSON.parse(sourceData);
-        const piece = editor.board[source.r] && editor.board[source.r][source.c];
-        if (!piece) return;
-        editor.board[source.r][source.c] = null;
-        editor.board[r][c] = piece;
-      } catch (error) { return; }
-    }
-    renderEditor();
-  }
-  editorBoardEl.addEventListener('dragstart', editorDragStart);
-  editorPaletteTopEl.addEventListener('dragstart', editorDragStart);
-  editorPaletteBottomEl.addEventListener('dragstart', editorDragStart);
-  editorBoardEl.addEventListener('dragover', (e) => e.preventDefault());
-  editorBoardEl.addEventListener('drop', editorDrop);
-  editorBoardEl.addEventListener('dragend', (e) => {
-    if (e.dataTransfer.dropEffect !== 'none') return;
-    const source = e.target.closest('.editor-piece');
-    if (!source) return;
-    const c = +source.dataset.c;
-    const r = +source.dataset.r;
-    if (editor.board[r] && editor.board[r][c]) {
-      editor.board[r][c] = null;
-      renderEditor();
-    }
-  });
   editorTurnEl.addEventListener('change', () => { editor.turn = editorTurnEl.value; });
   editorClearEl.addEventListener('click', () => {
     editor.board = engine.initialBoard().map((row) => row.map(() => null));
@@ -2402,6 +2305,102 @@
     playFromPositionEl.checked = true;
     history.pushState({ rpsScreen: 'home' }, '', '?');
     showHome();
+  });
+
+  setupPieceDragging({
+    boardEl,
+    orientationFn: () => myColor || 'blue',
+    getPiece: (sq) => state && state.board[sq.r][sq.c],
+    canStart: (piece) => !!state && state.status === 'playing' && !state.spectating && piece.color === myColor && (canMoveNow() || premoveAllowed()),
+    canStartEmpty: () => !!state && state.status === 'playing' && !state.spectating && (canMoveNow() || premoveAllowed()),
+    getWasSelected: (sq) => !!(selected && selected.c === sq.c && selected.r === sq.r),
+    onStart: (sq) => { selectPiece(sq.c, sq.r); render(); },
+    onClick: (sq, piece, sourceKind, wasSelected) => handleClick(sq.c, sq.r, sq.c, sq.r, wasSelected),
+    onDrop: (from, target) => {
+      if (target) tryPlayMove(from.c, from.r, target.c, target.r);
+      else { clearSelection(); render(); }
+    },
+  });
+  setupPieceDragging({
+    boardEl: explorerBoardEl,
+    orientationFn: () => 'blue',
+    getPiece: (sq) => explorer.position && explorer.position.board[sq.r][sq.c],
+    canStart: (piece) => !!explorer.position && piece.color === explorer.position.turn,
+    canStartEmpty: () => !!explorer.position && !!explorer.selected,
+    onStart: (sq) => { explorer.selected = sq; renderExplorer(); },
+    onClick: (sq) => {
+      if (!explorer.position) return;
+      const piece = explorer.position.board[sq.r][sq.c];
+      if (piece && piece.color === explorer.position.turn) {
+        explorer.selected = explorer.selected && explorer.selected.c === sq.c && explorer.selected.r === sq.r ? null : sq;
+        renderExplorer();
+      } else if (explorer.selected) {
+        const legal = engine.legalMovesFrom(explorer.position.board, explorer.position.turn, explorer.selected.c, explorer.selected.r);
+        const move = legal.find((m) => m.toC === sq.c && m.toR === sq.r);
+        if (move) descendExplorer(moveStringFor(move));
+        else { explorer.selected = null; renderExplorer(); }
+      }
+    },
+    onDrop: (from, target) => {
+      if (target && explorer.position) {
+        const legal = engine.legalMovesFrom(explorer.position.board, explorer.position.turn, from.c, from.r);
+        const move = legal.find((m) => m.toC === target.c && m.toR === target.r);
+        if (move) descendExplorer(moveStringFor(move));
+      }
+      explorer.selected = null;
+    },
+  });
+  setupPieceDragging({
+    boardEl: editorBoardEl,
+    orientationFn: () => editor.orientation,
+    getPiece: (sq) => editor.board[sq.r][sq.c],
+    canStart: () => true,
+    canStartEmpty: () => true,
+    onClick: (sq) => {
+      if (!sq) return;
+      if (editor.tool.kind === 'erase') editor.board[sq.r][sq.c] = null;
+      else if (editor.tool.kind === 'piece') editor.board[sq.r][sq.c] = { color: editor.tool.color, type: editor.tool.type };
+      renderEditor();
+    },
+    onDrop: (from, target, piece, sourceKind) => {
+      if (sourceKind === 'palette') {
+        if (target) editor.board[target.r][target.c] = piece;
+      } else if (from && target) {
+        editor.board[from.r][from.c] = null;
+        editor.board[target.r][target.c] = piece;
+      } else if (from) editor.board[from.r][from.c] = null;
+      renderEditor();
+    },
+  });
+  const editorPaletteConfig = {
+    boardEl: editorBoardEl,
+    orientationFn: () => editor.orientation,
+    canStart: () => true,
+    onToolClick: chooseEditorTool,
+    onClick: (sq, piece, sourceKind) => {
+      if (sourceKind === 'palette') editor.tool = { kind: 'piece', color: piece.color, type: piece.type };
+      renderEditor();
+    },
+    onDrop: (from, target, piece) => {
+      if (target) editor.board[target.r][target.c] = piece;
+      renderEditor();
+    },
+  };
+  setupPaletteDragging(editorPaletteTopEl, editorPaletteConfig);
+  setupPaletteDragging(editorPaletteBottomEl, editorPaletteConfig);
+  setupPieceDragging({
+    boardEl: playPositionBoardEl,
+    orientationFn: () => 'blue',
+    getPiece: (sq) => playPosition && playPosition.board[sq.r][sq.c],
+    canStart: () => !!playPosition,
+    onClick: () => {},
+    onDrop: (from, target, piece) => {
+      if (playPosition && from && target) {
+        playPosition.board[from.r][from.c] = null;
+        playPosition.board[target.r][target.c] = piece;
+      }
+      renderPositionPreview();
+    },
   });
 
   window.addEventListener('popstate', (e) => {

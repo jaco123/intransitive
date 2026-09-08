@@ -770,6 +770,10 @@ function handleCreate(ws, msg) {
     send(ws, { type: 'error', message: 'Invalid starting position.' });
     return;
   }
+  if (startPosition !== undefined && msg.rated !== false) {
+    send(ws, { type: 'error', message: 'Custom starting positions are casual only.' });
+    return;
+  }
   const g = newGame(msg.timeControl, msg.rated === false || !user, startPosition);
   games.set(g.id, g);
   g.blue = seatFor(user, ws, g.timeControl);
@@ -884,6 +888,10 @@ function handleQueue(ws, msg) {
   const startPosition = startPositionFromMessage(msg);
   if (startPosition === null) {
     send(ws, { type: 'error', message: 'Invalid starting position.' });
+    return;
+  }
+  if (startPosition !== undefined && msg.rated !== false) {
+    send(ws, { type: 'error', message: 'Custom starting positions are casual only.' });
     return;
   }
 

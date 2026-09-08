@@ -265,6 +265,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 .sq.selected { background: var(--selected); }
 .sq.goal-blue { background-image: linear-gradient(rgba(74, 134, 240, 0.55), rgba(74, 134, 240, 0.55)); }
 .sq.goal-red { background-image: linear-gradient(rgba(239, 106, 106, 0.55), rgba(239, 106, 106, 0.55)); }
+.sq.drag-source { background-image: linear-gradient(rgba(100, 150, 100, 0.38), rgba(100, 150, 100, 0.38)); }
 
 .piece { width: 82%; height: 82%; position: relative; cursor: grab; z-index: 2; }
 .piece:active { cursor: grabbing; }
@@ -364,6 +365,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 .gamestatus.waiting { background: var(--surface-3); color: var(--muted); }
 .gamestatus.yourturn { background: #23406b; color: #fff; }
 .gamestatus.over { background: #2f4d2f; color: #fff; }
+.gamestatus.over { border: 0; outline: 0; }
 
 .link-block .field-label { margin-top: 0; }
 
@@ -379,7 +381,7 @@ h1 span { color: var(--muted); font-weight: 400; }
   overflow-y: auto;
   background: var(--surface-2);
   border: 1px solid var(--border);
-  border-radius: var(--r-md);
+  border-radius: 0;
   font-variant-numeric: tabular-nums;
   font-size: 14px;
 }
@@ -417,6 +419,9 @@ h1 span { color: var(--muted); font-weight: 400; }
 
 .actions { display: flex; gap: var(--s2); margin-top: auto; }
 .actions .btn { flex: 1; }
+#finishedActions { flex-direction: column; }
+#finishedActions .btn { border: 0; outline: 0; }
+#finishedActions .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .game-actions {
   display: flex;
   justify-content: space-evenly;
@@ -441,6 +446,14 @@ h1 span { color: var(--muted); font-weight: 400; }
 .icon-btn svg { width: 26px; height: 26px; }
 .icon-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-bright); }
 .icon-btn.danger:hover { background: rgba(204, 51, 51, 0.18); color: #ff8a80; }
+.move-nav { display: flex; align-items: center; gap: 2px; margin-top: -4px; }
+.move-nav .icon-btn { width: 34px; height: 32px; border-radius: 0; }
+.move-nav .icon-btn:disabled { opacity: .35; cursor: default; }
+.move-nav-icon { font-family: "lichess-icons"; font-size: 18px; line-height: 1; }
+.move-nav-icon::before { content: attr(data-icon); }
+.move-settings { padding: 8px 10px; background: var(--surface-2); color: var(--muted); font-size: 12px; }
+.move-settings label { display: flex; align-items: center; gap: 6px; }
+.hide-coordinates .coord-rank, .hide-coordinates .coord-file { display: none; }
 
 .action-confirm {
   padding: var(--s3);
@@ -618,6 +631,11 @@ h1 span { color: var(--muted); font-weight: 400; }
 #editor .board { order: 2; }
 #editor #editorPaletteTop { order: 1; }
 #editor #editorPaletteBottom { order: 3; }
+#editor .actions { flex-direction: column; width: 100%; }
+#editor .actions .btn { flex: none; width: 100%; border: 0; outline: 0; }
+#editor .actions .btn:focus-visible, #editor > .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+#editor #editorToAnalysis { background: var(--surface-3); }
+#editor #editorToAnalysis:hover { background: #3f3d39; }
 
 /* ---------------------------------------------------------------------------
    History list

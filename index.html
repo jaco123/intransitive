@@ -181,6 +181,14 @@
         </div>
 
         <div class="movelist-label">Moves</div>
+        <div class="move-nav" id="gameMoveNav" aria-label="Move navigation">
+          <button class="icon-btn" type="button" data-move-action="first" aria-label="Jump to first move"><span class="move-nav-icon" data-icon="&#xe035;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="prev" aria-label="Previous move"><span class="move-nav-icon" data-icon="&#xe027;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="next" aria-label="Next move"><span class="move-nav-icon" data-icon="&#xe026;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="last" aria-label="Jump to last move"><span class="move-nav-icon" data-icon="&#xe034;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-settings-target="gameMoveSettings" aria-label="Settings"><span class="move-nav-icon" data-icon="&#xe005;" aria-hidden="true"></span></button>
+        </div>
+        <div class="move-settings hidden" id="gameMoveSettings"><label><input type="checkbox" data-coordinates-board="board" checked /> Show coordinates</label></div>
         <ol id="moves" class="moves"></ol>
 
         <div class="game-chat">
@@ -223,9 +231,10 @@
           </div>
         </div>
 
-        <div class="actions">
+        <div class="actions" id="finishedActions">
           <button id="rematch" class="btn primary hidden">Rematch</button>
           <button id="newGame" class="btn hidden">New game</button>
+          <button id="finishedAnalysis" class="btn hidden">Analysis board</button>
         </div>
       </aside>
     </div>
@@ -256,6 +265,14 @@
       </div>
       <aside class="side">
         <div id="replayResult" class="gamestatus"></div>
+        <div class="move-nav" id="replayMoveNav" aria-label="Move navigation">
+          <button class="icon-btn" type="button" data-move-action="first" aria-label="Jump to first move"><span class="move-nav-icon" data-icon="&#xe035;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="prev" aria-label="Previous move"><span class="move-nav-icon" data-icon="&#xe027;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="next" aria-label="Next move"><span class="move-nav-icon" data-icon="&#xe026;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="last" aria-label="Jump to last move"><span class="move-nav-icon" data-icon="&#xe034;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-settings-target="replayMoveSettings" aria-label="Settings"><span class="move-nav-icon" data-icon="&#xe005;" aria-hidden="true"></span></button>
+        </div>
+        <div class="move-settings hidden" id="replayMoveSettings"><label><input type="checkbox" data-coordinates-board="replayBoard" checked /> Show coordinates</label></div>
         <div class="movelist-label">Moves</div>
         <ol id="replayMoves" class="moves"></ol>
         <div class="actions">
@@ -290,6 +307,14 @@
           <button id="explorerReset" class="btn">Reset</button>
         </div>
         <div class="movelist-label">Moves from this position</div>
+        <div class="move-nav" id="explorerMoveNav" aria-label="Move navigation">
+          <button class="icon-btn" type="button" data-move-action="first" aria-label="Jump to first move"><span class="move-nav-icon" data-icon="&#xe035;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="prev" aria-label="Previous move"><span class="move-nav-icon" data-icon="&#xe027;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="next" aria-label="Next move"><span class="move-nav-icon" data-icon="&#xe026;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-move-action="last" aria-label="Jump to last move"><span class="move-nav-icon" data-icon="&#xe034;" aria-hidden="true"></span></button>
+          <button class="icon-btn" type="button" data-settings-target="explorerMoveSettings" aria-label="Settings"><span class="move-nav-icon" data-icon="&#xe005;" aria-hidden="true"></span></button>
+        </div>
+        <div class="move-settings hidden" id="explorerMoveSettings"><label><input type="checkbox" data-coordinates-board="explorerBoard" checked /> Show coordinates</label></div>
         <ol id="explorerMoves" class="moves explorer-list"></ol>
       </aside>
     </div>

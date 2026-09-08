@@ -24,6 +24,12 @@ if ! node "$project_dir/tests/editor-next-ui.js"; then
   failed=1
 fi
 
+printf '\n===== latest UI/protocol regression test =====\n'
+if ! node "$project_dir/tests/latest-ui.js"; then
+  printf 'FAILED: latest UI/protocol regression test\n'
+  failed=1
+fi
+
 printf '\n===== live deployment browser test =====\n'
 if ! node "$project_dir/tests/live-deployment.js"; then
   printf 'FAILED: live deployment browser test\n'
