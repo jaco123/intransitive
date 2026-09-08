@@ -2314,7 +2314,6 @@
     canStart: (piece) => !!state && state.status === 'playing' && !state.spectating && piece.color === myColor && (canMoveNow() || premoveAllowed()),
     canStartEmpty: () => !!state && state.status === 'playing' && !state.spectating && (canMoveNow() || premoveAllowed()),
     getWasSelected: (sq) => !!(selected && selected.c === sq.c && selected.r === sq.r),
-    onStart: (sq) => { selectPiece(sq.c, sq.r); render(); },
     onClick: (sq, piece, sourceKind, wasSelected) => handleClick(sq.c, sq.r, sq.c, sq.r, wasSelected),
     onDrop: (from, target) => {
       if (target) tryPlayMove(from.c, from.r, target.c, target.r);
@@ -2327,7 +2326,6 @@
     getPiece: (sq) => explorer.position && explorer.position.board[sq.r][sq.c],
     canStart: (piece) => !!explorer.position && piece.color === explorer.position.turn,
     canStartEmpty: () => !!explorer.position && !!explorer.selected,
-    onStart: (sq) => { explorer.selected = sq; renderExplorer(); },
     onClick: (sq) => {
       if (!explorer.position) return;
       const piece = explorer.position.board[sq.r][sq.c];
