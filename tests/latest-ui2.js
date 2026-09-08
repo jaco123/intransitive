@@ -121,7 +121,7 @@ async function createCustomCaptureGame(page, joinPage) {
       assert.strictEqual(await page.locator('link[rel="icon"]').count(), 1, 'Watch should retain the favicon');
       assert.ok(await page.locator('#watch [data-game-id]').count() > 0, 'Watch should list active games');
       const activeGameId = new URL(activeCreator.url()).searchParams.get('game');
-      await page.locator('#watch [data-game-id="' + activeGameId + '"]').click();
+      await page.locator('#watch [data-game-id="' + activeGameId + '"]').first().click();
       await page.locator('#game').waitFor();
       assert.strictEqual(await page.locator('#gameChatInput').count(), 1, 'spectator chat input missing');
       assert.strictEqual(await page.locator('#resign').isVisible(), false, 'spectator must not have player controls');
