@@ -92,6 +92,10 @@ function parseStartPosition(value) {
   return { board: engine.cloneBoard(value.board), turn: value.turn };
 }
 
+function startPositionFromMessage(msg) {
+  return msg.board === undefined ? undefined : parseStartPosition({ board: msg.board, turn: msg.turn });
+}
+
 // Lichess-style category from a time control (initial seconds + 40 * increment seconds).
 function timeControlCategory(tc) {
   const initial = Number(tc && tc.initial) || 0;
@@ -758,7 +762,7 @@ function handleJoin(ws, msg) {
 function handleCreate(ws, msg) {
   leaveLobby(ws); // creating a private game removes any open seek
   const user = resolveUser(msg.session);
-  const startPosition = parseStartPosition(msg);
+  const startPosition = startPositionFromMessage(msg);
   if (startPosition === null) {
     send(ws, { type: 'error', message: 'Invalid starting position.' });
     return;
@@ -874,7 +878,7 @@ function parseMoveNotation(notation) {
 function handleQueue(ws, msg) {
   const user = resolveUser(msg.session);
   const tc = normalizeTimeControl(msg.timeControl);
-  const startPosition = parseStartPosition(msg);
+  const startPosition = startPositionFromMessage(msg);
   if (startPosition === null) {
     send(ws, { type: 'error', message: 'Invalid starting position.' });
     return;
