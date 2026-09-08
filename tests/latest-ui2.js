@@ -2,6 +2,7 @@
 
 /* Live-IP TFV regressions for the latest RPS UI request. */
 const assert = require('assert');
+const crypto = require('crypto');
 const { firefox } = require('playwright');
 
 const BASE = (process.env.RPS_LIVE_BASE || 'http://141.95.142.131').replace(/\/$/, '');
@@ -10,6 +11,34 @@ async function openEditor(page) {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Board editor', exact: true }).click();
   await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor();
+}
+
+async function registerUser(context, prefix) {
+  const page = await context.newPage({ viewport: { width: 1366, height: 768 } });
+  page.setDefaultTimeout(5000);
+  await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  const username = 'qa' + prefix + Date.now().toString(36) + crypto.randomBytes(3).toString('hex');
+  const password = crypto.randomBytes(18).toString('base64url');
+  await page.getByRole('button', { name: 'Sign up', exact: true }).click();
+  await page.locator('#authModal').waitFor({ state: 'visible' });
+  await page.locator('#authUsername').fill(username);
+  await page.locator('#authPassword').fill(password);
+  await page.locator('#authSubmit').click();
+  await page.locator('#navUser').waitFor({ state: 'visible' });
+  return { page, username, password };
+}
+
+async function createPrivateGame(createPage, joinPage) {
+  await createPage.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await createPage.locator('#createBtn').click();
+  await createPage.locator('#gameStatus').filter({ hasText: /Waiting for opponent/ }).waitFor();
+  const url = createPage.url();
+  await joinPage.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+  await joinPage.locator('#joinInput').fill(url);
+  await joinPage.locator('#joinBtn').click();
+  await createPage.locator('#gameStatus').filter({ hasText: /Your move|to move/ }).waitFor({ timeout: 5000 });
+  await joinPage.locator('#gameStatus').filter({ hasText: /Your move|to move/ }).waitFor({ timeout: 5000 });
+  return new URL(url).searchParams.get('game');
 }
 
 async function joinCreatedGame(createPage, joinPage) {
@@ -112,6 +141,50 @@ async function createCustomCaptureGame(page, joinPage) {
     try { await joinCreatedGame(activeCreator, activeOpponent); }
     catch (error) { failures.push('active game setup for Watch: ' + error.message); }
 
+    let featuredId = null;
+    try {
+      // Use separate browser contexts so the two authenticated users have independent sessions.
+      const highContext = await browser.newContext();
+      const lowContext = await browser.newContext();
+      const high = await registerUser(highContext, 'hi');
+      const low = await registerUser(lowContext, 'lo');
+      await joinCreatedGame(high.page, low.page);
+      await low.page.locator('#resign').click();
+      await low.page.locator('#actionConfirmYes').click();
+      await high.page.locator('#gameStatus').filter({ hasText: /resignation/ }).waitFor({ timeout: 5000 });
+      await low.page.locator('#gameStatus').filter({ hasText: /resignation/ }).waitFor({ timeout: 5000 });
+
+      const highGuestContext = await browser.newContext();
+      const lowGuestContext = await browser.newContext();
+      const highGuest = await highGuestContext.newPage({ viewport: { width: 1366, height: 768 } });
+      const lowGuest = await lowGuestContext.newPage({ viewport: { width: 1366, height: 768 } });
+      featuredId = await createPrivateGame(high.page, highGuest);
+      const lowGameId = await createPrivateGame(low.page, lowGuest);
+      assert.notStrictEqual(featuredId, lowGameId, 'featured regression needs two different active games');
+
+      const watchResponse = await page.request.get(BASE + '/api/watch', { timeout: 5000 });
+      assert.strictEqual(watchResponse.status(), 200, '/api/watch should be available');
+      const watchData = await watchResponse.json();
+      const active = watchData.games.filter((game) => game.status === 'playing');
+      const score = (game) => Math.max(...['blue', 'red'].map((color) => {
+        const rating = game.players[color] && game.players[color].rating;
+        return Number.isFinite(rating) ? rating : -1;
+      }));
+      const expected = active.slice().sort((a, b) =>
+        (score(b) - score(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id)
+      )[0];
+      assert.ok(expected, '/api/watch should expose active playing games');
+      assert.ok(score(active.find((game) => game.id === featuredId)) !== score(active.find((game) => game.id === lowGameId)),
+        'featured regression games should have distinct player ratings');
+      assert.ok(watchData.featured, '/api/watch should select a featured game');
+      assert.strictEqual(watchData.featured.id, expected.id, '/api/watch featured game should be highest-rated with deterministic tie-breaks');
+
+      await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await page.locator('#homeFeaturedGame [data-game-id="' + watchData.featured.id + '"]').waitFor({ timeout: 5000 });
+      assert.strictEqual(await page.locator('#homeFeaturedGame [data-game-id="' + watchData.featured.id + '"]').isVisible(), true,
+        'home should render the exact /api/watch featured game');
+    } catch (error) { failures.push('highest-rated featured game selection: ' + error.message); }
+
     try {
       assert.strictEqual(await page.getByRole('button', { name: /Highest-rated|Ongoing game|Watch/i }).count() > 0, true,
         'home should expose a clickable highest-rated ongoing game');
@@ -139,6 +212,23 @@ async function createCustomCaptureGame(page, joinPage) {
       await page.getByRole('heading', { name: 'Players', exact: true }).waitFor();
       assert.strictEqual(await page.locator('link[rel="icon"]').count(), 1, 'Players should retain the favicon');
       const search = page.locator('#playersSearch');
+      const playersContext = await browser.newContext();
+      const known = await registerUser(playersContext, 'pl');
+      await known.page.getByRole('button', { name: 'Players', exact: true }).click();
+      await known.page.getByRole('heading', { name: 'Players', exact: true }).waitFor();
+      const positiveSearch = known.page.locator('#playersSearch');
+      await positiveSearch.fill(known.username);
+      const matchingRow = known.page.locator('.player-directory-row').filter({ hasText: known.username });
+      await matchingRow.waitFor({ timeout: 5000 });
+      assert.strictEqual(await matchingRow.count(), 1, 'Players search should return the known registered user');
+      assert.match(await matchingRow.first().innerText(), new RegExp(known.username), 'matching player row should include the username');
+
+      // Preserve the existing no-result assertion after the positive search.
+      const noResultSearch = known.page.locator('#playersSearch');
+      await noResultSearch.fill('definitely-no-such-player');
+      await known.page.locator('#playersEmpty').waitFor({ state: 'visible', timeout: 5000 });
+      assert.match(await known.page.locator('body').innerText(), /no players|no results/i, 'Players should show a no-result state');
+
       await search.fill('definitely-no-such-player');
       await page.waitForTimeout(250);
       assert.match(await page.locator('body').innerText(), /no players|no results/i, 'Players should show a no-result state');
