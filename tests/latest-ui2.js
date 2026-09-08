@@ -107,8 +107,18 @@ async function createCustomCaptureGame(page, joinPage) {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth && document.documentElement.scrollHeight <= window.innerHeight),
         'editor should fit a laptop viewport without clipping or page scroll');
       await page.locator('#editorReset').hover();
-      assert.notStrictEqual(await page.locator('#editorReset').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)',
-        'editor hover should reveal button styling');
+      const hover = await page.locator('#editorReset').evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
+        return {
+          active: el.matches(':hover'),
+          background: getComputedStyle(el).backgroundColor,
+          hitInsideButton: hit === el || el.contains(hit),
+        };
+      });
+      assert.strictEqual(hover.active, true, 'editor hover should reach the action button');
+      assert.strictEqual(hover.hitInsideButton, true, 'editor hover should not be blocked by another layer');
+      assert.notStrictEqual(hover.background, 'rgba(0, 0, 0, 0)', 'editor hover should reveal button styling');
     } catch (error) { failures.push('editor layout/buttons: ' + error.message); }
 
     try {
