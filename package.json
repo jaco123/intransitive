@@ -1,0 +1,18 @@
+{
+  "name": "rps",
+  "version": "1.0.0",
+  "description": "",
+  "main": "app.js",
+  "scripts": {
+    "test": "bash tests/runAll.sh",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "glicko2": "^1.2.2",
+    "ws": "^8.21.3"
+  }
+}

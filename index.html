@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RPS2</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Top navigation -->
+  <header id="nav">
+    <div class="nav-inner">
+      <div class="nav-left">
+        <a id="navBrand" class="nav-brand" href="?">RPS2</a>
+        <nav class="nav-links">
+          <button id="analysisBtn" class="nav-link-btn">Analysis</button>
+          <button id="editorBtn" class="nav-link-btn">Board editor</button>
+        </nav>
+      </div>
+      <div id="navAuth">
+        <div id="navGuest">
+          <button id="loginBtn" class="btn small">Log in</button>
+          <button id="signupBtn" class="btn small primary">Sign up</button>
+        </div>
+        <div id="navUser" class="hidden">
+          <button id="profileBtn" class="nav-profile-btn" title="Your profile">
+            <svg class="nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z"/></svg>
+            <span id="navUsername"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Home / lobby -->
+  <div id="home" class="screen">
+    <main class="lobby">
+      <div class="lobby__side">
+        <div class="lobby__box">
+          <div class="lobby__box__top"><span class="title">How to play</span></div>
+          <div class="lobby__box__content">
+            <div class="rules">
+              <p>Every piece moves one square in any direction.</p>
+              <p>Rock beats Scissors · Scissors beats Paper · Paper beats Rock.</p>
+              <p>You may only capture a piece you beat. You cannot capture your own pieces.</p>
+              <p>Win by reaching your goal square. Lose if you have no legal moves.</p>
+              <p>Draw after 50 moves per side without a capture, or threefold repetition.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="lobby__box">
+          <div class="lobby__box__top"><span class="title">Chat</span></div>
+          <div class="lobby__box__content">
+            <div id="chatLog" class="chat-log"></div>
+            <div class="chat-input-row">
+              <input id="chatInput" class="input" placeholder="Chat with others…" maxlength="500" autocomplete="off" />
+              <button id="chatSend" class="btn small primary">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="lobby__app">
+        <div class="tabs-horiz"><span>&nbsp;</span></div>
+        <div class="lobby__app__content">
+          <div class="lpools" id="lobbyList"></div>
+          <p id="lobbyEmpty" class="lobby-empty">No open games right now. Create a lobby game to appear here.</p>
+        </div>
+      </div>
+
+      <div class="lobby__table">
+        <div class="lobby__box">
+          <div class="lobby__box__top"><span class="title">New game</span></div>
+          <div class="lobby__box__content">
+            <div class="tc-sliders">
+              <div class="tc-row">
+                <label for="tcMinutes">Minutes per side</label>
+                <span class="tc-val" id="tcMinutesVal">5</span>
+              </div>
+              <input type="range" id="tcMinutes" min="1" max="30" step="1" value="5" />
+
+              <div class="tc-row">
+                <label for="tcIncrement">Increment in seconds</label>
+                <span class="tc-val" id="tcIncrementVal">3</span>
+              </div>
+              <input type="range" id="tcIncrement" min="0" max="15" step="1" value="3" />
+            </div>
+
+            <div class="tc-presets" id="tcPresets">
+              <button class="tc-preset" data-min="1" data-inc="0">1+0</button>
+              <button class="tc-preset" data-min="3" data-inc="0">3+0</button>
+              <button class="tc-preset" data-min="3" data-inc="2">3+2</button>
+              <button class="tc-preset" data-min="5" data-inc="0">5+0</button>
+              <button class="tc-preset" data-min="5" data-inc="3">5+3</button>
+              <button class="tc-preset" data-min="10" data-inc="0">10+0</button>
+              <button class="tc-preset" data-min="15" data-inc="10">15+10</button>
+            </div>
+
+            <div class="mode-toggle">
+              <button id="modeRated" class="mode-btn active">Rated</button>
+              <button id="modeCasual" class="mode-btn">Casual</button>
+            </div>
+
+            <div class="lobby__start">
+              <button class="button button-metal lobby__start__button" id="queueBtn">
+                <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="9" cy="7.5" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M2.5 19.5c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13v-.5z"/><path d="M15.5 13.9c2.6.3 4.5 2.3 4.5 4.9v.7h-4"/></g></svg>
+                <span id="queueBtnLabel">Create lobby game</span>
+              </button>
+              <button class="button button-metal lobby__start__button" id="createBtn">
+                <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="12" cy="7.5" r="4"/><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5v.5H4v-.5z"/></g></svg>
+                <span>Create private game</span>
+              </button>
+            </div>
+            <div id="queueStatus" class="queue-status hidden"></div>
+
+            <label class="field-label" for="joinInput">Or join a game</label>
+            <div class="join-row">
+              <input id="joinInput" class="input" placeholder="Link or ID" />
+              <button id="joinBtn" class="btn small">Join</button>
+            </div>
+            <div id="homeError" class="error hidden"></div>
+          </div>
+        </div>
+
+        <div class="lobby__counters"><span id="lobbyCount" class="lobby-count"></span></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Game -->
+  <div id="game" class="screen hidden">
+    <div class="game-layout">
+      <div class="players-col">
+        <div class="player top" id="opponentBar">
+          <span class="pname" id="opponentName">Red</span>
+          <span class="clock-wrap">
+            <span class="grace hidden" id="opponentGrace"></span>
+            <span class="clock" id="opponentClock">5:00</span>
+          </span>
+        </div>
+
+        <div class="board-wrap">
+          <div id="board" class="board"></div>
+          <svg id="liveArrows" class="arrows-layer" viewBox="0 0 100 100"></svg>
+        </div>
+
+        <div class="player bottom" id="playerBar">
+          <span class="pname" id="playerName">Blue</span>
+          <span class="clock-wrap">
+            <span class="grace hidden" id="playerGrace"></span>
+            <span class="clock" id="playerClock">5:00</span>
+          </span>
+        </div>
+      </div>
+
+      <aside class="side">
+        <div class="side-head">
+          <span id="gameMode" class="game-mode hidden"></span>
+          <div id="gameStatus" class="gamestatus">Waiting…</div>
+        </div>
+
+        <div class="link-block">
+          <label class="field-label">Invite link</label>
+          <div class="join-row">
+            <input id="gameLink" class="input" readonly />
+            <button id="copyLink" class="btn small">Copy</button>
+          </div>
+        </div>
+
+        <div class="movelist-label">Moves</div>
+        <ol id="moves" class="moves"></ol>
+
+        <div class="game-chat">
+          <div class="movelist-label">Chat</div>
+          <div id="gameChatLog" class="chat-log game-chat-log"></div>
+          <div class="chat-input-row">
+            <input id="gameChatInput" class="input" placeholder="Chat with your opponent…" maxlength="500" autocomplete="off" />
+            <button id="gameChatSend" class="btn small primary">Send</button>
+          </div>
+        </div>
+
+        <div id="claimActions" class="claim-actions hidden">
+          <button id="claimVictory" class="btn primary">Claim victory</button>
+          <button id="claimDraw" class="btn">Claim draw</button>
+        </div>
+
+        <div id="drawOfferNotice" class="draw-offer hidden">
+          <span class="draw-offer-text"></span>
+          <button id="acceptDraw" class="btn primary">Accept</button>
+          <button id="declineDraw" class="btn">Decline</button>
+        </div>
+
+        <div class="game-actions" id="gameActions">
+          <button id="resign" class="icon-btn danger" title="Resign" aria-label="Resign">
+            <svg viewBox="0 0 448 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M64 32C64 14.3 49.7 0 32 0S0 14.3 0 32V64 368 480c0 17.7 14.3 32 32 32s32-14.3 32-32V352l64.3-16.1c41.1-10.3 84.6-5.5 122.5 13.4c44.2 22.1 95.5 24.8 141.7 7.4l34.7-13c12.5-4.7 20.8-16.6 20.8-30V66.1c0-23-24.2-38-44.8-27.7l-9.6 4.8c-46.3 23.2-100.8 23.2-147.1 0c-35.1-17.6-75.4-22-113.5-12.5L64 48V32z"/></svg>
+          </button>
+          <button id="offerDraw" class="icon-btn" title="Offer draw" aria-label="Offer draw">
+            <svg viewBox="0 0 640 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M323.4 85.2l-96.8 78.4c-16.1 13-19.2 36.4-7 53.1c12.9 17.8 38 21.3 55.3 7.8l99.3-77.2c7-5.4 17-4.2 22.5 2.8s4.2 17-2.8 22.5l-20.9 16.2L512 316.8V128h-.7l-3.9-2.5L434.8 79c-15.3-9.8-33.2-15-51.4-15c-21.8 0-43 7.5-60 21.2zm22.8 124.4l-51.7 40.2C263 274.4 217.3 268 193.7 235.6c-22.2-30.5-16.6-73.1 12.7-96.8l83.2-67.3c-11.6-4.9-24.1-7.4-36.8-7.4C234 64 215.7 69.6 200 80l-72 48V352h28.2l91.4 83.4c19.6 17.9 49.9 16.5 67.8-3.1c5.5-6.1 9.2-13.2 11.1-20.6l17 15.6c19.5 17.9 49.9 16.6 67.8-2.9c4.5-4.9 7.8-10.6 9.9-16.5c19.4 13 45.8 10.3 62.1-7.5c17.9-19.5 16.6-49.9-2.9-67.8l-134.2-123zM16 128c-8.8 0-16 7.2-16 16V352c0 17.7 14.3 32 32 32H64c17.7 0 32-14.3 32-32V128H16zM48 320a16 16 0 1 1 0 32 16 16 0 1 1 0-32zM544 128V352c0 17.7 14.3 32 32 32h32c17.7 0 32-14.3 32-32V144c0-8.8-7.2-16-16-16H544zm32 208a16 16 0 1 1 32 0 16 16 0 1 1 -32 0z"/></svg>
+          </button>
+          <button id="abort" class="icon-btn hidden" title="Abort game" aria-label="Abort game">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
+          </button>
+        </div>
+
+        <div id="actionConfirm" class="action-confirm hidden">
+          <span id="actionConfirmText" class="action-confirm-text">Resign?</span>
+          <div class="action-confirm-btns">
+            <button id="actionConfirmYes" class="btn danger">Yes</button>
+            <button id="actionConfirmNo" class="btn">No</button>
+          </div>
+        </div>
+
+        <div class="actions">
+          <button id="rematch" class="btn primary hidden">Rematch</button>
+          <button id="newGame" class="btn hidden">New game</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- My games / history -->
+  <div id="history" class="screen hidden">
+    <div class="screen-head">
+      <button id="historyBack" class="btn small">‹ Back</button>
+      <h1>My games</h1>
+      <button id="profileLogout" class="btn small profile-logout">Log out</button>
+    </div>
+    <div id="profilePanel" class="profile-panel"></div>
+    <div id="historyList" class="history-list"></div>
+  </div>
+
+  <!-- Replay -->
+  <div id="replay" class="screen hidden">
+    <div class="screen-head">
+      <button id="replayBack" class="btn small">‹ Back to games</button>
+      <h1 id="replayTitle">Game</h1>
+    </div>
+    <div class="game-layout">
+      <div class="players-col">
+        <div class="board-wrap">
+          <div id="replayBoard" class="board"></div>
+        </div>
+      </div>
+      <aside class="side">
+        <div id="replayResult" class="gamestatus"></div>
+        <div class="movelist-label">Moves</div>
+        <ol id="replayMoves" class="moves"></ol>
+        <div class="actions">
+          <button id="replayPrev" class="btn">‹ Prev</button>
+          <button id="replayNext" class="btn">Next ›</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Analysis (opening explorer) -->
+  <div id="explorer" class="screen hidden">
+    <div class="screen-head">
+      <button id="explorerBack" class="btn small">‹ Back</button>
+      <h1>Analysis</h1>
+    </div>
+    <div class="game-layout">
+      <div class="players-col">
+        <div class="board-wrap">
+          <div id="explorerBoard" class="board"></div>
+          <svg id="explorerArrows" class="arrows-layer" viewBox="0 0 100 100"></svg>
+        </div>
+      </div>
+      <aside class="side">
+        <div id="explorerStatus" class="gamestatus"></div>
+        <div id="explorerPath" class="explorer-path"></div>
+        <div class="movelist-label">Moves</div>
+        <ol id="explorerPathMoves" class="moves path-moves"></ol>
+        <div class="actions">
+          <button id="explorerPrev" class="btn">‹ Prev</button>
+          <button id="explorerNext" class="btn">Next ›</button>
+          <button id="explorerReset" class="btn">Reset</button>
+        </div>
+        <div class="movelist-label">Moves from this position</div>
+        <ol id="explorerMoves" class="moves explorer-list"></ol>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Board editor -->
+  <div id="editor" class="screen hidden">
+    <div class="screen-head">
+      <button id="editorBack" class="btn small">‹ Back</button>
+      <h1>Board editor</h1>
+    </div>
+    <div class="game-layout">
+      <div class="players-col">
+        <div class="board-wrap">
+          <div id="editorBoard" class="board"></div>
+        </div>
+      </div>
+      <aside class="side">
+        <div class="editor-group">
+          <div class="movelist-label">Side to place</div>
+          <div class="mode-toggle">
+            <button id="editorColorBlue" class="mode-btn active">Blue</button>
+            <button id="editorColorRed" class="mode-btn">Red</button>
+          </div>
+        </div>
+        <div class="editor-group">
+          <div class="movelist-label">Piece</div>
+          <div class="editor-toggle">
+            <button id="editorTypeRock" class="mode-btn active">Rock</button>
+            <button id="editorTypePaper" class="mode-btn">Paper</button>
+            <button id="editorTypeScissors" class="mode-btn">Scissors</button>
+          </div>
+        </div>
+        <div class="editor-group">
+          <div class="movelist-label">Tools</div>
+          <div class="mode-toggle">
+            <button id="editorEraser" class="mode-btn">Erase</button>
+          </div>
+        </div>
+        <div class="editor-group">
+          <div class="movelist-label">Side to move</div>
+          <div class="mode-toggle">
+            <button id="editorTurnBlue" class="mode-btn active">Blue</button>
+            <button id="editorTurnRed" class="mode-btn">Red</button>
+          </div>
+        </div>
+        <div class="actions">
+          <button id="editorClear" class="btn">Clear board</button>
+          <button id="editorReset" class="btn">Start position</button>
+        </div>
+        <button id="editorToAnalysis" class="btn primary" style="width:100%">Analysis board</button>
+      </aside>
+    </div>
+  </div>
+
+  <!-- Auth modal -->
+  <div id="authModal" class="modal hidden">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card">
+      <button id="authClose" class="modal-close" aria-label="Close">×</button>
+      <div class="auth-tabs">
+        <button id="tabLogin" class="auth-tab active">Log in</button>
+        <button id="tabRegister" class="auth-tab">Sign up</button>
+      </div>
+      <form id="authForm">
+        <label class="field-label" for="authUsername">Username</label>
+        <input id="authUsername" class="input" autocomplete="username" maxlength="20" />
+        <label class="field-label" for="authPassword">Password</label>
+        <input id="authPassword" class="input" type="password" autocomplete="current-password" />
+        <div id="authError" class="error hidden"></div>
+        <button type="submit" id="authSubmit" class="btn primary" style="width:100%">Log in</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="engine.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
