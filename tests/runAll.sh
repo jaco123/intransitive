@@ -18,6 +18,12 @@ if ! node "$project_dir/tests/editor-ui.js"; then
   failed=1
 fi
 
+printf '\n===== next editor/analysis UI test =====\n'
+if ! node "$project_dir/tests/editor-next-ui.js"; then
+  printf 'FAILED: next editor/analysis UI test\n'
+  failed=1
+fi
+
 printf '\n===== live deployment browser test =====\n'
 if ! node "$project_dir/tests/live-deployment.js"; then
   printf 'FAILED: live deployment browser test\n'

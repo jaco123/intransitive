@@ -117,24 +117,23 @@ async function pageHealth(page) {
     assert.strictEqual(await page.locator('#editorBoard .piece').count(), initialCount, 'Starting position should restore pieces');
 
     await page.locator('#editorAnalysis').click();
-    await page.getByText('Initial position').waitFor({ state: 'visible' });
+    await page.getByText('Custom position').waitFor({ state: 'visible' });
     assert.strictEqual(await page.locator('#explorer').isVisible(), true);
     await page.goBack();
     await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible' });
     await page.getByRole('button', { name: 'Blue Scissors' }).click();
     await page.locator('#editorBoard .sq[data-c="2"][data-r="2"]').click();
     await page.locator('#editorToAnalysis').click();
-    await page.getByText('Custom position').waitFor({ state: 'visible' });
-    assert.strictEqual(await page.locator('#explorer').isVisible(), true);
+    await page.locator('#home').waitFor({ state: 'visible' });
+    await page.locator('#playFromPosition').waitFor({ state: 'visible' });
+    assert.strictEqual(await page.locator('#playFromPosition').isChecked(), true);
 
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
-    assert.strictEqual(await page.locator('#home').isVisible(), true, 'Play should return to the lobby');
     await page.goBack();
     try {
-      await page.getByText(/to move · .* games/).waitFor({ state: 'visible', timeout: 3000 });
-      assert.strictEqual(await page.getByRole('heading', { name: 'Board editor', exact: true }).isVisible(), false,
-        'browser Back should leave the editor');
-      console.log('PASS Analysis -> Board editor -> browser Back returns to Analysis');
+      await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible', timeout: 3000 });
+      assert.strictEqual(await page.locator('#editor').isVisible(), true,
+        'browser Back should return from the lobby to the editor');
+      console.log('PASS Analysis/editor history and Continue-from-position navigation');
     } catch (error) {
       failures.push(error.message);
     }

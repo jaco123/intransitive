@@ -60,6 +60,9 @@
   const tcPresetsEl = $('tcPresets');
   const modeRatedEl = $('modeRated');
   const modeCasualEl = $('modeCasual');
+  const playFromPositionEl = $('playFromPosition');
+  const playFromPositionPreviewEl = $('playFromPositionPreview');
+  const playPositionBoardEl = $('playPositionBoard');
   const homeErrorEl = $('homeError');
   const resignBtn = $('resign');
   const newGameBtn = $('newGame');
@@ -167,6 +170,8 @@
   let liveArrows = [];       // board arrows drawn on the live board
   let explorerArrows = [];   // board arrows drawn on the analysis board
   let arrowDrag = null;      // in-progress right-click-drag arrow
+  let explorerPress = null;  // pointer drag state for analysis moves
+  let previewPress = null;   // native drag state for the lobby position preview
 
   let explorer = {        // analysis / opening explorer state
     baseBoard: null,      // custom start board (null = standard initial position)
@@ -187,6 +192,7 @@
     orientation: 'blue',
     tool: { kind: 'piece', color: 'blue', type: 'rock' },
   };
+  let playPosition = null;  // { board, turn } while Play from position is enabled
 
   // ---------------------------------------------------------------------------
   // Session (localStorage)
@@ -417,6 +423,15 @@
 
   function canMoveNow() {
     return state && state.status === 'playing' && state.turn === myColor && reviewStep == null;
+  }
+
+  function updateDragGhost(ghost, x, y, boardEl) {
+    const rect = boardEl.getBoundingClientRect();
+    const size = (rect.width / SIZE) * 0.82;
+    ghost.style.width = size + 'px';
+    ghost.style.height = size + 'px';
+    ghost.style.left = (x - size / 2) + 'px';
+    ghost.style.top = (y - size / 2) + 'px';
   }
 
   // ---------------------------------------------------------------------------
@@ -911,6 +926,22 @@
       }
       return;
     }
+    if (explorerPress) {
+      const dx = e.clientX - explorerPress.startX;
+      const dy = e.clientY - explorerPress.startY;
+      if (!explorerPress.moved && Math.hypot(dx, dy) > 5) {
+        explorerPress.moved = true;
+        const piece = explorer.position && explorer.position.board[explorerPress.r][explorerPress.c];
+        if (piece) {
+          explorerPress.ghost = document.createElement('div');
+          explorerPress.ghost.className = 'drag-ghost';
+          explorerPress.ghost.innerHTML = pieceSvg(piece.type, piece.color);
+          document.body.appendChild(explorerPress.ghost);
+        }
+      }
+      if (explorerPress.ghost) updateDragGhost(explorerPress.ghost, e.clientX, e.clientY, explorerBoardEl);
+      return;
+    }
     if (!press || press.kind !== 'piece') return;
     const dx = e.clientX - press.startX;
     const dy = e.clientY - press.startY;
@@ -927,13 +958,7 @@
     }
 
     if (press.ghost) {
-      const rect = boardEl.getBoundingClientRect();
-      const sqSize = rect.width / SIZE;
-      const ghostSize = sqSize * 0.82;
-      press.ghost.style.width = ghostSize + 'px';
-      press.ghost.style.height = ghostSize + 'px';
-      press.ghost.style.left = (e.clientX - ghostSize / 2) + 'px';
-      press.ghost.style.top = (e.clientY - ghostSize / 2) + 'px';
+      updateDragGhost(press.ghost, e.clientX, e.clientY, boardEl);
     }
   });
 
@@ -947,6 +972,22 @@
         else d.arrows.push({ fromC: d.fromC, fromR: d.fromR, toC: d.toC, toR: d.toR, color: d.color });
       }
       renderArrows(d.svgEl, d.arrows, d.orientationFn());
+      return;
+    }
+    if (explorerPress) {
+      const d = explorerPress;
+      explorerPress = null;
+      if (d.ghost) d.ghost.remove();
+      if (d.moved) {
+        const target = squareFromBoardPoint(e.clientX, e.clientY, explorerBoardEl, 'blue');
+        if (target && explorer.position) {
+          const legal = engine.legalMovesFrom(explorer.position.board, explorer.position.turn, d.c, d.r);
+          const move = legal.find((m) => m.toC === target.c && m.toR === target.r);
+          if (move) descendExplorer(moveStringFor(move));
+        }
+        explorer.selected = null;
+        return;
+      }
       return;
     }
     if (!press) return;
@@ -1188,6 +1229,7 @@
   }
   function showHome() {
     showScreen(homeEl);
+    renderPositionPreview();
   }
   function updateLink() {
     if (gameId) {
@@ -1207,6 +1249,24 @@
     toast.classList.add('show');
     clearTimeout(showToast._t);
     showToast._t = setTimeout(() => toast.classList.remove('show'), 3000);
+  }
+
+  function renderPositionPreview() {
+    if (!playFromPositionEl || !playFromPositionPreviewEl || !playPositionBoardEl) return;
+    const enabled = playFromPositionEl.checked;
+    playFromPositionPreviewEl.classList.toggle('hidden', !enabled);
+    if (!enabled) return;
+    if (!playPosition) playPosition = { board: engine.initialBoard(), turn: 'blue' };
+    drawBoard(playPositionBoardEl, playPosition.board, 'blue', null, null, null, null, true);
+    playPositionBoardEl.dataset.turn = playPosition.turn;
+  }
+
+  function positionPayload() {
+    if (!playFromPositionEl.checked || !playPosition) return {};
+    return {
+      board: engine.cloneBoard(playPosition.board),
+      turn: playPosition.turn === 'red' ? 'red' : 'blue',
+    };
   }
 
   function parseTimeControl() {
@@ -1782,8 +1842,8 @@
   // Board editor
   // ---------------------------------------------------------------------------
   function editorToolIcon(kind) {
-    if (kind === 'cursor') return '↖';
-    if (kind === 'erase') return '🗑';
+    if (kind === 'cursor') return '<img src="/assets/lichess-pointer.svg" alt="" aria-hidden="true">';
+    if (kind === 'erase') return '<img src="/assets/lichess-trash.svg" alt="" aria-hidden="true">';
     return '';
   }
 
@@ -1794,7 +1854,7 @@
     cursor.className = 'editor-tool';
     cursor.dataset.tool = 'cursor';
     cursor.setAttribute('aria-label', 'Select and move pieces');
-    cursor.textContent = editorToolIcon('cursor');
+    cursor.innerHTML = editorToolIcon('cursor');
     cursor.classList.toggle('active', editor.tool.kind === 'cursor');
     el.appendChild(cursor);
     for (const type of ['rock', 'paper', 'scissors']) {
@@ -1815,7 +1875,7 @@
     erase.className = 'editor-tool';
     erase.dataset.tool = 'erase';
     erase.setAttribute('aria-label', 'Delete piece');
-    erase.textContent = editorToolIcon('erase');
+    erase.innerHTML = editorToolIcon('erase');
     erase.classList.toggle('active', editor.tool.kind === 'erase');
     el.appendChild(erase);
   }
@@ -1893,7 +1953,7 @@
     queued = true;
     queueBtnLabel.textContent = 'Cancel seek';
 
-    const msg = { type: 'queue', timeControl, rated: !casual };
+    const msg = { type: 'queue', timeControl, rated: !casual, ...positionPayload() };
     const t = sessionToken();
     if (t) msg.session = t;
 
@@ -1916,10 +1976,38 @@
   });
   modeRatedEl.addEventListener('click', () => setRatedMode(true));
   modeCasualEl.addEventListener('click', () => setRatedMode(false));
+  playFromPositionEl.addEventListener('change', () => {
+    if (playFromPositionEl.checked && !playPosition) {
+      playPosition = { board: engine.initialBoard(), turn: 'blue' };
+    }
+    if (!playFromPositionEl.checked) playPosition = null;
+    renderPositionPreview();
+  });
+
+  playPositionBoardEl.addEventListener('dragstart', (e) => {
+    const piece = e.target.closest('.piece');
+    if (!piece) return;
+    e.dataTransfer.setData('application/x-rps-preview-source', JSON.stringify({ c: +piece.dataset.c, r: +piece.dataset.r }));
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  playPositionBoardEl.addEventListener('dragover', (e) => e.preventDefault());
+  playPositionBoardEl.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const sq = e.target.closest('.sq');
+    if (!sq || !playPosition) return;
+    try {
+      const source = JSON.parse(e.dataTransfer.getData('application/x-rps-preview-source'));
+      const piece = playPosition.board[source.r] && playPosition.board[source.r][source.c];
+      if (!piece) return;
+      playPosition.board[source.r][source.c] = null;
+      playPosition.board[+sq.dataset.r][+sq.dataset.c] = piece;
+      renderPositionPreview();
+    } catch (error) { /* Ignore drops that did not originate in the preview. */ }
+  });
 
   createBtn.addEventListener('click', () => {
     homeErrorEl.classList.add('hidden');
-    pending = { type: 'create', timeControl: parseTimeControl(), rated: ratedMode };
+    pending = { type: 'create', timeControl: parseTimeControl(), rated: ratedMode, ...positionPayload() };
     const t = sessionToken();
     if (t) pending.session = t;
     connect();
@@ -2176,6 +2264,17 @@
     if (!li) return;
     descendExplorer(li.dataset.move);
   });
+  explorerBoardEl.addEventListener('pointerdown', (e) => {
+    if (e.button === 2 || !explorer.position) return;
+    const sq = squareFromBoardPoint(e.clientX, e.clientY, explorerBoardEl, 'blue');
+    if (!sq) return;
+    const piece = explorer.position.board[sq.r][sq.c];
+    if (!piece || piece.color !== explorer.position.turn) return;
+    e.preventDefault();
+    explorer.selected = { c: sq.c, r: sq.r };
+    renderExplorer();
+    explorerPress = { c: sq.c, r: sq.r, startX: e.clientX, startY: e.clientY, moved: false, ghost: null };
+  });
   explorerBoardEl.addEventListener('click', (e) => {
     const sq = e.target.closest('.sq');
     if (!sq || !explorer.position) return;
@@ -2297,8 +2396,13 @@
   });
   editorResetEl.addEventListener('click', () => { editor.board = engine.initialBoard(); renderEditor(); });
   editorFlipEl.addEventListener('click', () => { editor.orientation = editor.orientation === 'blue' ? 'red' : 'blue'; renderEditor(); });
-  editorAnalysisEl.addEventListener('click', () => openAnalysis(null, 'blue'));
-  editorToAnalysisEl.addEventListener('click', () => openAnalysis(editor.board, editor.turn));
+  editorAnalysisEl.addEventListener('click', () => openAnalysis(editor.board, editor.turn));
+  editorToAnalysisEl.addEventListener('click', () => {
+    playPosition = { board: engine.cloneBoard(editor.board), turn: editor.turn };
+    playFromPositionEl.checked = true;
+    history.pushState({ rpsScreen: 'home' }, '', '?');
+    showHome();
+  });
 
   window.addEventListener('popstate', (e) => {
     if (e.state && e.state.rpsScreen === 'editor') openEditor(false);

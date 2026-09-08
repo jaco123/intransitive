@@ -38,6 +38,8 @@ const PUBLIC_ASSETS = new Map([
   ['/app.js', 'app.js'],
   ['/style.css', 'style.css'],
   ['/favicon.svg', 'favicon.svg'],
+  ['/assets/lichess-pointer.svg', 'assets/lichess-pointer.svg'],
+  ['/assets/lichess-trash.svg', 'assets/lichess-trash.svg'],
   ['/sound/Move.mp3', 'sound/Move.mp3'],
   ['/sound/Capture.mp3', 'sound/Capture.mp3'],
 ]);
@@ -76,6 +78,20 @@ function normalizeTimeControl(tc) {
   return { initial, increment };
 }
 
+function parseStartPosition(value) {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || !Array.isArray(value.board) || value.board.length !== engine.SIZE) return null;
+  for (const row of value.board) {
+    if (!Array.isArray(row) || row.length !== engine.SIZE) return null;
+    for (const piece of row) {
+      if (piece !== null && (!piece || typeof piece !== 'object' ||
+          !['blue', 'red'].includes(piece.color) || !['rock', 'paper', 'scissors'].includes(piece.type))) return null;
+    }
+  }
+  if (value.turn !== 'blue' && value.turn !== 'red') return null;
+  return { board: engine.cloneBoard(value.board), turn: value.turn };
+}
+
 // Lichess-style category from a time control (initial seconds + 40 * increment seconds).
 function timeControlCategory(tc) {
   const initial = Number(tc && tc.initial) || 0;
@@ -87,8 +103,18 @@ function timeControlCategory(tc) {
   return 'classical';
 }
 
-function newGame(timeControl, casual) {
+function newGame(timeControl, casual, startPosition) {
   const tc = normalizeTimeControl(timeControl);
+  const position = startPosition || { board: engine.initialBoard(), turn: 'blue' };
+  const game = new engine.Game();
+  game.board = engine.cloneBoard(position.board);
+  game.turn = position.turn;
+  game.history = [];
+  game.lastMove = null;
+  game.halfmoveClock = 0;
+  game.fullmoveNumber = 1;
+  game.positionCounts = new Map();
+  game.recordPosition();
   return {
     id: randomId(),
     createdAt: Date.now(),
@@ -96,7 +122,8 @@ function newGame(timeControl, casual) {
     casual: !!casual,
     blue: null,
     red: null,
-    game: new engine.Game(),
+    game,
+    startPosition: { board: engine.cloneBoard(position.board), turn: position.turn },
     status: 'waiting',            // waiting | playing | finished | aborted
     result: null,                 // 'blue' | 'red' | 'draw' | null
     reason: null,                 // goal | timeout | noMoves | threefold | 100ply | resign | abort
@@ -275,7 +302,7 @@ function startGame(g) {
   g.clocks.redMs = g.timeControl.initial * 1000;
   g.clocks.blueGraceMs = GRACE_MS;
   g.clocks.redGraceMs = GRACE_MS;
-  g.clocks.running = 'blue'; // blue moves first
+  g.clocks.running = g.game.turn;
   g.clocks.lastTick = Date.now();
 
   if (!g.casual && g.blue && g.blue.userId && g.red && g.red.userId) {
@@ -558,7 +585,7 @@ function seatFrom(oldSeat, tc) {
 
 function startRematch(old) {
   if (!old.blue || !old.red || !old.blue.connected || !old.red.connected) return false;
-  const g = newGame(old.timeControl, old.casual);
+  const g = newGame(old.timeControl, old.casual, old.startPosition);
   games.set(g.id, g);
   g.blue = seatFrom(old.red, old.timeControl);   // colors reversed
   g.red = seatFrom(old.blue, old.timeControl);
@@ -731,7 +758,12 @@ function handleJoin(ws, msg) {
 function handleCreate(ws, msg) {
   leaveLobby(ws); // creating a private game removes any open seek
   const user = resolveUser(msg.session);
-  const g = newGame(msg.timeControl, msg.rated === false || !user);
+  const startPosition = parseStartPosition(msg);
+  if (startPosition === null) {
+    send(ws, { type: 'error', message: 'Invalid starting position.' });
+    return;
+  }
+  const g = newGame(msg.timeControl, msg.rated === false || !user, startPosition);
   games.set(g.id, g);
   g.blue = seatFor(user, ws, g.timeControl);
 
@@ -842,6 +874,11 @@ function parseMoveNotation(notation) {
 function handleQueue(ws, msg) {
   const user = resolveUser(msg.session);
   const tc = normalizeTimeControl(msg.timeControl);
+  const startPosition = parseStartPosition(msg);
+  if (startPosition === null) {
+    send(ws, { type: 'error', message: 'Invalid starting position.' });
+    return;
+  }
 
   // If this socket is already seeking, just re-send its seek confirmation.
   const existing = queue.find((e) => e.ws === ws);
@@ -857,6 +894,7 @@ function handleQueue(ws, msg) {
     ws,
     user,
     timeControl: tc,
+    startPosition,
     casual: !user || msg.rated === false,
     rating: user ? db.ratingFor(user, timeControlCategory(tc)).rating : 1500,
     queuedAt: Date.now(),
@@ -888,7 +926,7 @@ function handleAcceptSeek(ws, msg) {
   leaveLobby(ws); // cancel any seek the acceptor had open
 
   const user = resolveUser(msg.session);
-  const g = newGame(seek.timeControl, seek.casual);
+  const g = newGame(seek.timeControl, seek.casual, seek.startPosition);
   games.set(g.id, g);
 
   g.blue = seatFor(seek.user, seek.ws, g.timeControl); // seeker takes Blue

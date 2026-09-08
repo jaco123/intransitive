@@ -104,6 +104,16 @@
               <button id="modeCasual" class="mode-btn">Casual</button>
             </div>
 
+            <div class="play-position-setting">
+              <label class="checkbox-label">
+                <input type="checkbox" id="playFromPosition" />
+                <span>Play from position</span>
+              </label>
+              <div id="playFromPositionPreview" class="position-preview hidden" aria-label="Position preview">
+                <div id="playPositionBoard" class="board"></div>
+              </div>
+            </div>
+
             <div class="lobby__start">
               <button class="button button-metal lobby__start__button" id="queueBtn">
                 <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="9" cy="7.5" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M2.5 19.5c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13v-.5z"/><path d="M15.5 13.9c2.6.3 4.5 2.3 4.5 4.9v.7h-4"/></g></svg>
@@ -308,11 +318,11 @@
           </select>
         </div>
         <div class="actions">
-          <button id="editorReset" class="btn">↺ <span>Starting position</span></button>
-          <button id="editorClear" class="btn">🗑 <span>Clear board</span></button>
-          <button id="editorFlip" class="btn">⇄ <span>Flip board</span></button>
+          <button id="editorReset" class="btn" data-icon="&#xe078;">↺ <span>Starting position</span></button>
+          <button id="editorClear" class="btn" data-icon="&#xe04f;">🗑 <span>Clear board</span></button>
+          <button id="editorFlip" class="btn" data-icon="&#xe020;">⇄ <span>Flip board</span></button>
         </div>
-        <button id="editorAnalysis" class="btn" style="width:100%">⌕ <span>Analysis board</span></button>
+        <button id="editorAnalysis" class="btn" data-icon="&#xe01f;" style="width:100%">⌕ <span>Analysis board</span></button>
         <button id="editorToAnalysis" class="btn primary" style="width:100%">▶ <span>Continue from here</span></button>
       </aside>
     </div>
