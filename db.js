@@ -194,7 +194,8 @@ function listPlayers(search = '', limit = 50) {
   const term = String(search || '').trim().slice(0, 20);
   const escaped = term.replace(/[\\%_]/g, '\\$&');
   const rows = db.prepare(`
-    SELECT id, username, rating, wins, losses, draws
+    SELECT id, username, wins, losses, draws,
+      rating_bullet, rating_blitz, rating_rapid, rating_classical
     FROM users
     WHERE username LIKE ? ESCAPE '\\'
     ORDER BY rating DESC, username ASC
@@ -203,7 +204,12 @@ function listPlayers(search = '', limit = 50) {
   return rows.map((row) => ({
     id: row.id,
     username: row.username,
-    rating: Math.round(row.rating),
+    ratings: {
+      bullet: Math.round(row.rating_bullet),
+      blitz: Math.round(row.rating_blitz),
+      rapid: Math.round(row.rating_rapid),
+      classical: Math.round(row.rating_classical),
+    },
     wins: row.wins,
     losses: row.losses,
     draws: row.draws,

@@ -532,9 +532,9 @@ h1 span { color: var(--muted); font-weight: 400; }
 .nav-profile-icon { width: 22px; height: 22px; flex: 0 0 auto; }
 
 .nav-left { display: flex; align-items: center; gap: var(--s4); }
-.nav-links { display: flex; align-items: center; gap: var(--s2); }
+.nav-links { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .nav-link-btn {
-  padding: 7px 12px;
+  padding: 10px 15px;
   font-family: var(--font-sans);
   font-size: 15px;
   font-weight: 600;
@@ -640,15 +640,22 @@ h1 span { color: var(--muted); font-weight: 400; }
 .directory-panel { background: var(--surface); border-radius: var(--r-md); padding: var(--s5); }
 .directory-panel h2 { margin: 0 0 var(--s3); color: var(--text-bright); font-size: 20px; }
 .watch-list, .players-list { display: flex; flex-direction: column; gap: var(--s2); }
-.watch-game { display: flex; justify-content: space-between; align-items: center; gap: var(--s3); width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
+.watch-game { display: grid; grid-template-columns: 86px 1fr auto; justify-content: space-between; align-items: center; gap: var(--s3); width: 100%; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-sm); background: var(--surface-2); color: var(--text); text-align: left; cursor: pointer; }
 .watch-game:hover, .watch-game:focus-visible { background: var(--surface-3); color: var(--text-bright); }
+.watch-game-preview { display: grid; grid-template-columns: repeat(9, 1fr); width: 76px; aspect-ratio: 1; overflow: hidden; border-radius: 2px; }
+.watch-game-preview .sq { min-width: 0; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.watch-game-preview svg { width: 86%; height: 86%; }
 .watch-game-players { font-weight: 600; }
 .watch-game-status { color: var(--muted); font-size: 13px; white-space: nowrap; }
 .directory-rating { color: var(--muted); font-family: var(--font-mono); font-size: 12px; margin-left: 4px; }
 .featured-label { display: block; color: var(--muted); font-size: 13px; margin-bottom: var(--s2); }
 .featured-game-button { border-color: var(--primary); }
-.player-directory-row { display: grid; grid-template-columns: 1fr 70px 100px; gap: var(--s3); padding: 10px 12px; background: var(--surface-2); border-radius: var(--r-sm); }
+.player-directory-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(300px, 2fr) 100px; align-items: center; gap: var(--s3); width: 100%; padding: 10px 12px; border: 0; background: var(--surface-2); border-radius: var(--r-sm); color: var(--text); text-align: left; cursor: pointer; }
+.player-directory-row:hover, .player-directory-row:focus-visible { background: var(--surface-3); color: var(--text-bright); }
 .player-directory-name { color: var(--text-bright); font-weight: 600; }
+.player-ratings-inline { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s2); font-family: var(--font-mono); font-size: 12px; }
+.player-rating-inline { white-space: nowrap; }
+.rating-category { color: var(--muted); font-family: var(--font-sans); font-size: 10px; text-transform: uppercase; }
 .player-record { color: var(--muted); font-size: 12px; text-align: right; }
 
 @media (min-width: 1000px) {
@@ -732,6 +739,11 @@ h1 span { color: var(--muted); font-weight: 400; }
 .profile-rating-range { font-size: 11px; color: var(--c-font-dimmer); }
 @media (max-width: 560px) {
   .profile-ratings { grid-template-columns: repeat(2, 1fr); }
+  .watch-game { grid-template-columns: 60px 1fr; }
+  .watch-game-preview { width: 54px; }
+  .watch-game-status { grid-column: 2; }
+  .player-directory-row { grid-template-columns: 1fr; gap: var(--s2); }
+  .player-ratings-inline { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ---------------------------------------------------------------------------
@@ -1210,8 +1222,7 @@ input[type="range"]::-moz-range-thumb {
 .editor-toggle .mode-btn { padding: 10px 8px; font-size: 14px; }
 
 /* Opening explorer: taller stat list, compact move path */
-.moves.explorer-list { max-height: 420px; }
-.moves.path-moves { max-height: 120px; min-height: 34px; }
+.moves.explorer-list { min-height: 192px; max-height: 420px; }
 
 @media (max-width: 900px) {
   .game-layout { flex-direction: column; align-items: center; }

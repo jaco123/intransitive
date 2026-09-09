@@ -847,6 +847,8 @@ function activeGameInfo(g) {
     rated: !!g.rated,
     casual: !!g.casual,
     createdAt: g.createdAt,
+    board: engine.cloneBoard(g.game.board),
+    turn: g.game.turn,
     players: {
       blue: playerInfo(g, 'blue'),
       red: playerInfo(g, 'red'),
@@ -1090,6 +1092,17 @@ async function handleApi(req, res, urlPath, query) {
     if (req.method === 'GET' && urlPath === '/api/players') {
       const search = query ? query.get('search') || '' : '';
       sendJson(res, 200, { players: db.listPlayers(search, 50) });
+      return;
+    }
+
+    const playerMatch = urlPath.match(/^\/api\/players\/([A-Za-z0-9_-]{2,20})$/);
+    if (req.method === 'GET' && playerMatch) {
+      const user = db.getUserByUsername(playerMatch[1]);
+      if (!user) {
+        sendJson(res, 404, { error: 'Player not found.' });
+        return;
+      }
+      sendJson(res, 200, { user: db.publicUser(user) });
       return;
     }
 
