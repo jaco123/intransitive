@@ -249,6 +249,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 }
 
 .board {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(9, minmax(0, 1fr));
   grid-template-rows: repeat(9, minmax(0, 1fr));

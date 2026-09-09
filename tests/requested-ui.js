@@ -80,8 +80,16 @@ async function createGame(creator, opponent) {
     await page.getByRole('button', { name: 'Blue Rock', exact: true }).click();
     const square = page.locator('#editorBoard .sq[data-c="4"][data-r="4"]');
     await square.hover();
-    assert.strictEqual(await page.locator('#editorBoard .editor-cursor-piece').count(), 1,
+    const cursor = page.locator('#editorBoard .editor-cursor-piece');
+    assert.strictEqual(await cursor.count(), 1,
       'selected editor piece should follow the pointer');
+    const squareBox = await square.boundingBox();
+    const cursorBox = await cursor.boundingBox();
+    assert.ok(squareBox && cursorBox, 'editor cursor and hovered square should have geometry');
+    assert.ok(Math.abs((cursorBox.x + cursorBox.width / 2) - (squareBox.x + squareBox.width / 2)) < 2,
+      'selected editor piece should be centered horizontally under the pointer');
+    assert.ok(Math.abs((cursorBox.y + cursorBox.height / 2) - (squareBox.y + squareBox.height / 2)) < 2,
+      'selected editor piece should be centered vertically under the pointer');
     assert.strictEqual(await page.locator('#editorBoard .piece').first().getAttribute('draggable'), 'false',
       'editor painting mode should not enable dragging');
 
