@@ -192,12 +192,13 @@ async function pointerDrag(page, source, target) {
       const target = await creator.locator('#board .mv-dot').first().boundingBox();
       assert.ok(target, 'live move target should be visible');
       await creator.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
-      await watch.waitForFunction((previous) => {
-        const current = document.querySelector('.watch-game-preview');
+      const previewSelector = '#watch [data-game-id="' + gameId + '"] .watch-game-preview';
+      await watch.waitForFunction((selector, previous) => {
+        const current = document.querySelector(selector);
         return current && current.innerHTML !== previous;
-      }, before, { timeout: 7000 });
+      }, previewSelector, before, { timeout: 7000 });
       assert.notStrictEqual(await card.locator('.watch-game-preview').innerHTML(), before, 'Watch preview should update after a game move');
-      await card.click();
+      await card.locator('.watch-game-players').click();
       await watch.locator('#game').waitFor({ state: 'visible' });
       await opponent.close();
       await creator.close();
@@ -212,6 +213,7 @@ async function pointerDrag(page, source, target) {
       const row = known.page.locator('.player-directory-row').filter({ hasText: known.username });
       await row.waitFor();
       await row.click();
+      await known.page.locator('.profile-card').waitFor({ state: 'visible' });
       assert.strictEqual(new URL(known.page.url()).searchParams.get('view'), 'profile', 'player click should route to a profile URL');
       const profileText = await known.page.locator('body').innerText();
       for (const rating of ['Bullet', 'Blitz', 'Rapid', 'Classical']) assert.match(profileText, new RegExp(rating, 'i'), rating + ' rating should be shown');
