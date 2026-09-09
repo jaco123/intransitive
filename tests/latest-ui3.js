@@ -182,8 +182,8 @@ async function pointerDrag(page, source, target) {
       const watch = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await watch.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
       await watch.getByRole('button', { name: 'Watch', exact: true }).click();
-      await watch.locator('#watch [data-game-id="' + gameId + '"]').waitFor();
-      const card = watch.locator('#watch [data-game-id="' + gameId + '"]');
+      await watch.locator('#watchList [data-game-id="' + gameId + '"]').waitFor();
+      const card = watch.locator('#watchList [data-game-id="' + gameId + '"]');
       assert.strictEqual(await card.locator('.watch-game-preview').count(), 1, 'each Watch game should include a board preview');
       assert.strictEqual(await card.locator('.watch-game-preview .sq').count(), 81, 'Watch preview should render a complete board');
       const before = await card.locator('.watch-game-preview').innerHTML();
@@ -192,12 +192,12 @@ async function pointerDrag(page, source, target) {
       const target = await creator.locator('#board .mv-dot').first().boundingBox();
       assert.ok(target, 'live move target should be visible');
       await creator.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
-      const previewSelector = '#watch [data-game-id="' + gameId + '"] .watch-game-preview';
-      await watch.waitForFunction((selector, previous) => {
-        const current = document.querySelector(selector);
-        return current && current.innerHTML !== previous;
-      }, previewSelector, before, { timeout: 7000 });
-      assert.notStrictEqual(await card.locator('.watch-game-preview').innerHTML(), before, 'Watch preview should update after a game move');
+      let updated = false;
+      for (let attempt = 0; attempt < 8; attempt++) {
+        await watch.waitForTimeout(1000);
+        if ((await card.locator('.watch-game-preview').innerHTML()) !== before) { updated = true; break; }
+      }
+      assert.strictEqual(updated, true, 'Watch preview should update after a game move');
       await card.locator('.watch-game-players').click();
       await watch.locator('#game').waitFor({ state: 'visible' });
       await opponent.close();
