@@ -32,6 +32,9 @@
             <svg class="nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z"/></svg>
             <span id="navUsername"></span>
           </button>
+          <button id="settingsBtn" class="nav-settings-btn" title="Settings" aria-label="Settings">
+            <svg class="nav-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65-2-3.46-2.49 1a7.3 7.3 0 0 0-1.7-.98L15 3h-4l-.35 2.93c-.61.25-1.18.58-1.7.98l-2.49-1-2 3.46 2.11 1.65c-.04.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65 2 3.46 2.49-1c.52.4 1.09.73 1.7.98L11 21h4l.35-2.93a7.3 7.3 0 0 0 1.7-.98l2.49 1 2-3.46-2.11-1.65zM13 15.5A3.5 3.5 0 1 1 13 8a3.5 3.5 0 0 1 0 7.5z"/></svg>
+          </button>
         </div>
       </div>
     </div>
@@ -426,6 +429,19 @@
         <div id="authError" class="error hidden"></div>
         <button type="submit" id="authSubmit" class="btn primary" style="width:100%">Log in</button>
       </form>
+    </div>
+  </div>
+
+  <div id="settingsModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <div class="modal-backdrop" data-close-settings></div>
+    <div class="modal-card settings-card">
+      <button id="settingsClose" class="modal-close" aria-label="Close settings">×</button>
+      <h2 id="settingsTitle">Settings</h2>
+      <label class="field-label" for="soundVolume">Sound volume</label>
+      <div class="settings-volume-row">
+        <input id="soundVolume" type="range" min="0" max="1" step="0.05" value="0.75" aria-label="Sound volume" />
+        <output id="soundVolumeValue" for="soundVolume">75%</output>
+      </div>
     </div>
   </div>
 

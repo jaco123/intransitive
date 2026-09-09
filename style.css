@@ -545,6 +545,22 @@ h1 span { color: var(--muted); font-weight: 400; }
 }
 .nav-profile-btn:hover { background: rgba(255, 255, 255, 0.07); }
 .nav-profile-icon { width: 22px; height: 22px; flex: 0 0 auto; }
+.nav-settings-btn {
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--text-bright);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.nav-settings-btn:hover, .nav-settings-btn:focus-visible { background: rgba(255, 255, 255, 0.07); }
+.nav-settings-icon { width: 22px; height: 22px; }
 
 .nav-left { display: flex; align-items: center; gap: var(--s4); }
 .nav-links { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -635,7 +651,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 }
 .editor-action-icon::before { content: attr(data-icon); }
 
-.play-position-setting { margin-top: var(--s3); }
+.play-position-setting { margin-top: var(--s3); margin-bottom: var(--s3); }
 .checkbox-label { display: flex; align-items: center; gap: var(--s2); font-size: 13px; font-weight: 600; color: var(--c-font-dim); cursor: pointer; }
 .checkbox-label input { width: 16px; height: 16px; accent-color: var(--primary); }
 .position-preview { width: min(100%, 250px); margin-top: var(--s3); }
@@ -894,6 +910,11 @@ h1 span { color: var(--muted); font-weight: 400; }
   cursor: pointer;
 }
 .modal-close:hover { color: var(--text-bright); }
+.settings-card { width: min(92vw, 420px); }
+.settings-card h2 { margin: 0 0 var(--s4); color: var(--text-bright); }
+.settings-volume-row { display: flex; align-items: center; gap: var(--s3); }
+.settings-volume-row input[type="range"] { flex: 1; accent-color: var(--primary); }
+.settings-volume-row output { min-width: 3.5em; color: var(--text-bright); font-family: var(--font-mono); text-align: right; }
 .auth-tabs { display: flex; gap: var(--s2); margin-bottom: var(--s4); }
 .auth-tab {
   flex: 1;
@@ -961,12 +982,12 @@ h1 span { color: var(--muted); font-weight: 400; }
 
 /* Center: lobby pools */
 .lobby__app {
-  min-height: 440px;
+  min-height: 620px;
   display: flex;
   flex-direction: column;
 }
 .tabs-horiz {
-  display: flex;
+  display: none;
   justify-content: center;
   align-items: flex-end;
   margin-bottom: var(--s2);
@@ -982,7 +1003,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 .lobby__app__content {
   position: relative;
   flex: 1;
-  min-height: 400px;
+  min-height: 580px;
   overflow-y: auto;
   background: var(--c-bg);
   border-radius: var(--ui-roundness);

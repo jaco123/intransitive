@@ -23,6 +23,7 @@
   const loginBtn = $('loginBtn');
   const signupBtn = $('signupBtn');
   const profileBtn = $('profileBtn');
+  const settingsBtn = $('settingsBtn');
   const analysisBtn = $('analysisBtn');
   const editorBtn = $('editorBtn');
   const playBtn = $('playBtn');
@@ -41,6 +42,10 @@
   const tabLoginEl = $('tabLogin');
   const tabRegisterEl = $('tabRegister');
   const authCloseEl = $('authClose');
+  const settingsModalEl = $('settingsModal');
+  const settingsCloseEl = $('settingsClose');
+  const soundVolumeEl = $('soundVolume');
+  const soundVolumeValueEl = $('soundVolumeValue');
 
   // Game
   const boardEl = $('board');
@@ -177,6 +182,16 @@
   const TIME_CONTROL_LABELS = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical' };
   const TIME_CONTROL_SYMBOLS = { bullet: '\ue032', blitz: '\ue008', rapid: '\ue002', classical: '\ue00a' };
   const SESSION_KEY = 'rps_session';
+  const SOUND_VOLUME_KEY = 'rps_sound_volume';
+
+  function storedSoundVolume() {
+    try {
+      const value = Number(localStorage.getItem(SOUND_VOLUME_KEY));
+      return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.75;
+    } catch (e) { return 0.75; }
+  }
+
+  let soundVolume = storedSoundVolume();
 
   let ws = null;
   let pending = null;
@@ -573,12 +588,21 @@
   }
 
   const soundCache = {};
+  function setSoundVolume(value) {
+    soundVolume = Math.max(0, Math.min(1, Number(value) || 0));
+    for (const audio of Object.values(soundCache)) audio.volume = soundVolume;
+    if (soundVolumeEl) soundVolumeEl.value = String(soundVolume);
+    if (soundVolumeValueEl) soundVolumeValueEl.value = Math.round(soundVolume * 100) + '%';
+    try { localStorage.setItem(SOUND_VOLUME_KEY, String(soundVolume)); } catch (e) {}
+  }
+
   function playSound(name) {
     try {
       if (!soundCache[name]) {
         soundCache[name] = new Audio('sound/' + name + '.mp3');
       }
       const a = soundCache[name];
+      a.volume = soundVolume;
       a.currentTime = 0;
       const p = a.play();
       if (p && p.catch) p.catch(() => {});
@@ -1729,6 +1753,16 @@
     authModalEl.classList.add('hidden');
   }
 
+  function openSettings() {
+    setSoundVolume(soundVolume);
+    settingsModalEl.classList.remove('hidden');
+    soundVolumeEl.focus();
+  }
+
+  function closeSettings() {
+    settingsModalEl.classList.add('hidden');
+  }
+
   async function submitAuth(e) {
     e.preventDefault();
     authErrorEl.classList.add('hidden');
@@ -2678,13 +2712,19 @@
     showScreen(historyEl);
     loadHistory();
   });
+  settingsBtn.addEventListener('click', openSettings);
   profileLogoutEl.addEventListener('click', logout);
   authCloseEl.addEventListener('click', closeAuth);
+  settingsCloseEl.addEventListener('click', closeSettings);
+  soundVolumeEl.addEventListener('input', () => setSoundVolume(soundVolumeEl.value));
   tabLoginEl.addEventListener('click', () => openAuth('login'));
   tabRegisterEl.addEventListener('click', () => openAuth('register'));
   authFormEl.addEventListener('submit', submitAuth);
   authModalEl.addEventListener('click', (e) => {
     if (e.target.dataset && e.target.dataset.close !== undefined) closeAuth();
+  });
+  settingsModalEl.addEventListener('click', (e) => {
+    if (e.target.dataset && e.target.dataset.closeSettings !== undefined) closeSettings();
   });
 
   // History / replay events

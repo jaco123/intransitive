@@ -85,6 +85,75 @@ async function dragWithinSquare(page, board, color) {
       assert.ok(link.fontSize >= 17 && link.height >= 46, 'navigation controls should be larger'); await p.close();
     });
 
+    await check('opening book blue-win segment is green', async () => {
+      const p = await page();
+      await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await p.getByRole('button', { name: 'Analysis', exact: true }).click();
+      await p.locator('#explorerMoves .explorer-move').first().waitFor({ state: 'visible' });
+      const segment = p.locator('#explorerMoves .explorer-move .stat-bar .seg.win').first();
+      await segment.waitFor({ state: 'visible' });
+      const color = await segment.evaluate((el) => getComputedStyle(el).backgroundColor.match(/\d+/g).map(Number));
+      assert.ok(color[1] > color[0] * 1.15 && color[1] > color[2] * 1.15,
+        'blue-win segment should render green, got rgb(' + color.join(', ') + ')');
+      await p.close();
+    });
+
+    await check('lobby games box fills below How to play', async () => {
+      const p = await page();
+      await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      const games = p.locator('.lobby__app__content');
+      const howToPlay = p.locator('.lobby__side .lobby__box').first();
+      await games.waitFor({ state: 'visible' }); await howToPlay.waitFor({ state: 'visible' });
+      const gamesBox = await games.boundingBox(); const howBox = await howToPlay.boundingBox();
+      assert.ok(gamesBox && howBox, 'home boxes should have geometry');
+      assert.ok(Math.abs(gamesBox.y - howBox.y) <= 2, 'Games and How to play boxes should share their top edge');
+      assert.ok(gamesBox.height > howBox.height, 'Games box should extend farther down than How to play');
+      await p.close();
+    });
+
+    await check('new game control has vertical spacing', async () => {
+      const p = await page();
+      await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      const playFromPosition = p.locator('label').filter({ hasText: 'Play from position' }).first();
+      const create = p.locator('#queueBtn');
+      await playFromPosition.waitFor({ state: 'visible' }); await create.waitFor({ state: 'visible' });
+      const controlBox = await playFromPosition.boundingBox(); const createBox = await create.boundingBox();
+      assert.ok(controlBox && createBox, 'New game controls should have geometry');
+      assert.ok(createBox.y - (controlBox.y + controlBox.height) >= 10, 'Create lobby game should have vertical space below Play from position');
+      await p.close();
+    });
+
+    await check('settings sound-volume control is interactive', async () => {
+      const context = await browser.newContext();
+      const account = await register(context);
+      const p = account.page;
+      try {
+        const settingsButton = p.getByRole('button', { name: 'Settings', exact: true });
+        assert.strictEqual(await settingsButton.count(), 1, 'top bar should have one Settings button');
+        const profileButton = p.locator('#profileBtn');
+        const profileBox = await profileButton.boundingBox(); const settingsBox = await settingsButton.boundingBox();
+        assert.ok(profileBox && settingsBox && settingsBox.x >= profileBox.x + profileBox.width - 2,
+          'Settings should be next to the profile button');
+        await settingsButton.click();
+        const settings = p.getByRole('dialog', { name: 'Settings', exact: true });
+        await settings.waitFor({ state: 'visible' });
+        const volume = settings.getByRole('slider', { name: /Sound volume/i });
+        await volume.waitFor({ state: 'visible' });
+        const before = await volume.inputValue();
+        const next = before === '0' ? '0.75' : '0';
+        await volume.fill(next);
+        assert.strictEqual(await volume.inputValue(), next, 'sound-volume slider should change through the UI');
+        await p.waitForFunction((value) => localStorage.getItem('rps_sound_volume') === value, next);
+        await p.reload({ waitUntil: 'domcontentloaded' });
+        await p.getByRole('button', { name: 'Settings', exact: true }).click();
+        const reloadedVolume = p.getByRole('dialog', { name: 'Settings', exact: true }).getByRole('slider', { name: /Sound volume/i });
+        await reloadedVolume.waitFor({ state: 'visible' });
+        assert.strictEqual(await reloadedVolume.inputValue(), next, 'sound volume should persist across reloads');
+      } finally {
+        await Promise.allSettled([p.close(), context.close()]);
+      }
+    });
+
     await check('watch filters', async () => {
       const p = await page(); await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' }); await p.getByRole('button', { name: 'Watch', exact: true }).click(); await p.locator('#watch').waitFor({ state: 'visible' });
       assert.deepStrictEqual(await p.locator('#watch .watch-filter:not([data-category="all"])').evaluateAll((els) => els.map((el) => el.dataset.category)), ['bullet', 'blitz', 'rapid', 'classical']); await p.close();
