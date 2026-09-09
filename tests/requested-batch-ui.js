@@ -48,6 +48,13 @@ async function createStudy(page, name) {
   return new URL(page.url()).searchParams.get('study');
 }
 
+async function assertFavicon(page) {
+  const href = await page.locator('link[rel="icon"]').getAttribute('href');
+  assert.ok(href, 'Study route should declare a favicon');
+  const response = await page.request.get(new URL(href, BASE + '/').href);
+  assert.strictEqual(response.status(), 200, 'Study route favicon should load');
+}
+
 async function createLiveGame(context) {
   const creator = await newPage(context);
   const joiner = await newPage(context);
@@ -92,11 +99,16 @@ async function createLiveGame(context) {
 
     await check('Study entry and route', async () => {
       const page = await newPage(browser);
+      const errors = [];
+      page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+      page.on('pageerror', (error) => errors.push(String(error)));
       try {
         await openStudies(page);
         assert.strictEqual(new URL(page.url()).searchParams.get('view'), 'studies');
         assert.strictEqual(await page.locator('#studyList').isVisible(), true);
         assert.strictEqual(await page.locator('#studyPublicList').isVisible(), true);
+        await assertFavicon(page);
+        assert.deepStrictEqual(errors, [], 'Study route should not emit console or page errors');
       } finally { await page.close(); }
     });
 
@@ -109,6 +121,7 @@ async function createLiveGame(context) {
         const studyId = await createStudy(account.page, name);
         assert.ok(studyId, 'created study should have a route id');
         await account.page.locator('#studyNameHeading').filter({ hasText: name }).waitFor({ state: 'visible' });
+        await assertFavicon(account.page);
         assert.strictEqual(await account.page.locator('#studyNameHeading').innerText(), name);
         assert.ok(await account.page.locator('#studyPage .study-position').count() >= 1,
           'a study should start with an analysis-board position');
