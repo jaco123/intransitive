@@ -1131,7 +1131,9 @@
     if (d.sourceEl) d.sourceEl.classList.remove('drag-source');
     if (d.ghost) d.ghost.remove();
     const target = squareFromBoardPoint(e.clientX, e.clientY, d.config.boardEl, d.config.orientationFn());
-    if (d.moved) d.config.onDrop(d.sq, target, d.piece, d.sourceKind);
+    const sameSquare = d.moved && d.sq && target && d.sq.c === target.c && d.sq.r === target.r;
+    if (sameSquare) d.config.onClick(d.sq, d.piece, d.sourceKind, d.wasSelected);
+    else if (d.moved) d.config.onDrop(d.sq, target, d.piece, d.sourceKind);
     else d.config.onClick(d.sq, d.piece, d.sourceKind, d.wasSelected);
   });
 

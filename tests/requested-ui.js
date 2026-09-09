@@ -55,6 +55,17 @@ async function centerOf(locator) {
   return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
+async function dragWithinSquare(page, board, color) {
+  const piece = page.locator(`${board} .piece[data-color="${color}"]`).first();
+  const box = await piece.boundingBox();
+  assert.ok(box, 'expected a selectable piece');
+  const x = box.x + box.width / 2; const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + 8, y + 8);
+  await page.mouse.up();
+}
+
 (async () => {
   const browser = await firefox.launch({ headless: true });
   const failures = [];
@@ -177,6 +188,27 @@ async function centerOf(locator) {
       await p.locator('#explorerHistory .move').first().waitFor({ state: 'visible' });
       assert.match(await p.locator('#explorerHistory').innerText(), /x/, 'captured analysis moves should retain x notation');
       await p.close();
+    });
+
+    await check('same-square drag selects pieces in game and analysis', async () => {
+      const cc = await browser.newContext(); const oc = await browser.newContext();
+      let creator = null; let opponent = null;
+      try {
+        creator = await register(cc); opponent = await register(oc);
+        await createGame(creator.page, opponent.page);
+        await dragWithinSquare(creator.page, '#board', 'blue');
+        assert.strictEqual(await creator.page.locator('#board .sq.selected').count(), 1, 'same-square drag should select a live-game piece');
+        await creator.page.getByRole('button', { name: 'Analysis', exact: true }).click();
+        await creator.page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
+        await dragWithinSquare(creator.page, '#explorerBoard', 'blue');
+        assert.strictEqual(await creator.page.locator('#explorerBoard .sq.selected').count(), 1, 'same-square drag should select an analysis piece');
+      } finally {
+        await Promise.allSettled([
+          creator && creator.page ? creator.page.close() : Promise.resolve(),
+          opponent && opponent.page ? opponent.page.close() : Promise.resolve(),
+          cc.close(), oc.close(),
+        ]);
+      }
     });
 
     await check('profile layout, shared game rows, and controls', async () => {
