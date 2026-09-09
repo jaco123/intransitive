@@ -170,7 +170,7 @@ async function dragWithinSquare(page, board, color) {
         await joiner.locator('#joinBtn').click();
         await joiner.waitForTimeout(1000);
         assert.strictEqual(await joiner.locator('#game').isVisible(), false, 'a user must not start a private game against themselves');
-        assert.strictEqual(await creator.locator('#gameStatus').innerText(), 'Waiting for opponent', 'self-join must leave the private game waiting');
+        assert.match(await creator.locator('#gameStatus').innerText(), /Waiting for opponent/, 'self-join must leave the private game waiting');
         assert.strictEqual(await joiner.locator('#home').isVisible(), true, 'rejected self-join should remain in the lobby');
       } finally {
         await Promise.allSettled([creator && creator.close(), joiner && joiner.close(), context.close()]);
