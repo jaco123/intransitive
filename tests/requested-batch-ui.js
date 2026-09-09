@@ -108,6 +108,7 @@ async function createLiveGame(context) {
         const name = 'Batch study ' + Date.now().toString(36);
         const studyId = await createStudy(account.page, name);
         assert.ok(studyId, 'created study should have a route id');
+        await account.page.locator('#studyNameHeading').filter({ hasText: name }).waitFor({ state: 'visible' });
         assert.strictEqual(await account.page.locator('#studyNameHeading').innerText(), name);
         assert.ok(await account.page.locator('#studyPage .study-position').count() >= 1,
           'a study should start with an analysis-board position');
@@ -205,7 +206,9 @@ async function createLiveGame(context) {
           return { bottom: box.bottom, top: box.top, height: box.height };
         }));
         assert.ok(featured && cards.length >= 2, 'featured and multiple small games should be visible');
-        assert.ok(featured.bottom <= VIEWPORT.height + 2, 'featured game should fit in the desktop viewport');
+        const featuredBottom = featured.y + featured.height;
+        assert.ok(featuredBottom <= VIEWPORT.height + 2,
+          'featured game should fit in the desktop viewport (bottom=' + featuredBottom + ', viewport=' + VIEWPORT.height + ')');
         const firstRow = cards.filter((card) => card.top < VIEWPORT.height && card.bottom <= VIEWPORT.height + 2);
         assert.ok(firstRow.length >= 2, 'multiple small Watch games should fit in the desktop viewport');
       } finally {
