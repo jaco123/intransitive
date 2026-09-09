@@ -1960,7 +1960,8 @@
 
   function renderTimeControlSummary() {
     if (!timeControlSummaryEl) return;
-    const category = timeControlCategory(parseTimeControl());
+    const tc = parseTimeControl();
+    const category = timeControlCategory({ tcInitial: tc.initial, tcIncrement: tc.increment });
     const session = getSession();
     const rating = session && session.user && session.user.ratings && session.user.ratings[category]
       ? session.user.ratings[category].rating : null;

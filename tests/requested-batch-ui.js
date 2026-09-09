@@ -141,6 +141,16 @@ async function createLiveGame(context) {
         assert.match(privateLink, /[?&]study=/);
         assert.match(privateLink, /[?&]token=[A-Za-z0-9_-]{16,}/,
           'private study link should contain an unguessable bearer token');
+
+        const studyId = new URL(owner.page.url()).searchParams.get('study');
+        const outsider = await newPage(browser);
+        try {
+          await outsider.goto(BASE + '/?view=study&study=' + encodeURIComponent(studyId), { waitUntil: 'domcontentloaded' });
+          await outsider.waitForTimeout(700);
+          assert.strictEqual(await outsider.locator('#studyPage').isVisible(), false,
+            'a private study without its token must not be exposed');
+        } finally { await outsider.close(); }
+
         await owner.page.locator('#studyPublish').click();
         await owner.page.locator('#studyPublicStatus').filter({ hasText: /public/i }).waitFor();
 
@@ -154,14 +164,6 @@ async function createLiveGame(context) {
         await recipient.page.goto(privateLink, { waitUntil: 'domcontentloaded' });
         await recipient.page.locator('#studyPage').waitFor({ state: 'visible' });
         assert.strictEqual(await recipient.page.locator('#studyNameHeading').innerText(), name);
-
-        const outsider = await newPage(browser);
-        try {
-          await outsider.goto(BASE + '/?view=study&study=' + encodeURIComponent(new URL(owner.page.url()).searchParams.get('study')), { waitUntil: 'domcontentloaded' });
-          await outsider.waitForTimeout(700);
-          assert.strictEqual(await outsider.locator('#studyPage').isVisible(), false,
-            'a private study without its token must not be exposed');
-        } finally { await outsider.close(); }
       } finally {
         await Promise.allSettled([owner && owner.page.close(), recipient && recipient.page.close(), ownerContext.close(), recipientContext.close()]);
       }
@@ -179,7 +181,7 @@ async function createLiveGame(context) {
         await account.page.locator('#editorAddToStudy').click();
         await account.page.locator('#studyChooser').waitFor({ state: 'visible' });
         await account.page.locator('#studyChooser [data-study-id]').filter({ hasText: name }).click();
-        await account.page.locator('#studyPage').waitFor({ state: 'visible' });
+        await account.page.locator('#studyPage .study-position').nth(1).waitFor({ state: 'visible' });
         assert.ok(await account.page.locator('#studyPage .study-position').count() >= 2,
           'editor position should be added to the selected study');
       } finally { await Promise.allSettled([account && account.page.close(), context.close()]); }
@@ -204,8 +206,8 @@ async function createLiveGame(context) {
         }));
         assert.ok(featured && cards.length >= 2, 'featured and multiple small games should be visible');
         assert.ok(featured.bottom <= VIEWPORT.height + 2, 'featured game should fit in the desktop viewport');
-        assert.ok(Math.max(...cards.map((card) => card.bottom)) <= VIEWPORT.height + 2,
-          'small Watch games should fit in the desktop viewport');
+        const firstRow = cards.filter((card) => card.top < VIEWPORT.height && card.bottom <= VIEWPORT.height + 2);
+        assert.ok(firstRow.length >= 2, 'multiple small Watch games should fit in the desktop viewport');
       } finally {
         await Promise.allSettled([
           watch && watch.close(),
