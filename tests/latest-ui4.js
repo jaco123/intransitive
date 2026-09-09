@@ -16,8 +16,13 @@ async function registerUser(context) {
   await page.locator('#authModal').waitFor({ state: 'visible' });
   await page.locator('#authUsername').fill(username);
   await page.locator('#authPassword').fill(crypto.randomBytes(18).toString('base64url'));
-  await page.locator('#authSubmit').click();
-  await page.locator('#navUser').waitFor({ state: 'visible' });
+  await page.locator('#authForm').press('Enter');
+  await Promise.race([
+    page.locator('#navUser').waitFor({ state: 'visible', timeout: 15000 }),
+    page.locator('#authError').waitFor({ state: 'visible', timeout: 15000 }).then(async () => {
+      throw new Error('registration failed: ' + await page.locator('#authError').innerText());
+    }),
+  ]);
   return { page, username };
 }
 
