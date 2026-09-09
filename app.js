@@ -1051,6 +1051,13 @@
         d.lastPaintKey = null;
         return;
       }
+      if (!d.lastPaintSquare) {
+        const key = target.c + ':' + target.r;
+        d.lastPaintKey = key;
+        d.config.onPaint(target, d.piece);
+        d.lastPaintSquare = target;
+        return;
+      }
       const previous = d.lastPaintSquare || target;
       const span = Math.max(Math.abs(target.c - previous.c), Math.abs(target.r - previous.r));
       for (let i = 1; i <= span; i++) {
