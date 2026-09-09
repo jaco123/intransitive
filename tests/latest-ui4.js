@@ -66,7 +66,7 @@ async function assertFavicon(page) {
       const nav = await page.locator('#nav .nav-inner').boundingBox();
       const brand = await page.locator('#navBrand').boundingBox();
       const auth = await page.locator('#navAuth').boundingBox();
-      assert.ok(nav && brand && auth && brand.x <= nav.x + 8, 'brand should be flush left');
+      assert.ok(nav && brand && auth && brand.x >= nav.x + 10 && brand.x <= nav.x + 18, 'brand should have a modest left inset');
       assert.ok(auth.x + auth.width >= nav.x + nav.width - 8, 'profile controls should be flush right');
       assert.strictEqual(await page.getByRole('button', { name: 'Leaderboard', exact: true }).count(), 1, 'Leaderboard nav button missing');
     } catch (error) { failures.push('Intransitive naming/top-bar/Leaderboard: ' + error.message); }
