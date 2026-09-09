@@ -179,6 +179,44 @@ async function centerOf(locator) {
       await p.close();
     });
 
+    await check('Intransitive title preserves active game and history', async () => {
+      const cc = await browser.newContext(); const oc = await browser.newContext();
+      let creator = null; let opponent = null;
+      try {
+        creator = await register(cc); opponent = await register(oc);
+        const gameUrl = await createGame(creator.page, opponent.page);
+        const gameId = new URL(gameUrl).searchParams.get('game');
+
+        await creator.page.locator('#navBrand').click();
+        await creator.page.locator('#home').waitFor({ state: 'visible' });
+        assert.strictEqual(new URL(creator.page.url()).search, '?', 'title should route to the lobby');
+        assert.strictEqual(await creator.page.locator('#inGameNotice').innerText(), 'You are in a game\nReturn to game\nClose', 'active game notice should be shown after title navigation');
+
+        await creator.page.getByRole('button', { name: 'Return to game', exact: true }).click();
+        await creator.page.locator('#game').waitFor({ state: 'visible' });
+        assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId, 'return should restore the active game URL');
+        assert.strictEqual(await creator.page.locator('#gameStatus').isVisible(), true, 'return should restore the player game view');
+
+        await creator.page.getByRole('button', { name: 'Analysis', exact: true }).click();
+        await creator.page.locator('#explorer').waitFor({ state: 'visible' });
+        assert.strictEqual(new URL(creator.page.url()).searchParams.get('view'), 'analysis', 'analysis should be a browser-history route');
+        await creator.page.locator('#navBrand').click();
+        await creator.page.locator('#home').waitFor({ state: 'visible' });
+        await creator.page.goBack();
+        await creator.page.locator('#explorer').waitFor({ state: 'visible' });
+        assert.strictEqual(new URL(creator.page.url()).searchParams.get('view'), 'analysis', 'Back should restore the non-game route');
+        await creator.page.goBack();
+        await creator.page.locator('#game').waitFor({ state: 'visible' });
+        assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId, 'Back should restore the active game route');
+      } finally {
+        await Promise.allSettled([
+          creator && creator.page ? creator.page.close() : Promise.resolve(),
+          opponent && opponent.page ? opponent.page.close() : Promise.resolve(),
+          cc.close(), oc.close(),
+        ]);
+      }
+    });
+
     await check('profiles, notice, browser history, post-game analysis', async () => {
       const cc = await browser.newContext(); const oc = await browser.newContext(); const vc = await browser.newContext();
       let creator = null; let opponent = null; let viewer = null;

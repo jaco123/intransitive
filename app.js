@@ -2920,7 +2920,7 @@
   });
 
   document.getElementById('navBrand').addEventListener('click', (e) => {
-    if (location.search && !location.search.includes('game=')) e.preventDefault();
+    e.preventDefault();
     showHome();
   });
 
