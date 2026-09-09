@@ -1281,14 +1281,7 @@
   }
 
   function timeControlCategory(game) {
-    if (TIME_CONTROL_LABELS[game.category]) return game.category;
-    const initial = Number(game.timeControl && game.timeControl.initial) || 0;
-    const increment = Number(game.timeControl && game.timeControl.increment) || 0;
-    const estimate = initial + 40 * increment;
-    if (estimate < 180) return 'bullet';
-    if (estimate < 480) return 'blitz';
-    if (estimate < 1500) return 'rapid';
-    return 'classical';
+    return game.category;
   }
 
   function gameRating(game) {

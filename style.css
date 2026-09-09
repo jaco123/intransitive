@@ -507,7 +507,7 @@ h1 span { color: var(--muted); font-weight: 400; }
   box-shadow: none;
 }
 .nav-inner {
-  max-width: 1400px;
+  max-width: none;
   margin: 0 auto;
   padding: 12px 0;
   display: flex;
