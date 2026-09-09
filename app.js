@@ -254,6 +254,8 @@
   }
   function clearSession() {
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
+    incomingChallenges = [];
+    renderChallengeInbox();
   }
 
   // ---------------------------------------------------------------------------

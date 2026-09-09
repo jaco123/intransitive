@@ -209,6 +209,16 @@ async function centerOf(locator) {
         record('profile should provide a Watch control', await participantWatch.count() === 1);
         record('profile should provide a Challenge control', await opponent.page.locator('#profileChallenge').count() === 1);
 
+        await opponent.page.setViewportSize({ width: 390, height: 844 });
+        await opponent.page.goto(BASE + '/?view=profile&player=' + encodeURIComponent(creator.username), { waitUntil: 'domcontentloaded' });
+        await opponent.page.locator('#profilePanel').waitFor({ state: 'visible' });
+        const mobileRatings = await opponent.page.locator('#profileRatings').boundingBox();
+        const mobileHistory = await opponent.page.locator('#profileHistory').boundingBox();
+        record('profile ratings and history should stack on mobile', !!(mobileRatings && mobileHistory && Math.abs(mobileRatings.x - mobileHistory.x) < 2));
+        await opponent.page.setViewportSize({ width: 1366, height: 768 });
+        await opponent.page.goto(BASE + '/?view=profile&player=' + encodeURIComponent(creator.username), { waitUntil: 'domcontentloaded' });
+        await opponent.page.locator('#profilePanel').waitFor({ state: 'visible' });
+
         if (await participantWatch.count() === 1) {
           try {
             await participantWatch.click();
@@ -269,7 +279,8 @@ async function centerOf(locator) {
         await target.page.locator('#game').waitFor({ state: 'visible' });
         await challenger.page.locator('#gameStatus').filter({ hasText: /move|to move/ }).waitFor();
         assert.strictEqual(new URL(challenger.page.url()).searchParams.get('game'), new URL(target.page.url()).searchParams.get('game'), 'accepted challenge should open one shared game');
-        assert.ok((await challenger.page.locator('#gameMode').innerText()).length > 0, 'accepted challenge should preserve the selected game mode');
+        assert.strictEqual(await challenger.page.locator('#gameMode').innerText(), 'Rated', 'accepted challenge should preserve rated mode');
+        assert.match(await challenger.page.locator('#playerClock').innerText(), /^3:00$/, 'accepted challenge should preserve the selected 3+2 time control');
       } finally {
         await Promise.allSettled([
           target && target.page ? target.page.close() : Promise.resolve(),
