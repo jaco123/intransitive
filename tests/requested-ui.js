@@ -17,8 +17,13 @@ async function register(context) {
   await page.getByRole('button', { name: 'Sign up', exact: true }).click();
   await page.locator('#authUsername').fill(username);
   await page.locator('#authPassword').fill(password);
-  await page.locator('#authSubmit').click();
-  await page.locator('#navUser').waitFor({ state: 'visible' });
+  await page.locator('#authPassword').press('Enter');
+  await Promise.race([
+    page.locator('#navUser').waitFor({ state: 'visible', timeout: 15000 }),
+    page.locator('#authError').waitFor({ state: 'visible', timeout: 15000 }).then(async () => {
+      throw new Error('registration failed: ' + await page.locator('#authError').innerText());
+    }),
+  ]);
   return { page, username };
 }
 
@@ -175,7 +180,10 @@ async function centerOf(locator) {
     });
 
     await check('profiles, notice, browser history, post-game analysis', async () => {
-      const cc = await browser.newContext(); const oc = await browser.newContext(); const vc = await browser.newContext(); const creator = await register(cc); const opponent = await register(oc); const viewer = await vc.newPage({ viewport: { width: 1366, height: 768 } });
+      const cc = await browser.newContext(); const oc = await browser.newContext(); const vc = await browser.newContext();
+      let creator = null; let opponent = null; let viewer = null;
+      try {
+      creator = await register(cc); opponent = await register(oc); viewer = await vc.newPage({ viewport: { width: 1366, height: 768 } });
       const gameUrl = await createGame(creator.page, opponent.page); const gameId = new URL(gameUrl).searchParams.get('game');
       await check('opponent name opens profile', async () => { await creator.page.locator('#opponentName').click(); assert.strictEqual(new URL(creator.page.url()).searchParams.get('view'), 'profile'); });
       await check('participant active game restores own seat', async () => { await creator.page.locator('.profile-active-games [data-game-id]').waitFor({ state: 'visible' }); await creator.page.locator('.profile-active-games [data-game-id]').first().click(); assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId, 'participant should restore own game seat'); });
@@ -186,7 +194,14 @@ async function centerOf(locator) {
       await creator.page.goto(gameUrl, { waitUntil: 'domcontentloaded' }); await creator.page.locator('#game').waitFor({ state: 'visible' }); await playFirstLegalMove(creator.page, 'blue'); await playFirstLegalMove(opponent.page, 'red'); await opponent.page.locator('#resign').click(); await opponent.page.getByRole('button', { name: 'Yes', exact: true }).click(); await creator.page.locator('#gameStatus').filter({ hasText: 'resign' }).waitFor();
       await check('finished game notice and browser Back', async () => { await creator.page.getByRole('button', { name: 'Play', exact: true }).click(); assert.strictEqual(await creator.page.locator('#inGameNotice').isVisible(), false, 'finished games must not show notice'); await creator.page.goBack(); await creator.page.locator('#game').waitFor({ state: 'visible' }); assert.match(await creator.page.locator('#gameStatus').innerText(), /finished|resign/i, 'Back should restore finished game'); });
       await check('post-game analysis parity', async () => { await creator.page.getByRole('button', { name: 'Analysis board', exact: true }).click(); await creator.page.locator('#explorerHistory .move').nth(1).waitFor({ state: 'visible' }); assert.strictEqual(await creator.page.locator('#explorerHistory .move').count(), 2, 'post-game analysis should retain full history'); assert.ok(await creator.page.locator('#explorerMoves').isVisible(), 'post-game opening book should be below history'); assert.strictEqual(await creator.page.locator('#explorerBoard .lastmove').count(), 2, 'post-game analysis should highlight last move'); });
-      await creator.page.close(); await opponent.page.close(); await viewer.close(); await cc.close(); await oc.close(); await vc.close();
+      } finally {
+        await Promise.allSettled([
+          creator && creator.page ? creator.page.close() : Promise.resolve(),
+          opponent && opponent.page ? opponent.page.close() : Promise.resolve(),
+          viewer ? viewer.close() : Promise.resolve(),
+          cc.close(), oc.close(), vc.close(),
+        ]);
+      }
     });
   } finally { await browser.close(); }
   if (failures.length) throw new Error(failures.join(' | '));
