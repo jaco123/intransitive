@@ -190,7 +190,7 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
       assert.strictEqual(await page.locator('#moves').evaluate((el) => getComputedStyle(el).borderRadius), '0px',
         'move list should have sharp corners');
       await page.locator('#finishedAnalysis').click();
-      await page.locator('#explorerStatus').waitFor();
+      await page.locator('#explorerBoard .sq').first().waitFor();
       await opponent.close();
     } catch (error) { failures.push('finished game actions/review: ' + error.message); }
     try { assert.deepStrictEqual(errors, [], 'affected views should have no console/page errors'); }

@@ -1025,6 +1025,10 @@
       if (d.lastPaintKey !== key) {
         d.lastPaintKey = key;
         d.config.onPaint(target, d.piece);
+        if (d.sourceKind === 'paint' && d.sq) {
+          const sourceSquare = d.config.boardEl.querySelector(`.sq[data-c="${d.sq.c}"][data-r="${d.sq.r}"]`);
+          if (sourceSquare) sourceSquare.classList.add('drag-source');
+        }
       }
     }
   });
