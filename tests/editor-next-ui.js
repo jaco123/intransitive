@@ -16,7 +16,7 @@ async function editor(page) {
 async function analysis(page) {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await page.getByText(/to move · .* games/).waitFor({ state: 'visible' });
+  await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
 }
 
 (async () => {

@@ -625,6 +625,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 .position-preview { width: min(100%, 250px); margin-top: var(--s3); }
 .position-preview .board { box-shadow: 0 3px 12px rgba(0, 0, 0, .35); }
 #editor .players-col { width: min(calc(100vh - 310px), 500px); }
+#editor { padding-top: 28px; padding-bottom: 28px; }
 #editor .screen-head { justify-content: flex-start; margin-bottom: 8px; }
 #editor .board-wrap { flex-direction: column; }
 #editor .board { order: 2; }

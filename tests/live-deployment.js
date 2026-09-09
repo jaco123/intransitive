@@ -45,10 +45,7 @@ const BASE = (process.env.RPS_LIVE_BASE || 'http://141.95.142.131').replace(/\/$
 
   // Exercise a second UI view and its API-backed rendering on the deployed URL.
   await page.locator('#analysisBtn').click();
-  await page.waitForFunction(() => {
-    const status = document.getElementById('explorerStatus');
-    return status && status.textContent && status.textContent !== 'Loading…';
-  });
+  await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
   assert.strictEqual(await page.locator('#explorer').isVisible(), true);
   assert.deepStrictEqual(consoleErrors, [], 'browser console should have no errors');
   assert.deepStrictEqual(pageErrors, [], 'page should have no uncaught errors');

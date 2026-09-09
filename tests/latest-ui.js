@@ -122,7 +122,7 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
     } catch (error) { failures.push('lobby preview pointer drag: ' + error.message); await page.mouse.up(); }
 
     await page.locator('#analysisBtn').click();
-    await page.getByText(/to move · .* games/).waitFor({ state: 'visible' });
+    await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
     try {
       await dragWithPointer(page, '#explorerBoard', '#explorerBoard .piece[data-color="blue"]', '#explorerBoard .sq[data-c="0"][data-r="5"]');
     } catch (error) { failures.push('analysis pointer drag: ' + error.message); await page.mouse.up(); }

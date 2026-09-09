@@ -13,7 +13,7 @@ const VIEWPORTS = [
 async function openAnalysis(page) {
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Analysis', exact: true }).click();
-  await page.getByText(/to move · .* games/).waitFor({ state: 'visible' });
+  await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
 }
 
 async function assertFavicon(page) {
@@ -69,7 +69,7 @@ async function pageHealth(page) {
     await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible' });
     await assertFavicon(page);
     await page.goBack();
-    await page.getByText(/to move · .* games/).waitFor({ state: 'visible' });
+    await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
     assert.strictEqual(await page.getByRole('heading', { name: 'Board editor', exact: true }).isVisible(), false,
       'browser Back should return directly to Analysis');
     await page.getByRole('button', { name: 'Board editor', exact: true }).click();
