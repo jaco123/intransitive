@@ -39,6 +39,11 @@
 
   <!-- Home / lobby -->
   <div id="home" class="screen">
+    <div id="inGameNotice" class="in-game-notice hidden" role="status">
+      <span>You are in a game</span>
+      <button id="returnToGame" type="button" class="btn small primary">Return to game</button>
+      <button id="closeGameNotice" type="button" class="btn small">Close</button>
+    </div>
     <main class="lobby">
       <div class="lobby__side">
         <div class="lobby__box">
@@ -301,6 +306,7 @@
       <button id="profileLogout" class="btn small profile-logout">Log out</button>
     </div>
     <div id="profilePanel" class="profile-panel"></div>
+    <section id="profileActiveGames" class="profile-active-games hidden" aria-label="Active games"></section>
     <div id="profileHistory" class="history-list"></div>
     <div id="historyList" class="history-list"></div>
   </div>

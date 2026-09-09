@@ -97,6 +97,7 @@
   // History & replay
   const historyListEl = $('historyList');
   const profilePanelEl = $('profilePanel');
+  const profileActiveGamesEl = $('profileActiveGames');
   const profileHistoryEl = $('profileHistory');
   const historyBackEl = $('historyBack');
   const profileLogoutEl = $('profileLogout');
@@ -153,6 +154,9 @@
   const lobbyListEl = $('lobbyList');
   const lobbyEmptyEl = $('lobbyEmpty');
   const lobbyCountEl = $('lobbyCount');
+  const inGameNoticeEl = $('inGameNotice');
+  const returnToGameEl = $('returnToGame');
+  const closeGameNoticeEl = $('closeGameNotice');
 
   // Chat
   const chatLogEl = $('chatLog');
@@ -198,6 +202,7 @@
   let activeGamesData = [];
   let watchCategory = 'all';
   let playersSearchTimer = null;
+  let dismissedInGameNoticeId = null;
 
   let explorer = {        // analysis / opening explorer state
     baseBoard: null,      // custom start board (null = standard initial position)
@@ -208,6 +213,8 @@
     totalGames: 0,
     moves: [],            // [{ move, games, wins, draws, losses }]
     selected: null,       // { c, r } selected piece
+    history: [],           // the single source of truth for displayed analysis moves
+    loadSerial: 0,
   };
 
   let editor = {          // board editor state
@@ -850,6 +857,7 @@
     renderActions();
     renderDrawOffer();
     renderRematch();
+    renderInGameNotice();
   }
 
   // ---------------------------------------------------------------------------
@@ -980,9 +988,10 @@
         const tool = config.getPaintTool();
         if (tool && tool.kind !== 'cursor') {
           const paintPiece = tool.kind === 'piece' ? { color: tool.color, type: tool.type } : null;
-          // Painting is click-to-place. Starting a drag here makes a selected
-          // palette piece fight with the editor's normal placement behavior.
-          if (config.onClick) config.onClick(sq, paintPiece, 'paint', false);
+          beginPieceDrag(config, sq, paintPiece, null, e, 'paint');
+          activePieceDrag.painting = true;
+          activePieceDrag.lastPaintSquare = sq;
+          if (config.onPaint) config.onPaint(sq, paintPiece);
           return;
         }
       }
@@ -1033,6 +1042,30 @@
     }
     const d = activePieceDrag;
     if (!d) return;
+    if (d.painting) {
+      const target = squareFromBoardPoint(e.clientX, e.clientY, d.config.boardEl, d.config.orientationFn());
+      if (!target) {
+        // Do not interpolate across time spent outside the board. Re-entry is
+        // a new stroke segment, even while the button remains held.
+        d.lastPaintSquare = null;
+        d.lastPaintKey = null;
+        return;
+      }
+      const previous = d.lastPaintSquare || target;
+      const span = Math.max(Math.abs(target.c - previous.c), Math.abs(target.r - previous.r));
+      for (let i = 1; i <= span; i++) {
+        const sq = {
+          c: Math.round(previous.c + (target.c - previous.c) * i / span),
+          r: Math.round(previous.r + (target.r - previous.r) * i / span),
+        };
+        const key = sq.c + ':' + sq.r;
+        if (d.lastPaintKey === key) continue;
+        d.lastPaintKey = key;
+        d.config.onPaint(sq, d.piece);
+      }
+      d.lastPaintSquare = target;
+      return;
+    }
     if (!d.moved && (d.piece || d.sourceKind === 'paint') && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 5) {
       d.moved = true;
       d.ghost = document.createElement('div');
@@ -1073,6 +1106,7 @@
     const d = activePieceDrag;
     if (!d) return;
     activePieceDrag = null;
+    if (d.painting) return;
     if (d.sourceEl) d.sourceEl.classList.remove('drag-source');
     if (d.ghost) d.ghost.remove();
     const target = squareFromBoardPoint(e.clientX, e.clientY, d.config.boardEl, d.config.orientationFn());
@@ -1081,6 +1115,18 @@
   });
 
   window.addEventListener('pointercancel', () => {
+    if (arrowDrag) {
+      renderArrows(arrowDrag.svgEl, arrowDrag.arrows, arrowDrag.orientationFn());
+      arrowDrag = null;
+    }
+    if (activePieceDrag) {
+      if (activePieceDrag.sourceEl) activePieceDrag.sourceEl.classList.remove('drag-source');
+      if (activePieceDrag.ghost) activePieceDrag.ghost.remove();
+    }
+    activePieceDrag = null;
+  });
+
+  window.addEventListener('blur', () => {
     if (arrowDrag) {
       renderArrows(arrowDrag.svgEl, arrowDrag.arrows, arrowDrag.orientationFn());
       arrowDrag = null;
@@ -1311,7 +1357,10 @@
   function activeGameButton(game, featured = false) {
     const label = (game.players.blue && game.players.blue.name || 'Blue') + ' vs ' + (game.players.red && game.players.red.name || 'Red');
     const category = timeControlCategory(game);
-    return '<button type="button" class="watch-game' + (featured ? ' featured-game-button' : '') + '" data-game-id="' + escapeHtml(game.id) + '" aria-label="Watch ' + escapeHtml(label) + '">' +
+    return '<button type="button" class="watch-game' + (featured ? ' featured-game-button' : '') + '" data-game-id="' + escapeHtml(game.id) +
+      '" data-blue-user-id="' + (game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '') +
+      '" data-red-user-id="' + (game.players.red && game.players.red.userId != null ? game.players.red.userId : '') +
+      '" aria-label="Watch ' + escapeHtml(label) + '">' +
       miniBoardMarkup(game.board) +
       '<span class="watch-game-players"><span>' + activePlayerLabel(game.players.blue) + '</span><span> vs </span><span>' + activePlayerLabel(game.players.red) + '</span></span>' +
       '<span class="watch-game-time-control">' + timeControlIconMarkup(category) + ' ' + TIME_CONTROL_LABELS[category] + '</span>' +
@@ -1367,18 +1416,43 @@
 
   function spectateGame(id) {
     if (!id) return;
+    connectToGame(id, true, true);
+  }
+
+  function connectToGame(id, spectating, pushHistory) {
+    if (!id) return;
     clearTimeout(reconnectTimer);
+    reconnectTimer = null;
     if (ws) ws.close();
     ws = null;
     gameId = null;
     myToken = null;
     myColor = null;
     state = null;
-    pending = { type: 'spectate', gameId: id };
-    history.pushState({ rpsScreen: 'game' }, '', '?spectate=' + encodeURIComponent(id));
+    pending = spectating ? { type: 'spectate', gameId: id } : { type: 'join', gameId: id };
+    if (!spectating) {
+      const token = (() => { try { return sessionStorage.getItem('rps_token_' + id); } catch (e) { return null; } })();
+      if (token) pending.token = token;
+      const session = sessionToken();
+      if (session) pending.session = session;
+    }
+    if (pushHistory) history.pushState({ rpsScreen: 'game' }, '', '?' + (spectating ? 'spectate=' : 'game=') + encodeURIComponent(id));
     showGame();
     gameStatusEl.textContent = 'Connecting…';
     connect();
+  }
+
+  function openActiveGame(id, blueUserId, redUserId) {
+    const session = getSession();
+    const userId = session && session.user ? session.user.id : null;
+    const participant = userId != null && (String(userId) === String(blueUserId) || String(userId) === String(redUserId));
+    if (participant && gameId === id && myToken && state) {
+      history.pushState({ rpsScreen: 'game' }, '', '?game=' + encodeURIComponent(id));
+      showGame();
+      render();
+    } else {
+      connectToGame(id, !participant, true);
+    }
   }
 
   function renderPlayersDirectory(players) {
@@ -1415,6 +1489,12 @@
     if (updateUrl) history.pushState({ rpsScreen: 'home' }, '', '?');
     showScreen(homeEl);
     renderPositionPreview();
+    renderInGameNotice();
+  }
+  function renderInGameNotice() {
+    if (!inGameNoticeEl) return;
+    const show = !!(state && gameId && state.status === 'playing' && !state.spectating && dismissedInGameNoticeId !== gameId);
+    inGameNoticeEl.classList.toggle('hidden', !show);
   }
   function updateLink() {
     if (gameId) {
@@ -1604,6 +1684,7 @@
       if (res.status === 401) { clearSession(); renderNav(); openAuth('login'); return; }
       const data = await res.json();
       renderProfile(data.user);
+      renderProfileActiveGames(data.activeGames || []);
     } catch (e) {
       profilePanelEl.innerHTML = '';
     }
@@ -1615,16 +1696,46 @@
     showScreen(historyEl);
     profileLogoutEl.classList.add('hidden');
     historyListEl.innerHTML = '';
+    profileActiveGamesEl.innerHTML = '';
+    profileActiveGamesEl.classList.add('hidden');
     profileHistoryEl.innerHTML = '<p class="history-empty">Loading games…</p>';
     try {
       const res = await fetch('/api/players/' + encodeURIComponent(username), { cache: 'no-store' });
       if (!res.ok) throw new Error('not found');
       const data = await res.json();
       renderProfile(data.user);
+      renderProfileActiveGames(data.activeGames || []);
       renderPublicHistory(data.games || []);
     } catch (e) {
       profilePanelEl.innerHTML = '<p class="history-empty">Player not found.</p>';
       profileHistoryEl.innerHTML = '';
+      profileActiveGamesEl.innerHTML = '';
+    }
+  }
+
+  function renderProfileActiveGames(games) {
+    profileActiveGamesEl.innerHTML = '';
+    if (!games.length) {
+      profileActiveGamesEl.classList.add('hidden');
+      return;
+    }
+    profileActiveGamesEl.classList.remove('hidden');
+    const heading = document.createElement('h2');
+    heading.textContent = 'Active games';
+    profileActiveGamesEl.appendChild(heading);
+    for (const game of games) {
+      const card = document.createElement('button');
+      card.type = 'button';
+      card.className = 'profile-active-game';
+      card.dataset.gameId = game.id;
+      card.dataset.blueUserId = game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '';
+      card.dataset.redUserId = game.players.red && game.players.red.userId != null ? game.players.red.userId : '';
+      const blue = game.players.blue ? game.players.blue.name : 'Waiting for player';
+      const red = game.players.red ? game.players.red.name : 'Waiting for player';
+      card.innerHTML = '<span class="profile-active-game-players">' + escapeHtml(blue) + ' vs ' + escapeHtml(red) + '</span>' +
+        '<span class="profile-active-game-meta">' + timeControlIconMarkup(timeControlCategory(game)) + ' ' +
+        TIME_CONTROL_LABELS[timeControlCategory(game)] + ' · ' + (game.status === 'playing' ? 'Playing' : 'Waiting') + '</span>';
+      profileActiveGamesEl.appendChild(card);
     }
   }
 
@@ -1887,6 +1998,7 @@
       fromR: parseInt(m[2], 10) - 1,
       toC: engine.FILES.indexOf(m[4]),
       toR: parseInt(m[5], 10) - 1,
+      capture: m[3] === 'x',
     };
   }
 
@@ -1908,12 +2020,14 @@
     }
 
     const query = '?board=' + encodeURIComponent(engine.boardToString(board)) + '&turn=' + turn;
+    const loadSerial = ++explorer.loadSerial;
     try {
       const res = await fetch('/api/openings' + query);
       if (!res.ok) {
         return;
       }
       const data = await res.json();
+      if (loadSerial !== explorer.loadSerial) return;
       explorer.position = data.position;
       explorer.totalGames = data.totalGames;
       explorer.moves = data.moves;
@@ -1986,12 +2100,11 @@
   function renderAnalysisHistory() {
     const history = explorer.history || [];
     explorerHistoryEl.innerHTML = '';
-    explorerHistoryLabelEl.classList.toggle('hidden', !history.length);
-    explorerHistoryEl.classList.toggle('hidden', !history.length);
-    if (history.length) {
-      renderMovesList(explorerHistoryEl, history, explorer.step - 1);
-      explorerHistoryEl.querySelectorAll('.move[data-step]').forEach((el) => { el.dataset.analysisStep = el.dataset.step; });
-    }
+    explorerHistoryLabelEl.classList.remove('hidden');
+    explorerHistoryEl.classList.remove('hidden');
+    if (!history.length) return;
+    renderMovesList(explorerHistoryEl, history, explorer.step - 1);
+    explorerHistoryEl.querySelectorAll('.move[data-step]').forEach((el) => { el.dataset.analysisStep = el.dataset.step; });
   }
 
   function renderExplorerPath() {
@@ -2003,10 +2116,8 @@
 
   function renderExplorerMoves() {
     explorerMovesEl.innerHTML = '';
-    const hasGameHistory = !!(explorer.history && explorer.history.length);
-    explorerOpeningLabelEl.classList.toggle('hidden', hasGameHistory);
-    explorerMovesEl.classList.toggle('hidden', hasGameHistory);
-    if (hasGameHistory) return;
+    explorerOpeningLabelEl.classList.remove('hidden');
+    explorerMovesEl.classList.remove('hidden');
 
     // Build a stats map keyed by move string.
     const stats = new Map();
@@ -2077,6 +2188,7 @@
   function descendExplorer(moveStr) {
     explorer.path = explorer.path.slice(0, explorer.step);
     explorer.path.push(moveStr);
+    explorer.history = explorer.path.map(parseMoveString).filter(Boolean);
     explorer.step = explorer.path.length;
     playSound(moveStr.includes('x') ? 'Capture' : 'Move');
     loadExplorer();
@@ -2105,7 +2217,9 @@
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'editor-piece-tool';
-      button.draggable = true;
+      // The editor owns pointer gestures so the browser must not add a native
+      // drag image on top of the custom cursor/paint interaction.
+      button.draggable = false;
       button.dataset.tool = 'piece';
       button.dataset.color = color;
       button.dataset.type = type;
@@ -2129,7 +2243,7 @@
   function renderEditor() {
     drawBoard(editorBoardEl, editor.board, editor.orientation, null, null, null, null, true);
     editorBoardEl.querySelectorAll('.piece').forEach((piece) => {
-      piece.draggable = editor.tool.kind === 'cursor';
+      piece.draggable = false;
     });
     renderEditorPalette(editorPaletteTopEl, 'red');
     renderEditorPalette(editorPaletteBottomEl, 'blue');
@@ -2141,14 +2255,16 @@
   function updateEditorCursor() {
     const old = editorBoardEl.querySelector('.editor-cursor-piece');
     if (old) old.remove();
-    if (!editorCursorPoint || editor.tool.kind !== 'piece') return;
+    if (!editorCursorPoint || (editor.tool.kind !== 'piece' && editor.tool.kind !== 'erase')) return;
     const rect = editorBoardEl.getBoundingClientRect();
     if (!rect.width || !rect.height || editorCursorPoint.x < rect.left || editorCursorPoint.x > rect.right ||
         editorCursorPoint.y < rect.top || editorCursorPoint.y > rect.bottom) return;
-    const size = (rect.width / SIZE) * 0.82;
+    const size = (rect.width / SIZE) * (editor.tool.kind === 'erase' ? 0.64 : 0.82);
     const cursor = document.createElement('div');
     cursor.className = 'editor-cursor-piece';
-    cursor.innerHTML = pieceSvg(editor.tool.type, editor.tool.color);
+    cursor.innerHTML = editor.tool.kind === 'erase'
+      ? editorToolIcon('erase')
+      : pieceSvg(editor.tool.type, editor.tool.color);
     cursor.style.width = size + 'px';
     cursor.style.height = size + 'px';
     cursor.style.left = (editorCursorPoint.x - rect.left - size / 2) + 'px';
@@ -2546,8 +2662,23 @@
     if (opponent && !opponent.guest && opponent.name) loadPlayerProfile(opponent.name);
   });
   playBtn.addEventListener('click', () => {
-    history.pushState({ rpsScreen: 'home' }, '', '?');
     showHome();
+  });
+
+  returnToGameEl.addEventListener('click', () => {
+    if (!gameId) return;
+    history.pushState({ rpsScreen: 'game' }, '', '?game=' + encodeURIComponent(gameId));
+    if (state && myToken) {
+      showGame();
+      render();
+    } else {
+      connectToGame(gameId, false, false);
+    }
+  });
+  closeGameNoticeEl.addEventListener('click', () => {
+    if (!gameId) return;
+    dismissedInGameNoticeId = gameId;
+    renderInGameNotice();
   });
 
   explorerBackEl.addEventListener('click', () => showHome());
@@ -2562,8 +2693,12 @@
   });
   [watchListEl, featuredGameEl, homeFeaturedGameEl].forEach((root) => root.addEventListener('click', (e) => {
     const button = e.target.closest('[data-game-id]');
-    if (button) spectateGame(button.dataset.gameId);
+    if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId);
   }));
+  profileActiveGamesEl.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-game-id]');
+    if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId);
+  });
   playersListEl.addEventListener('click', (e) => {
     const row = e.target.closest('[data-player-username]');
     if (row) loadPlayerProfile(row.dataset.playerUsername);
@@ -2738,9 +2873,30 @@
     },
   });
 
+  function restoreGameRoute(params) {
+    const spectating = params.has('spectate');
+    const id = params.get(spectating ? 'spectate' : 'game');
+    if (!id) return;
+    const sameSession = gameId === id && state &&
+      ((spectating && state.spectating) || (!spectating && !state.spectating && !!myToken));
+    if (sameSession) {
+      showGame();
+      render();
+      return;
+    }
+    connectToGame(id, spectating, false);
+  }
+
   window.addEventListener('popstate', (e) => {
-    if (e.state && e.state.rpsScreen === 'editor') openEditor(false);
-    else if (e.state && e.state.rpsScreen === 'analysis') openAnalysis(null, 'blue', false);
+    const params = new URLSearchParams(location.search);
+    if (params.has('game') || params.has('spectate')) restoreGameRoute(params);
+    else if (e.state && e.state.rpsScreen === 'editor') openEditor(false);
+    else if (e.state && e.state.rpsScreen === 'analysis') {
+      if (state && state.status === 'finished' && !state.spectating) {
+        const start = state.startPosition || { board: engine.initialBoard(), turn: 'blue' };
+        openAnalysis(start.board, start.turn, false, state.history || []);
+      } else openAnalysis(null, 'blue', false);
+    }
     else if (e.state && e.state.rpsScreen === 'watch') { showScreen(watchEl); refreshActiveGames(); }
     else if (e.state && e.state.rpsScreen === 'players') { showScreen(playersEl); refreshPlayers(playersSearchEl.value); }
     else if (e.state && e.state.rpsScreen === 'leaderboard') { showScreen(leaderboardEl); refreshLeaderboards(); }

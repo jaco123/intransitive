@@ -187,10 +187,10 @@ function send(ws, obj) {
 function playerInfo(g, color) {
   const p = g[color];
   if (!p) return null;
-  if (!p.userId) return { name: CAP[color], guest: true, rating: null };
+  if (!p.userId) return { name: CAP[color], guest: true, rating: null, userId: null };
   let r = p.rating;
   if (g.status === 'finished' && p.ratingAfter != null) r = p.ratingAfter;
-  return { name: p.username || CAP[color], guest: false, rating: r == null ? null : Math.round(r) };
+  return { name: p.username || CAP[color], guest: false, rating: r == null ? null : Math.round(r), userId: p.userId };
 }
 
 function snapshot(g, color, spectating) {
@@ -868,6 +868,14 @@ function activeGames() {
     .map(activeGameInfo);
 }
 
+function activeGamesForUser(userId) {
+  return Array.from(games.values())
+    .filter((g) => (g.status === 'waiting' || g.status === 'playing') &&
+      ((g.blue && g.blue.userId === userId) || (g.red && g.red.userId === userId)))
+    .sort((a, b) => (b.createdAt - a.createdAt) || a.id.localeCompare(b.id))
+    .map(activeGameInfo);
+}
+
 function featuredGame() {
   const playing = Array.from(games.values()).filter((g) => g.status === 'playing');
   playing.sort((a, b) => {
@@ -1083,7 +1091,7 @@ async function handleApi(req, res, urlPath, query) {
         sendJson(res, 401, { error: 'Not authenticated.' });
         return;
       }
-      sendJson(res, 200, { user: db.publicUser(user) });
+      sendJson(res, 200, { user: db.publicUser(user), activeGames: activeGamesForUser(user.id) });
       return;
     }
 
@@ -1110,7 +1118,11 @@ async function handleApi(req, res, urlPath, query) {
         sendJson(res, 404, { error: 'Player not found.' });
         return;
       }
-      sendJson(res, 200, { user: db.publicUser(user), games: db.listPublicGames(user.id, 50) });
+      sendJson(res, 200, {
+        user: db.publicUser(user),
+        games: db.listPublicGames(user.id, 50),
+        activeGames: activeGamesForUser(user.id),
+      });
       return;
     }
 
