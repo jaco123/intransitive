@@ -24,7 +24,7 @@ const BASE = (process.env.RPS_LIVE_BASE || 'http://141.95.142.131').replace(/\/$
 
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await assert.doesNotReject(() => page.waitForTimeout(750));
-  assert.strictEqual(await page.title(), 'RPS2');
+  assert.strictEqual(await page.title(), 'Intransitive');
   assert.strictEqual(await page.locator('#home').isVisible(), true);
   assert.strictEqual(websocketUrls.some((url) => /\/ws$/.test(url)), true, 'UI should open its WebSocket');
 

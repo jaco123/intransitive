@@ -573,7 +573,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 
 /* Analysis and editor occupy the viewport; long move lists scroll inside the
  * side panel so the document itself never acquires a page scrollbar. */
-#explorer, #editor { height: calc(100vh - 70px); overflow: hidden; }
+#explorer, #editor { height: calc(100vh - 75px); overflow: hidden; }
 #explorer .game-layout, #editor .game-layout { height: calc(100% - 58px); min-height: 0; }
 #explorer .side, #editor .side { max-height: 100%; overflow-y: auto; }
 
