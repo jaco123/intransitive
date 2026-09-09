@@ -2855,6 +2855,10 @@
     updateEditorCursor();
   });
   editorBoardEl.addEventListener('pointerleave', () => {
+    if (activePieceDrag && activePieceDrag.painting) {
+      activePieceDrag.lastPaintSquare = null;
+      activePieceDrag.lastPaintKey = null;
+    }
     editorCursorPoint = null;
     updateEditorCursor();
   });
