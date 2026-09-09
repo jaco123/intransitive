@@ -152,6 +152,13 @@
     </div>
     <section class="directory-panel">
       <h2>Active games</h2>
+      <div id="watchFilters" class="watch-filters" role="group" aria-label="Filter games by time control">
+        <button type="button" class="watch-filter active" data-category="all">All</button>
+        <button type="button" class="watch-filter" data-category="bullet"><span class="time-control-symbol" data-time-control="bullet" data-icon="&#xe032;" aria-hidden="true"></span> Bullet</button>
+        <button type="button" class="watch-filter" data-category="blitz"><span class="time-control-symbol" data-time-control="blitz" data-icon="&#xe008;" aria-hidden="true"></span> Blitz</button>
+        <button type="button" class="watch-filter" data-category="rapid"><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</button>
+        <button type="button" class="watch-filter" data-category="classical"><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</button>
+      </div>
       <div id="featuredGame" class="featured-game hidden"></div>
       <div id="watchList" class="watch-list"></div>
       <p id="watchEmpty" class="history-empty">No active games right now.</p>
@@ -179,10 +186,10 @@
       <h1>Leaderboard</h1>
     </div>
     <section class="leaderboard-grid" aria-label="Leaderboards">
-      <section class="leaderboard-panel" data-category="bullet"><h2>Bullet</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
-      <section class="leaderboard-panel" data-category="blitz"><h2>Blitz</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
-      <section class="leaderboard-panel" data-category="rapid"><h2>Rapid</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
-      <section class="leaderboard-panel" data-category="classical"><h2>Classical</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="bullet"><h2><span class="time-control-symbol" data-time-control="bullet" data-icon="&#xe032;" aria-hidden="true"></span> Bullet</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="blitz"><h2><span class="time-control-symbol" data-time-control="blitz" data-icon="&#xe008;" aria-hidden="true"></span> Blitz</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="rapid"><h2><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="classical"><h2><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
     </section>
   </div>
 
@@ -191,7 +198,7 @@
     <div class="game-layout">
       <div class="players-col">
         <div class="player top" id="opponentBar">
-          <span class="pname" id="opponentName">Red</span>
+          <button type="button" class="pname profile-link" id="opponentName">Red</button>
           <span class="clock-wrap">
             <span class="grace hidden" id="opponentGrace"></span>
             <span class="clock" id="opponentClock">5:00</span>

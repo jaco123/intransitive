@@ -112,6 +112,7 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
     try {
       await page.getByRole('button', { name: 'Blue Rock' }).click();
       await page.locator('#editorBoard .sq[data-c="4"][data-r="4"]').click();
+      await page.getByRole('button', { name: 'Select and move pieces' }).first().click();
       await dragWithPointer(page, '#editorBoard', '#editorBoard .piece[data-c="4"][data-r="4"]', '#editorBoard .sq[data-c="5"][data-r="5"]');
     } catch (error) { failures.push('editor pointer drag: ' + error.message); await page.mouse.up(); }
 

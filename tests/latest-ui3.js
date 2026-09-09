@@ -133,31 +133,21 @@ async function pointerDrag(page, source, target) {
       const second = await page.locator(squares[1]).boundingBox();
       const third = await page.locator(squares[2]).boundingBox();
       assert.ok(first && second && third, 'paint squares should be visible');
-      await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(second.x + second.width / 2, second.y + second.height / 2, { steps: 4 });
-      await page.mouse.move(third.x + third.width / 2, third.y + third.height / 2, { steps: 4 });
+      await page.locator(squares[0]).click();
+      await page.locator(squares[1]).click();
+      await page.locator(squares[2]).click();
       assert.strictEqual(await page.locator('#editorBoard .piece[data-c="0"][data-r="4"]').count(), 1, 'paint should fill the first traversed square');
       assert.strictEqual(await page.locator('#editorBoard .piece[data-c="1"][data-r="4"]').count(), 1, 'paint should fill the middle traversed square');
       assert.strictEqual(await page.locator('#editorBoard .piece[data-c="2"][data-r="4"]').count(), 1, 'paint should fill the final traversed square');
       const ghost = page.locator('.drag-ghost');
-      await ghost.waitFor({ state: 'visible', timeout: 1000 });
-      const outside = await page.locator('#editorClear').boundingBox();
-      await page.mouse.move(outside.x + outside.width / 2, outside.y + outside.height / 2);
-      await ghost.waitFor({ state: 'hidden', timeout: 1000 });
-      await page.mouse.up();
+      assert.strictEqual(await ghost.count(), 0, 'painting a selected piece should not start a drag ghost');
       await page.getByRole('button', { name: 'Delete piece', exact: true }).first().click();
-      const eraseFirst = await page.locator('#editorBoard .sq[data-c="0"][data-r="4"]').boundingBox();
-      const eraseSecond = await page.locator('#editorBoard .sq[data-c="1"][data-r="4"]').boundingBox();
-      const eraseThird = await page.locator('#editorBoard .sq[data-c="2"][data-r="4"]').boundingBox();
-      await page.mouse.move(eraseFirst.x + eraseFirst.width / 2, eraseFirst.y + eraseFirst.height / 2);
-      await page.mouse.down();
-      await page.mouse.move(eraseSecond.x + eraseSecond.width / 2, eraseSecond.y + eraseSecond.height / 2, { steps: 4 });
-      await page.mouse.move(eraseThird.x + eraseThird.width / 2, eraseThird.y + eraseThird.height / 2, { steps: 4 });
+      await page.locator(squares[0]).click();
+      await page.locator(squares[1]).click();
+      await page.locator(squares[2]).click();
       assert.strictEqual(await page.locator('#editorBoard .piece[data-c="0"][data-r="4"]').count(), 0, 'trash should erase the first traversed square');
       assert.strictEqual(await page.locator('#editorBoard .piece[data-c="1"][data-r="4"]').count(), 0, 'trash should erase the middle traversed square');
       assert.strictEqual(await page.locator('#editorBoard .piece[data-c="2"][data-r="4"]').count(), 0, 'trash should erase the final traversed square');
-      await page.mouse.up();
     } catch (error) { failures.push('editor paint traversal/ghost: ' + error.message); await page.mouse.up(); }
 
     try {

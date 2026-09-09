@@ -848,6 +848,7 @@ function activeGameInfo(g) {
     status: g.status,
     rated: !!g.rated,
     casual: !!g.casual,
+    category: timeControlCategory(g.timeControl),
     createdAt: g.createdAt,
     board: engine.cloneBoard(g.game.board),
     turn: g.game.turn,

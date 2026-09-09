@@ -96,6 +96,7 @@ async function pageHealth(page) {
     await page.getByRole('button', { name: 'Red Paper' }).dragTo(page.locator('#editorBoard .sq[data-c="3"][data-r="3"]'));
     assert.strictEqual(await page.locator('#editorBoard .piece[data-c="3"][data-r="3"][data-color="red"]').count(), 1, 'dragged palette piece should be placed');
 
+    await page.getByRole('button', { name: 'Select and move pieces' }).first().click();
     await page.locator('#editorBoard .editor-piece[data-c="4"][data-r="4"]').dragTo(page.locator('#editorBoard .sq[data-c="5"][data-r="5"]'));
     assert.strictEqual(await page.locator('#editorBoard .piece[data-c="5"][data-r="5"]').count(), 1, 'existing piece should be draggable');
     await page.locator('#editorBoard .editor-piece[data-c="5"][data-r="5"]').dragTo(page.locator('#editorClear'));

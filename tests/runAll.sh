@@ -12,6 +12,12 @@ for test_file in test-engine.js test-ws.js test-phase2.js test-phase3.js test-ph
   fi
 done
 
+printf '\n===== requested Intransitive UI regression test =====\n'
+if ! node "$project_dir/tests/requested-ui.js"; then
+  printf 'FAILED: requested Intransitive UI regression test\n'
+  failed=1
+fi
+
 printf '\n===== editor UI regression and interaction test =====\n'
 if ! node "$project_dir/tests/editor-ui.js"; then
   printf 'FAILED: editor UI regression and interaction test\n'

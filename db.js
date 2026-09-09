@@ -144,6 +144,7 @@ function publicUser(u) {
     wins: u.wins,
     losses: u.losses,
     draws: u.draws,
+    topCategories: topCategoriesForUser(u.id),
     createdAt: u.created_at,
   };
 }
@@ -190,6 +191,17 @@ function getUserById(id) {
 
 function getUserByUsername(username) {
   return db.prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE').get(username) || null;
+}
+
+function topCategoriesForUser(userId) {
+  return CATEGORIES.filter((cat) => {
+    const top = db.prepare(`
+      SELECT id FROM users
+      ORDER BY rating_${cat} DESC, username ASC
+      LIMIT 1
+    `).get();
+    return top && top.id === userId;
+  });
 }
 
 function listPlayers(search = '', limit = 50) {
@@ -454,5 +466,6 @@ module.exports = {
   recordOpening,
   getOpening,
   publicUser,
+  topCategoriesForUser,
   USERNAME_RE,
 };

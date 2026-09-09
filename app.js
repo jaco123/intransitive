@@ -111,6 +111,7 @@
   const replayMoveNavEl = $('replayMoveNav');
   const replayMoveSettingsEl = $('replayMoveSettings');
   const watchBackEl = $('watchBack');
+  const watchFiltersEl = $('watchFilters');
   const watchListEl = $('watchList');
   const watchEmptyEl = $('watchEmpty');
   const featuredGameEl = $('featuredGame');
@@ -161,6 +162,8 @@
   const COLOR = { blue: '#4a86f0', red: '#ef6a6a' };
   const COLOR_STROKE = { blue: '#1f4f9e', red: '#9e2b2b' };
   const CAP = { blue: 'Blue', red: 'Red' };
+  const TIME_CONTROL_LABELS = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical' };
+  const TIME_CONTROL_SYMBOLS = { bullet: '\ue032', blitz: '\ue008', rapid: '\ue002', classical: '\ue00a' };
   const SESSION_KEY = 'rps_session';
 
   let ws = null;
@@ -192,6 +195,8 @@
   let arrowDrag = null;      // in-progress right-click-drag arrow
   let queueStatusTimer = null;
   let activeGamesTimer = null;
+  let activeGamesData = [];
+  let watchCategory = 'all';
   let playersSearchTimer = null;
 
   let explorer = {        // analysis / opening explorer state
@@ -213,6 +218,7 @@
     orientation: 'blue',
     tool: { kind: 'piece', color: 'blue', type: 'rock' },
   };
+  let editorCursorPoint = null;
   let playPosition = null;  // { board, turn } while Play from position is enabled
 
   // ---------------------------------------------------------------------------
@@ -744,8 +750,9 @@
   function renderPlayers() {
     if (!state) return;
     const opp = myColor === 'blue' ? 'red' : 'blue';
+    const opponent = state.players[opp];
     playerNameEl.textContent = formatPlayer(state.players[myColor]);
-    opponentNameEl.textContent = formatPlayer(state.players[opp]);
+    opponentNameEl.textContent = formatPlayer(opponent);
     for (const [el, color] of [[playerNameEl, myColor], [opponentNameEl, opp]]) {
       const delta = state.ratingDelta && state.ratingDelta[color];
       if (delta != null && state.players[color] && state.players[color].rating != null) {
@@ -755,7 +762,9 @@
       }
     }
     playerNameEl.className = 'pname ' + myColor;
-    opponentNameEl.className = 'pname ' + opp;
+    opponentNameEl.className = 'pname profile-link ' + opp;
+    opponentNameEl.disabled = !opponent || !!opponent.guest;
+    opponentNameEl.title = opponent && !opponent.guest ? 'View ' + opponent.name + "'s profile" : 'Guest player';
   }
 
   function renderMode() {
@@ -971,10 +980,9 @@
         const tool = config.getPaintTool();
         if (tool && tool.kind !== 'cursor') {
           const paintPiece = tool.kind === 'piece' ? { color: tool.color, type: tool.type } : null;
-          beginPieceDrag(config, sq, paintPiece,
-            config.boardEl.querySelector(`.sq[data-c="${sq.c}"][data-r="${sq.r}"]`), e, 'paint');
-          if (config.onStart) config.onStart(sq, paintPiece);
-          if (config.onPaint) config.onPaint(sq, paintPiece);
+          // Painting is click-to-place. Starting a drag here makes a selected
+          // palette piece fight with the editor's normal placement behavior.
+          if (config.onClick) config.onClick(sq, paintPiece, 'paint', false);
           return;
         }
       }
@@ -1266,6 +1274,30 @@
   // ---------------------------------------------------------------------------
   // UI helpers
   // ---------------------------------------------------------------------------
+  function timeControlIconMarkup(category) {
+    const icon = TIME_CONTROL_SYMBOLS[category];
+    if (!icon) return '';
+    return '<span class="time-control-symbol" data-time-control="' + category + '" data-icon="' + icon + '" aria-hidden="true"></span>';
+  }
+
+  function timeControlCategory(game) {
+    if (TIME_CONTROL_LABELS[game.category]) return game.category;
+    const initial = Number(game.timeControl && game.timeControl.initial) || 0;
+    const increment = Number(game.timeControl && game.timeControl.increment) || 0;
+    const estimate = initial + 40 * increment;
+    if (estimate < 180) return 'bullet';
+    if (estimate < 480) return 'blitz';
+    if (estimate < 1500) return 'rapid';
+    return 'classical';
+  }
+
+  function gameRating(game) {
+    return Math.max(...['blue', 'red'].map((color) => {
+      const value = game.players && game.players[color] && game.players[color].rating;
+      return Number.isFinite(value) ? value : -1;
+    }));
+  }
+
   function activePlayerLabel(player) {
     if (!player) return 'Waiting for player';
     return escapeHtml(player.name) + (player.rating == null ? '' : ' <span class="directory-rating">' + player.rating + '</span>');
@@ -1285,26 +1317,40 @@
 
   function activeGameButton(game, featured = false) {
     const label = (game.players.blue && game.players.blue.name || 'Blue') + ' vs ' + (game.players.red && game.players.red.name || 'Red');
+    const category = timeControlCategory(game);
     return '<button type="button" class="watch-game' + (featured ? ' featured-game-button' : '') + '" data-game-id="' + escapeHtml(game.id) + '" aria-label="Watch ' + escapeHtml(label) + '">' +
       miniBoardMarkup(game.board) +
       '<span class="watch-game-players"><span>' + activePlayerLabel(game.players.blue) + '</span><span> vs </span><span>' + activePlayerLabel(game.players.red) + '</span></span>' +
+      '<span class="watch-game-time-control">' + timeControlIconMarkup(category) + ' ' + TIME_CONTROL_LABELS[category] + '</span>' +
       '<span class="watch-game-status">' + (game.status === 'playing' ? 'Playing' : 'Waiting') + (game.rated ? ' · Rated' : ' · Casual') + '</span>' +
       '</button>';
   }
 
   function renderActiveGames(data) {
-    const games = Array.isArray(data.games) ? data.games : [];
+    activeGamesData = Array.isArray(data.games) ? data.games.slice() : [];
+    const sortGamesByRating = (games) => games
+      .sort((a, b) => (gameRating(b) - gameRating(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id));
+    const allGames = sortGamesByRating(activeGamesData.slice());
+    const games = allGames.filter((game) => watchCategory === 'all' || timeControlCategory(game) === watchCategory);
     watchListEl.innerHTML = games.map((game) => activeGameButton(game)).join('');
     watchEmptyEl.classList.toggle('hidden', games.length > 0);
-    if (data.featured) {
-      featuredGameEl.innerHTML = '<span class="featured-label">Highest-rated ongoing game</span>' + activeGameButton(data.featured, true);
+    const featured = games[0] || null;
+    if (featured) {
+      featuredGameEl.innerHTML = '<span class="featured-label">Highest-rated ' + TIME_CONTROL_LABELS[timeControlCategory(featured)].toLowerCase() + ' game</span>' + activeGameButton(featured, true);
       featuredGameEl.classList.remove('hidden');
-      homeFeaturedGameEl.innerHTML = '<span class="featured-label">Highest-rated ongoing game</span>' + activeGameButton(data.featured, true);
+      const homeFeatured = allGames[0];
+      homeFeaturedGameEl.innerHTML = '<span class="featured-label">Highest-rated ongoing game</span>' + activeGameButton(homeFeatured, true);
       homeFeaturedGameEl.classList.remove('hidden');
     } else {
       featuredGameEl.classList.add('hidden');
       homeFeaturedGameEl.classList.add('hidden');
       homeFeaturedGameEl.innerHTML = '';
+    }
+    if (watchFiltersEl) {
+      watchFiltersEl.querySelectorAll('.watch-filter').forEach((button) => {
+        button.classList.toggle('active', button.dataset.category === watchCategory);
+        button.setAttribute('aria-pressed', button.dataset.category === watchCategory ? 'true' : 'false');
+      });
     }
   }
 
@@ -1347,7 +1393,7 @@
       '<button type="button" class="player-directory-row" data-player-username="' + escapeHtml(player.username) + '">' +
       '<span class="player-directory-name">' + escapeHtml(player.username) + '</span>' +
       '<span class="player-ratings-inline">' + ['bullet', 'blitz', 'rapid', 'classical'].map((cat) =>
-        '<span class="player-rating-inline" title="' + cat + '"><span class="time-control-symbol" data-time-control="' + cat + '" aria-label="' + cat + '">&#xe00' + ({ bullet: '1', blitz: '2', rapid: '3', classical: '4' }[cat]) + ';</span> ' +
+        '<span class="player-rating-inline" title="' + cat + '">' + timeControlIconMarkup(cat) + ' ' +
         (player.ratings && player.ratings[cat] != null ? player.ratings[cat] : '—') + '</span>'
       ).join('') + '</span>' +
       '<span class="player-record">' + player.wins + 'W ' + player.losses + 'L ' + player.draws + 'D</span></button>'
@@ -1609,12 +1655,14 @@
 
     const grid = document.createElement('div');
     grid.className = 'profile-ratings';
+    const topCategories = new Set(user.topCategories || []);
     for (const [key, label, range] of cats) {
       const r = (user.ratings && user.ratings[key]) || { rating: user.rating, rd: user.rd };
       const cell = document.createElement('div');
       cell.className = 'profile-rating';
       cell.innerHTML =
-        '<span class="profile-rating-label">' + label + '</span>' +
+        '<span class="profile-rating-label">' + timeControlIconMarkup(key) + label +
+          (topCategories.has(key) ? '<span class="profile-crown" data-category="' + key + '" title="Top-rated in ' + label + '" aria-label="Top-rated in ' + label + '">♛</span>' : '') + '</span>' +
         '<span class="profile-rating-value">' + Math.round(r.rating) + '</span>' +
         '<span class="profile-rating-rd">±' + Math.round(r.rd) + '</span>' +
         '<span class="profile-rating-range">' + range + '</span>';
@@ -1923,7 +1971,9 @@
       legalTargets = engine.legalMovesFrom(pos.board, pos.turn, selected.c, selected.r);
     }
 
-    const lastMove = explorer.history && explorer.step > 0 ? explorer.history[explorer.step - 1] : null;
+    const lastMove = explorer.step > 0
+      ? (explorer.history && explorer.history[explorer.step - 1]) || parseMoveString(explorer.path[explorer.step - 1])
+      : null;
     drawBoard(explorerBoardEl, pos.board, 'blue', lastMove, selected, legalTargets);
     if (lastMove) {
       const source = explorerBoardEl.querySelector('.sq[data-c="' + lastMove.fromC + '"][data-r="' + lastMove.fromR + '"]');
@@ -2085,10 +2135,32 @@
 
   function renderEditor() {
     drawBoard(editorBoardEl, editor.board, editor.orientation, null, null, null, null, true);
+    editorBoardEl.querySelectorAll('.piece').forEach((piece) => {
+      piece.draggable = editor.tool.kind === 'cursor';
+    });
     renderEditorPalette(editorPaletteTopEl, 'red');
     renderEditorPalette(editorPaletteBottomEl, 'blue');
     editorTurnEl.value = editor.turn;
     editorBoardEl.dataset.orientation = editor.orientation;
+    updateEditorCursor();
+  }
+
+  function updateEditorCursor() {
+    const old = editorBoardEl.querySelector('.editor-cursor-piece');
+    if (old) old.remove();
+    if (!editorCursorPoint || editor.tool.kind !== 'piece') return;
+    const rect = editorBoardEl.getBoundingClientRect();
+    if (!rect.width || !rect.height || editorCursorPoint.x < rect.left || editorCursorPoint.x > rect.right ||
+        editorCursorPoint.y < rect.top || editorCursorPoint.y > rect.bottom) return;
+    const size = (rect.width / SIZE) * 0.82;
+    const cursor = document.createElement('div');
+    cursor.className = 'editor-cursor-piece';
+    cursor.innerHTML = pieceSvg(editor.tool.type, editor.tool.color);
+    cursor.style.width = size + 'px';
+    cursor.style.height = size + 'px';
+    cursor.style.left = (editorCursorPoint.x - rect.left - size / 2) + 'px';
+    cursor.style.top = (editorCursorPoint.y - rect.top - size / 2) + 'px';
+    editorBoardEl.appendChild(cursor);
   }
 
   // ---------------------------------------------------------------------------
@@ -2475,6 +2547,11 @@
     showScreen(playersEl);
     refreshPlayers(playersSearchEl.value);
   });
+  opponentNameEl.addEventListener('click', () => {
+    if (!state || !myColor) return;
+    const opponent = state.players[myColor === 'blue' ? 'red' : 'blue'];
+    if (opponent && !opponent.guest && opponent.name) loadPlayerProfile(opponent.name);
+  });
   playBtn.addEventListener('click', () => {
     history.pushState({ rpsScreen: 'home' }, '', '?');
     showHome();
@@ -2484,6 +2561,12 @@
   watchBackEl.addEventListener('click', () => showHome());
   playersBackEl.addEventListener('click', () => showHome());
   leaderboardBackEl.addEventListener('click', () => showHome());
+  watchFiltersEl.addEventListener('click', (e) => {
+    const button = e.target.closest('.watch-filter');
+    if (!button || !TIME_CONTROL_LABELS[button.dataset.category] && button.dataset.category !== 'all') return;
+    watchCategory = button.dataset.category;
+    renderActiveGames({ games: activeGamesData });
+  });
   [watchListEl, featuredGameEl, homeFeaturedGameEl].forEach((root) => root.addEventListener('click', (e) => {
     const button = e.target.closest('[data-game-id]');
     if (button) spectateGame(button.dataset.gameId);
@@ -2638,6 +2721,15 @@
   };
   setupPaletteDragging(editorPaletteTopEl, editorPaletteConfig);
   setupPaletteDragging(editorPaletteBottomEl, editorPaletteConfig);
+
+  editorBoardEl.addEventListener('pointermove', (e) => {
+    editorCursorPoint = { x: e.clientX, y: e.clientY };
+    updateEditorCursor();
+  });
+  editorBoardEl.addEventListener('pointerleave', () => {
+    editorCursorPoint = null;
+    updateEditorCursor();
+  });
   setupPieceDragging({
     boardEl: playPositionBoardEl,
     orientationFn: () => 'blue',
