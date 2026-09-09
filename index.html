@@ -44,6 +44,7 @@
       <button id="returnToGame" type="button" class="btn small primary">Return to game</button>
       <button id="closeGameNotice" type="button" class="btn small">Close</button>
     </div>
+    <section id="challengeInbox" class="challenge-inbox hidden" aria-label="Challenges"></section>
     <main class="lobby">
       <div class="lobby__side">
         <div class="lobby__box">
@@ -306,8 +307,10 @@
       <button id="profileLogout" class="btn small profile-logout">Log out</button>
     </div>
     <div id="profilePanel" class="profile-panel"></div>
-    <section id="profileActiveGames" class="profile-active-games hidden" aria-label="Active games"></section>
-    <div id="profileHistory" class="history-list"></div>
+    <div class="profile-layout">
+      <div id="profileHistory" class="history-list"></div>
+      <aside id="profileRatings" class="profile-ratings-side" aria-label="Ratings"></aside>
+    </div>
     <div id="historyList" class="history-list"></div>
   </div>
 
@@ -424,6 +427,23 @@
         <div id="authError" class="error hidden"></div>
         <button type="submit" id="authSubmit" class="btn primary" style="width:100%">Log in</button>
       </form>
+    </div>
+  </div>
+
+  <div id="challengeModal" class="modal hidden">
+    <div class="modal-backdrop" data-close-challenge></div>
+    <div class="modal-card challenge-card">
+      <button id="challengeClose" class="modal-close" aria-label="Close">×</button>
+      <h2>Challenge <span id="challengeTarget"></span></h2>
+      <label class="field-label" for="challengeMinutes">Minutes per side</label>
+      <input id="challengeMinutes" class="input" type="number" min="1" max="30" value="5" />
+      <label class="field-label" for="challengeIncrement">Increment in seconds</label>
+      <input id="challengeIncrement" class="input" type="number" min="0" max="60" value="3" />
+      <div class="mode-toggle">
+        <button id="challengeRated" type="button" class="mode-btn active">Rated</button>
+        <button id="challengeCasual" type="button" class="mode-btn">Casual</button>
+      </div>
+      <button id="challengeSend" type="button" class="btn primary" style="width:100%">Send challenge</button>
     </div>
   </div>
 

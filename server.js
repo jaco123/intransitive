@@ -62,6 +62,8 @@ const slotBySocket = new WeakMap(); // ws -> { gameId, color }
 const spectateBySocket = new WeakMap(); // ws -> gameId (spectators)
 const queue = [];                 // lobby seeks: { id, ws, user, timeControl, rating, queuedAt }
 const clients = new Set();        // all open WebSocket connections (for lobby broadcasts)
+const userBySocket = new WeakMap();
+const challenges = new Map();      // challengeId -> pending direct challenge
 let seekSeq = 0;
 const chatLog = [];               // recent public chat messages (in-memory)
 const MAX_CHAT = 100;
@@ -181,6 +183,38 @@ function resolveUser(sessionToken) {
 function send(ws, obj) {
   if (ws && ws.readyState === ws.OPEN) {
     ws.send(JSON.stringify(obj));
+  }
+}
+
+function authenticatedUser(ws, msg) {
+  const user = resolveUser(msg && msg.session);
+  if (user) userBySocket.set(ws, user);
+  return user || userBySocket.get(ws) || null;
+}
+
+function publicChallenge(challenge) {
+  return {
+    id: challenge.id,
+    challenger: challenge.challengerUsername,
+    target: challenge.targetUsername,
+    timeControl: challenge.timeControl,
+    rated: challenge.rated,
+    createdAt: challenge.createdAt,
+  };
+}
+
+function sendPendingChallenges(ws, userId) {
+  const pending = [];
+  for (const challenge of challenges.values()) {
+    if (challenge.targetId === userId) pending.push(publicChallenge(challenge));
+  }
+  if (pending.length) send(ws, { type: 'challengeList', challenges: pending });
+}
+
+function notifyUser(userId, message) {
+  for (const client of clients) {
+    const user = userBySocket.get(client);
+    if (user && user.id === userId) send(client, message);
   }
 }
 
@@ -710,6 +744,81 @@ function handleGameChat(ws, msg) {
   g.chat.push(entry);
   if (g.chat.length > MAX_GAME_CHAT) g.chat.shift();
   broadcastGameChat(g, entry);
+}
+
+function handleChallengeCreate(ws, msg) {
+  const challenger = authenticatedUser(ws, msg);
+  if (!challenger) {
+    send(ws, { type: 'error', message: 'You must be logged in to send a challenge.' });
+    return;
+  }
+  if (typeof msg.targetUsername !== 'string' || !/^[A-Za-z0-9_-]{2,20}$/.test(msg.targetUsername)) {
+    send(ws, { type: 'error', message: 'Invalid challenge target.' });
+    return;
+  }
+  const target = db.getUserByUsername(msg.targetUsername);
+  if (!target || target.id === challenger.id) {
+    send(ws, { type: 'error', message: 'That player cannot be challenged.' });
+    return;
+  }
+  const timeControl = normalizeTimeControl(msg.timeControl);
+  const rated = msg.rated !== false;
+  for (const challenge of challenges.values()) {
+    if (challenge.challengerId === challenger.id && challenge.targetId === target.id) {
+      send(ws, { type: 'error', message: 'You already have a pending challenge to that player.' });
+      return;
+    }
+  }
+  const challenge = {
+    id: randomId(),
+    challengerId: challenger.id,
+    challengerUsername: challenger.username,
+    challengerWs: ws,
+    targetId: target.id,
+    targetUsername: target.username,
+    timeControl,
+    rated,
+    createdAt: Date.now(),
+  };
+  challenges.set(challenge.id, challenge);
+  send(ws, { type: 'challengeSent', challenge: publicChallenge(challenge) });
+  notifyUser(target.id, { type: 'challengeReceived', challenge: publicChallenge(challenge) });
+}
+
+function handleChallengeAccept(ws, msg) {
+  const target = authenticatedUser(ws, msg);
+  const challenge = challenges.get(msg.challengeId);
+  if (!target || !challenge || challenge.targetId !== target.id) {
+    send(ws, { type: 'error', message: 'That challenge is no longer available.' });
+    return;
+  }
+  const challenger = db.getUserById(challenge.challengerId);
+  if (!challenger || !challenge.challengerWs || challenge.challengerWs.readyState !== 1 ||
+      slotBySocket.get(ws) || slotBySocket.get(challenge.challengerWs) || spectateBySocket.get(ws) || spectateBySocket.get(challenge.challengerWs)) {
+    challenges.delete(challenge.id);
+    send(ws, { type: 'error', message: 'That challenge can no longer be accepted.' });
+    return;
+  }
+  challenges.delete(challenge.id);
+  leaveLobby(ws);
+  leaveLobby(challenge.challengerWs);
+  const g = newGame(challenge.timeControl, !challenge.rated);
+  games.set(g.id, g);
+  g.blue = seatFor(challenger, challenge.challengerWs, g.timeControl);
+  g.red = seatFor(target, ws, g.timeControl);
+  slotBySocket.set(challenge.challengerWs, { gameId: g.id, color: 'blue' });
+  slotBySocket.set(ws, { gameId: g.id, color: 'red' });
+  send(challenge.challengerWs, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
+  send(ws, { type: 'joined', gameId: g.id, color: 'red', token: g.red.token });
+  startGame(g);
+}
+
+function handleChallengeDecline(ws, msg) {
+  const target = authenticatedUser(ws, msg);
+  const challenge = challenges.get(msg.challengeId);
+  if (!target || !challenge || challenge.targetId !== target.id) return;
+  challenges.delete(challenge.id);
+  notifyUser(challenge.challengerId, { type: 'challengeDeclined', challengeId: challenge.id });
 }
 
 function handleSpectate(ws, msg) {
@@ -1281,7 +1390,10 @@ wss.on('connection', (ws) => {
       return;
     }
 
+    if (msg.session) authenticatedUser(ws, msg);
+
     switch (msg.type) {
+      case 'identify': sendPendingChallenges(ws, authenticatedUser(ws, msg)?.id); break;
       case 'create': handleCreate(ws, msg); break;
       case 'join': handleJoin(ws, msg); break;
       case 'spectate': handleSpectate(ws, msg); break;
@@ -1290,6 +1402,9 @@ wss.on('connection', (ws) => {
       case 'queue': handleQueue(ws, msg); break;
       case 'queueCancel': handleQueueCancel(ws); break;
       case 'acceptSeek': handleAcceptSeek(ws, msg); break;
+      case 'challengeCreate': handleChallengeCreate(ws, msg); break;
+      case 'challengeAccept': handleChallengeAccept(ws, msg); break;
+      case 'challengeDecline': handleChallengeDecline(ws, msg); break;
       case 'claimVictory': handleClaim(ws, msg); break;
       case 'claimDraw': handleClaim(ws, msg); break;
       case 'gameChat': handleGameChat(ws, msg); break;
@@ -1323,6 +1438,10 @@ httpServer.listen(PORT, '0.0.0.0', () => {
 // Opportunistic cleanup of long-finished games (keeps memory bounded).
 setInterval(() => {
   const cutoff = Date.now() - 60 * 60 * 1000;
+  const challengeCutoff = Date.now() - 30 * 60 * 1000;
+  for (const [id, challenge] of challenges) {
+    if (challenge.createdAt < challengeCutoff) challenges.delete(id);
+  }
   for (const [id, g] of games) {
     if ((g.status === 'finished' || g.status === 'aborted') && g.createdAt < cutoff) {
       stopTicker(g);

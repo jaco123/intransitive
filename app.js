@@ -97,8 +97,8 @@
   // History & replay
   const historyListEl = $('historyList');
   const profilePanelEl = $('profilePanel');
-  const profileActiveGamesEl = $('profileActiveGames');
   const profileHistoryEl = $('profileHistory');
+  const profileRatingsEl = $('profileRatings');
   const historyBackEl = $('historyBack');
   const profileLogoutEl = $('profileLogout');
   const replayBoardEl = $('replayBoard');
@@ -157,6 +157,15 @@
   const inGameNoticeEl = $('inGameNotice');
   const returnToGameEl = $('returnToGame');
   const closeGameNoticeEl = $('closeGameNotice');
+  const challengeInboxEl = $('challengeInbox');
+  const challengeModalEl = $('challengeModal');
+  const challengeTargetEl = $('challengeTarget');
+  const challengeMinutesEl = $('challengeMinutes');
+  const challengeIncrementEl = $('challengeIncrement');
+  const challengeRatedEl = $('challengeRated');
+  const challengeCasualEl = $('challengeCasual');
+  const challengeSendEl = $('challengeSend');
+  const challengeCloseEl = $('challengeClose');
 
   // Chat
   const chatLogEl = $('chatLog');
@@ -189,6 +198,9 @@
   let authMode = 'login'; // 'login' | 'register'
   let replay = null;      // { game, boards, step }
   let queued = false;     // whether we're currently in the matchmaking queue
+  let challengeTarget = null;
+  let challengeRated = true;
+  let incomingChallenges = [];
   let mySeekId = null;    // id of the open seek we created (if any)
   let seeks = [];         // latest lobby seek list from the server
   let ratedMode = true;   // true = rated, false = casual
@@ -1151,6 +1163,8 @@
   function connect() {
     ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
     ws.onopen = () => {
+      const session = sessionToken();
+      if (session) ws.send(JSON.stringify({ type: 'identify', session }));
       if (pending) {
         ws.send(JSON.stringify(pending));
         pending = null;
@@ -1235,6 +1249,28 @@
       case 'lobby':
         seeks = msg.seeks || [];
         renderLobby();
+        break;
+
+      case 'challengeList':
+        incomingChallenges = msg.challenges || [];
+        renderChallengeInbox();
+        break;
+
+      case 'challengeReceived':
+        if (msg.challenge) {
+          incomingChallenges = [msg.challenge, ...incomingChallenges.filter((c) => c.id !== msg.challenge.id)];
+          renderChallengeInbox();
+          showToast(msg.challenge.challenger + ' sent you a challenge.');
+        }
+        break;
+
+      case 'challengeSent':
+        closeChallenge();
+        showToast('Challenge sent to ' + (msg.challenge ? msg.challenge.target : 'player') + '.');
+        break;
+
+      case 'challengeDeclined':
+        showToast('Challenge declined.');
         break;
 
       case 'gameStart':
@@ -1523,6 +1559,73 @@
     showToast._t = setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
+  function renderChallengeInbox() {
+    if (!challengeInboxEl) return;
+    challengeInboxEl.innerHTML = '';
+    challengeInboxEl.classList.toggle('hidden', incomingChallenges.length === 0);
+    for (const challenge of incomingChallenges) {
+      const item = document.createElement('div');
+      item.className = 'challenge-incoming';
+      item.dataset.challengeId = challenge.id;
+      const minutes = Math.floor(challenge.timeControl.initial / 60);
+      item.innerHTML = '<span><strong>' + escapeHtml(challenge.challenger) + '</strong> challenged you · ' + minutes + '+' + challenge.timeControl.increment + ' · ' + (challenge.rated ? 'Rated' : 'Casual') + '</span>' +
+        '<span class="challenge-incoming-actions"><button type="button" class="btn small primary" data-challenge-action="accept">Accept</button><button type="button" class="btn small" data-challenge-action="decline">Decline</button></span>';
+      challengeInboxEl.appendChild(item);
+    }
+  }
+
+  function openChallenge(username) {
+    challengeTarget = username;
+    challengeTargetEl.textContent = username;
+    challengeMinutesEl.value = tcMinutesEl.value;
+    challengeIncrementEl.value = tcIncrementEl.value;
+    challengeRated = ratedMode;
+    challengeRatedEl.classList.toggle('active', challengeRated);
+    challengeCasualEl.classList.toggle('active', !challengeRated);
+    challengeModalEl.classList.remove('hidden');
+    challengeMinutesEl.focus();
+  }
+
+  function closeChallenge() {
+    challengeTarget = null;
+    challengeModalEl.classList.add('hidden');
+  }
+
+  function sendChallenge() {
+    if (!challengeTarget) return;
+    const initial = Math.max(60, Math.min(1800, Math.round(Number(challengeMinutesEl.value) * 60)));
+    const increment = Math.max(0, Math.min(60, Math.round(Number(challengeIncrementEl.value))));
+    const msg = {
+      type: 'challengeCreate',
+      targetUsername: challengeTarget,
+      timeControl: { initial, increment },
+      rated: challengeRated,
+      session: sessionToken(),
+    };
+    if (!msg.session) {
+      showToast('Log in to send a challenge.');
+      return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    } else {
+      pending = msg;
+      connect();
+    }
+  }
+
+  function respondToChallenge(challengeId, action) {
+    incomingChallenges = incomingChallenges.filter((challenge) => challenge.id !== challengeId);
+    renderChallengeInbox();
+    const msg = { type: action === 'accept' ? 'challengeAccept' : 'challengeDecline', challengeId, session: sessionToken() };
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(msg));
+    } else {
+      pending = msg;
+      connect();
+    }
+  }
+
   function renderPositionPreview() {
     if (!playFromPositionEl || !playFromPositionPreviewEl || !playPositionBoardEl) return;
     const enabled = playFromPositionEl.checked;
@@ -1636,6 +1739,7 @@
         return;
       }
       setSession({ token: data.token, user: data.user });
+      if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'identify', session: data.token }));
       closeAuth();
       renderNav();
       showToast((authMode === 'login' ? 'Welcome back, ' : 'Welcome, ') + data.user.username + '!');
@@ -1677,23 +1781,24 @@
       if (res.status === 401) { clearSession(); renderNav(); openAuth('login'); return; }
       const data = await res.json();
       renderHistory(data.games || []);
-      loadProfile();
+      loadProfile(data.games || []);
     } catch (e) {
       historyListEl.innerHTML = '<p class="history-empty">Could not load games.</p>';
     }
   }
 
-  async function loadProfile() {
+  async function loadProfile(finishedGames = []) {
     const s = getSession();
-    if (!s) { profilePanelEl.innerHTML = ''; return; }
+    if (!s) { profilePanelEl.innerHTML = ''; profileRatingsEl.innerHTML = ''; return; }
     try {
       const res = await fetch('/api/me', { headers: { Authorization: 'Bearer ' + s.token } });
       if (res.status === 401) { clearSession(); renderNav(); openAuth('login'); return; }
       const data = await res.json();
       renderProfile(data.user);
-      renderProfileActiveGames(data.activeGames || []);
+      renderProfileGames(data.activeGames || [], finishedGames);
     } catch (e) {
       profilePanelEl.innerHTML = '';
+      profileRatingsEl.innerHTML = '';
     }
   }
 
@@ -1703,51 +1808,64 @@
     showScreen(historyEl);
     profileLogoutEl.classList.add('hidden');
     historyListEl.innerHTML = '';
-    profileActiveGamesEl.innerHTML = '';
-    profileActiveGamesEl.classList.add('hidden');
     profileHistoryEl.innerHTML = '<p class="history-empty">Loading games…</p>';
+    profileRatingsEl.innerHTML = '';
     try {
       const res = await fetch('/api/players/' + encodeURIComponent(username), { cache: 'no-store' });
       if (!res.ok) throw new Error('not found');
       const data = await res.json();
       renderProfile(data.user);
-      renderProfileActiveGames(data.activeGames || []);
-      renderPublicHistory(data.games || []);
+      renderProfileGames(data.activeGames || [], data.games || []);
     } catch (e) {
       profilePanelEl.innerHTML = '<p class="history-empty">Player not found.</p>';
       profileHistoryEl.innerHTML = '';
-      profileActiveGamesEl.innerHTML = '';
+      profileRatingsEl.innerHTML = '';
     }
   }
 
-  function renderProfileActiveGames(games) {
-    profileActiveGamesEl.innerHTML = '';
-    if (!games.length) {
-      profileActiveGamesEl.classList.add('hidden');
-      return;
+  function profileGameRow(game, active) {
+    const row = document.createElement(active ? 'button' : 'div');
+    if (active) row.type = 'button';
+    row.className = 'history-row' + (active ? ' history-row-active' : '');
+    if (active) {
+      row.dataset.gameId = game.id;
+      row.dataset.blueUserId = game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '';
+      row.dataset.redUserId = game.players.red && game.players.red.userId != null ? game.players.red.userId : '';
     }
-    profileActiveGamesEl.classList.remove('hidden');
-    const heading = document.createElement('h2');
-    heading.textContent = 'Active games';
-    profileActiveGamesEl.appendChild(heading);
-    for (const game of games) {
-      const card = document.createElement('button');
-      card.type = 'button';
-      card.className = 'profile-active-game';
-      card.dataset.gameId = game.id;
-      card.dataset.blueUserId = game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '';
-      card.dataset.redUserId = game.players.red && game.players.red.userId != null ? game.players.red.userId : '';
-      const blue = game.players.blue ? game.players.blue.name : 'Waiting for player';
-      const red = game.players.red ? game.players.red.name : 'Waiting for player';
-      card.innerHTML = '<span class="profile-active-game-players">' + escapeHtml(blue) + ' vs ' + escapeHtml(red) + '</span>' +
-        '<span class="profile-active-game-meta">' + timeControlIconMarkup(timeControlCategory(game)) + ' ' +
-        TIME_CONTROL_LABELS[timeControlCategory(game)] + ' · ' + (game.status === 'playing' ? 'Playing' : 'Waiting') + '</span>';
-      profileActiveGamesEl.appendChild(card);
+    const blue = active ? (game.players.blue ? game.players.blue.name : 'Waiting for player') : game.blueName;
+    const red = active ? (game.players.red ? game.players.red.name : 'Waiting for player') : game.redName;
+    const category = timeControlCategory(game);
+    row.innerHTML =
+      '<span class="hist-outcome ' + (active ? 'playing' : '') + '">' + (active ? 'Playing' : (game.result === 'draw' ? 'Draw' : (game.result === 'blue' ? 'Blue' : 'Red') + ' win')) + '</span>' +
+      '<span class="history-main"><span class="hist-opp">' + (active ? escapeHtml(blue + ' vs ' + red) : escapeHtml(blue + ' vs ' + red)) + '</span>' +
+        '<span class="hist-tc">' + (active ? timeControlIconMarkup(category) + ' ' + TIME_CONTROL_LABELS[category] : tcLabel(game)) + '</span></span>' +
+      '<span class="hist-rating">' + (game.rated ? 'Rated' : 'Casual') + '</span>' +
+      '<span class="hist-date">' + (active ? 'Playing' : new Date(game.finishedAt).toLocaleString()) + '</span>';
+    if (!active) row.addEventListener('click', () => openReplay(game.id));
+    return row;
+  }
+
+  function renderProfileGames(activeGames, finishedGames) {
+    profileHistoryEl.innerHTML = '';
+    for (const game of activeGames) profileHistoryEl.appendChild(profileGameRow(game, true));
+    for (const game of finishedGames) profileHistoryEl.appendChild(profileGameRow(game, false));
+    if (!activeGames.length && !finishedGames.length) {
+      profileHistoryEl.innerHTML = '<p class="history-empty">No finished games yet.</p>';
+    }
+    const watch = profilePanelEl.querySelector('#profileWatch');
+    if (watch) {
+      const game = activeGames[0];
+      watch.classList.toggle('hidden', !game);
+      if (game) {
+        watch.dataset.gameId = game.id;
+        watch.dataset.blueUserId = game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '';
+        watch.dataset.redUserId = game.players.red && game.players.red.userId != null ? game.players.red.userId : '';
+      }
     }
   }
 
   function renderProfile(user) {
-    if (!user) { profilePanelEl.innerHTML = ''; return; }
+    if (!user) { profilePanelEl.innerHTML = ''; profileRatingsEl.innerHTML = ''; return; }
     const cats = [
       ['bullet', 'Bullet', '< 3 min'],
       ['blitz', 'Blitz', '3–8 min'],
@@ -1764,6 +1882,13 @@
       '<span class="profile-meta">' + (user.wins || 0) + 'W · ' + (user.losses || 0) + 'L · ' + (user.draws || 0) + 'D</span>';
     card.appendChild(head);
 
+    const actions = document.createElement('div');
+    actions.className = 'profile-actions';
+    actions.innerHTML =
+      '<button type="button" id="profileWatch" class="btn primary hidden">Watch</button>' +
+      '<button type="button" id="profileChallenge" class="btn" data-username="' + escapeHtml(user.username) + '">Challenge</button>';
+    card.appendChild(actions);
+
     const grid = document.createElement('div');
     grid.className = 'profile-ratings';
     const topCategories = new Set(user.topCategories || []);
@@ -1779,27 +1904,10 @@
         '<span class="profile-rating-range">' + range + '</span>';
       grid.appendChild(cell);
     }
-    card.appendChild(grid);
     profilePanelEl.innerHTML = '';
     profilePanelEl.appendChild(card);
-  }
-
-  function renderPublicHistory(games) {
-    profileHistoryEl.innerHTML = '';
-    if (!games.length) {
-      profileHistoryEl.innerHTML = '<p class="history-empty">No finished games yet.</p>';
-      return;
-    }
-    for (const g of games) {
-      const row = document.createElement('div');
-      row.className = 'history-row';
-      row.innerHTML = '<span class="hist-outcome">' + (g.result === 'draw' ? 'Draw' : (g.result === 'blue' ? 'Blue' : 'Red') + ' win') + '</span>' +
-        '<span class="hist-opp">' + escapeHtml(g.blueName) + ' vs ' + escapeHtml(g.redName) + '</span>' +
-        '<span class="hist-tc">' + tcLabel(g) + '</span><span class="hist-rating">' + (g.rated ? 'Rated' : 'Casual') + '</span>' +
-        '<span class="hist-date">' + new Date(g.finishedAt).toLocaleString() + '</span>';
-      row.addEventListener('click', () => openReplay(g.id));
-      profileHistoryEl.appendChild(row);
-    }
+    profileRatingsEl.innerHTML = '<h2>Ratings</h2>';
+    profileRatingsEl.appendChild(grid);
   }
 
   async function refreshLeaderboards() {
@@ -2702,9 +2810,40 @@
     const button = e.target.closest('[data-game-id]');
     if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId);
   }));
-  profileActiveGamesEl.addEventListener('click', (e) => {
-    const button = e.target.closest('[data-game-id]');
+  profileHistoryEl.addEventListener('click', (e) => {
+    const button = e.target.closest('.history-row-active[data-game-id]');
     if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId);
+  });
+  profilePanelEl.addEventListener('click', (e) => {
+    const watch = e.target.closest('#profileWatch');
+    if (watch && watch.dataset.gameId) {
+      openActiveGame(watch.dataset.gameId, watch.dataset.blueUserId, watch.dataset.redUserId);
+      return;
+    }
+    const challenge = e.target.closest('#profileChallenge');
+    if (challenge) {
+      openChallenge(challenge.dataset.username);
+    }
+  });
+  challengeInboxEl.addEventListener('click', (e) => {
+    const action = e.target.closest('[data-challenge-action]');
+    const item = e.target.closest('.challenge-incoming');
+    if (action && item) respondToChallenge(item.dataset.challengeId, action.dataset.challengeAction);
+  });
+  challengeRatedEl.addEventListener('click', () => {
+    challengeRated = true;
+    challengeRatedEl.classList.add('active');
+    challengeCasualEl.classList.remove('active');
+  });
+  challengeCasualEl.addEventListener('click', () => {
+    challengeRated = false;
+    challengeCasualEl.classList.add('active');
+    challengeRatedEl.classList.remove('active');
+  });
+  challengeSendEl.addEventListener('click', sendChallenge);
+  challengeCloseEl.addEventListener('click', closeChallenge);
+  challengeModalEl.addEventListener('click', (e) => {
+    if (e.target.dataset.closeChallenge !== undefined) closeChallenge();
   });
   playersListEl.addEventListener('click', (e) => {
     const row = e.target.closest('[data-player-username]');

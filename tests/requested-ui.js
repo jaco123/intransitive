@@ -179,6 +179,106 @@ async function centerOf(locator) {
       await p.close();
     });
 
+    await check('profile layout, shared game rows, and controls', async () => {
+      const tc = await browser.newContext(); const to = await browser.newContext(); const tv = await browser.newContext();
+      let creator = null; let opponent = null; let viewer = null;
+      try {
+        creator = await register(tc); opponent = await register(to); viewer = await register(tv);
+        const gameUrl = await createGame(creator.page, opponent.page);
+        const gameId = new URL(gameUrl).searchParams.get('game');
+
+        await opponent.page.locator('#opponentName').click();
+        await opponent.page.locator('#profilePanel').waitFor({ state: 'visible' });
+        const issues = [];
+        const record = (label, condition) => { if (!condition) issues.push(label); };
+        const activeRow = opponent.page.locator('#profileHistory [data-game-id]').first();
+        record('profile should not show an Active games heading', await opponent.page.locator('#profileHistory h2').count() === 0);
+        record('profile should show the active game', await activeRow.count() === 1);
+        if (await activeRow.count()) {
+          record('active games should use the finished-game history row class', await activeRow.evaluate((el) => el.classList.contains('history-row')));
+          record('active history rows should use the finished-game row structure', await activeRow.locator('.history-main').count() > 0);
+        }
+        const ratings = opponent.page.locator('#profileRatings');
+        const history = opponent.page.locator('#profileHistory');
+        const hasRatings = await ratings.count() === 1;
+        record('profile ratings should be rendered in a side panel', hasRatings);
+        const ratingBox = hasRatings ? await ratings.boundingBox() : null;
+        const historyBox = await history.boundingBox();
+        record('ratings should sit beside profile history on desktop', !!(ratingBox && historyBox && ratingBox.x > historyBox.x + historyBox.width * 0.55));
+        const participantWatch = opponent.page.locator('#profileWatch');
+        record('profile should provide a Watch control', await participantWatch.count() === 1);
+        record('profile should provide a Challenge control', await opponent.page.locator('#profileChallenge').count() === 1);
+
+        if (await participantWatch.count() === 1) {
+          try {
+            await participantWatch.click();
+            await opponent.page.locator('#game').waitFor({ state: 'visible' });
+            await opponent.page.waitForFunction((name) => document.querySelector('#playerName')?.textContent.includes(name), opponent.username);
+            record('participant Watch should restore their own seat', new URL(opponent.page.url()).searchParams.get('game') === gameId && await opponent.page.locator('#gameMode').innerText() !== 'Spectating');
+          } catch (error) {
+            issues.push('participant Watch should restore their own seat: ' + error.message);
+          }
+        }
+
+        await viewer.page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await viewer.page.getByRole('button', { name: 'Players', exact: true }).click();
+        await viewer.page.locator('#playersSearch').fill(creator.username);
+        await viewer.page.locator(`.player-directory-row[data-player-username="${creator.username}"]`).click();
+        await viewer.page.locator('#profilePanel').waitFor({ state: 'visible' });
+        const spectatorWatch = viewer.page.locator('#profileWatch');
+        record('third-party profile should provide a Watch control', await spectatorWatch.count() === 1);
+        if (await spectatorWatch.count() === 1) {
+          try {
+            await spectatorWatch.click();
+            await viewer.page.locator('#game').waitFor({ state: 'visible' });
+            record('third-party Watch should open spectator mode', new URL(viewer.page.url()).searchParams.get('spectate') === gameId);
+          } catch (error) {
+            issues.push('third-party Watch should open spectator mode: ' + error.message);
+          }
+        }
+        assert.strictEqual(issues.length, 0, issues.join(' | '));
+      } finally {
+        await Promise.allSettled([
+          creator && creator.page ? creator.page.close() : Promise.resolve(),
+          opponent && opponent.page ? opponent.page.close() : Promise.resolve(),
+          viewer && viewer.page ? viewer.page.close() : Promise.resolve(),
+          tc.close(), to.close(), tv.close(),
+        ]);
+      }
+    });
+
+    await check('profile Challenge sends and accepts a real game', async () => {
+      const tc = await browser.newContext(); const to = await browser.newContext();
+      let target = null; let challenger = null;
+      try {
+        target = await register(tc); challenger = await register(to);
+        await challenger.page.getByRole('button', { name: 'Players', exact: true }).click();
+        await challenger.page.locator('#playersSearch').fill(target.username);
+        await challenger.page.locator(`.player-directory-row[data-player-username="${target.username}"]`).click();
+        await challenger.page.locator('#profilePanel').waitFor({ state: 'visible' });
+        await challenger.page.locator('#profileChallenge').click();
+        await challenger.page.locator('#challengeModal').waitFor({ state: 'visible' });
+        assert.strictEqual(await challenger.page.locator('#challengeTarget').innerText(), target.username, 'challenge should name the target player');
+        await challenger.page.locator('#challengeMinutes').fill('3');
+        await challenger.page.locator('#challengeIncrement').fill('2');
+        await challenger.page.locator('#challengeRated').click();
+        await challenger.page.locator('#challengeSend').click();
+        await target.page.locator('#challengeInbox').waitFor({ state: 'visible' });
+        await target.page.locator('.challenge-incoming').filter({ hasText: challenger.username }).getByRole('button', { name: 'Accept', exact: true }).click();
+        await challenger.page.locator('#game').waitFor({ state: 'visible' });
+        await target.page.locator('#game').waitFor({ state: 'visible' });
+        await challenger.page.locator('#gameStatus').filter({ hasText: /move|to move/ }).waitFor();
+        assert.strictEqual(new URL(challenger.page.url()).searchParams.get('game'), new URL(target.page.url()).searchParams.get('game'), 'accepted challenge should open one shared game');
+        assert.ok((await challenger.page.locator('#gameMode').innerText()).length > 0, 'accepted challenge should preserve the selected game mode');
+      } finally {
+        await Promise.allSettled([
+          target && target.page ? target.page.close() : Promise.resolve(),
+          challenger && challenger.page ? challenger.page.close() : Promise.resolve(),
+          tc.close(), to.close(),
+        ]);
+      }
+    });
+
     await check('Intransitive title preserves active game and history', async () => {
       const cc = await browser.newContext(); const oc = await browser.newContext();
       let creator = null; let opponent = null;
@@ -234,8 +334,8 @@ async function centerOf(locator) {
       creator = await register(cc); opponent = await register(oc); viewer = await vc.newPage({ viewport: { width: 1366, height: 768 } });
       const gameUrl = await createGame(creator.page, opponent.page); const gameId = new URL(gameUrl).searchParams.get('game');
       await check('opponent name opens profile', async () => { await creator.page.locator('#opponentName').click(); assert.strictEqual(new URL(creator.page.url()).searchParams.get('view'), 'profile'); });
-      await check('participant active game restores own seat', async () => { await creator.page.locator('.profile-active-games [data-game-id]').waitFor({ state: 'visible' }); await creator.page.locator('.profile-active-games [data-game-id]').first().click(); assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId, 'participant should restore own game seat'); });
-      await check('third-party active game opens spectator view', async () => { await viewer.goto(BASE + '/', { waitUntil: 'domcontentloaded' }); await viewer.getByRole('button', { name: 'Players', exact: true }).click(); await viewer.locator('#playersSearch').fill(opponent.username); await viewer.locator(`.player-directory-row[data-player-username="${opponent.username}"]`).click(); await viewer.locator('.profile-active-games [data-game-id]').waitFor({ state: 'visible' }); await viewer.locator('.profile-active-games [data-game-id]').first().click(); assert.strictEqual(new URL(viewer.url()).searchParams.get('spectate'), gameId); });
+      await check('participant active game restores own seat', async () => { await creator.page.locator('#profileHistory [data-game-id]').waitFor({ state: 'visible' }); await creator.page.locator('#profileHistory [data-game-id]').first().click(); assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId, 'participant should restore own game seat'); });
+      await check('third-party active game opens spectator view', async () => { await viewer.goto(BASE + '/', { waitUntil: 'domcontentloaded' }); await viewer.getByRole('button', { name: 'Players', exact: true }).click(); await viewer.locator('#playersSearch').fill(opponent.username); await viewer.locator(`.player-directory-row[data-player-username="${opponent.username}"]`).click(); await viewer.locator('#profileHistory [data-game-id]').waitFor({ state: 'visible' }); await viewer.locator('#profileHistory [data-game-id]').first().click(); assert.strictEqual(new URL(viewer.url()).searchParams.get('spectate'), gameId); });
       await creator.page.goto(gameUrl, { waitUntil: 'domcontentloaded' }); await creator.page.locator('#game').waitFor({ state: 'visible' });
       await check('live lobby notice and close dismissal', async () => { await creator.page.getByRole('button', { name: 'Play', exact: true }).click(); await creator.page.locator('#inGameNotice').waitFor({ state: 'visible' }); assert.strictEqual(await creator.page.locator('#inGameNotice').innerText(), 'You are in a game\nReturn to game\nClose'); await creator.page.getByRole('button', { name: 'Return to game', exact: true }).click(); await creator.page.locator('#game').waitFor({ state: 'visible' }); await creator.page.getByRole('button', { name: 'Play', exact: true }).click(); await creator.page.locator('#inGameNotice').waitFor({ state: 'visible' }); await creator.page.getByRole('button', { name: 'Close', exact: true }).click(); await creator.page.locator('#inGameNotice').waitFor({ state: 'hidden' }); assert.strictEqual(await creator.page.locator('#game').isVisible(), false, 'Close should only dismiss the notice'); });
       await check('browser Back restores live game', async () => { await creator.page.goto(gameUrl, { waitUntil: 'domcontentloaded' }); await creator.page.locator('#game').waitFor({ state: 'visible' }); await creator.page.getByRole('button', { name: 'Play', exact: true }).click(); await creator.page.goBack(); await creator.page.locator('#game').waitFor({ state: 'visible' }); assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId); await creator.page.goForward(); await creator.page.locator('#home').waitFor({ state: 'visible' }); });
