@@ -19,6 +19,13 @@ async function openEditor(page) {
   await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible' });
 }
 
+async function assertFavicon(page) {
+  const href = await page.locator('link[rel="icon"]').getAttribute('href');
+  assert.ok(href, 'affected view should declare a favicon');
+  const response = await page.request.get(new URL(href, BASE + '/').href);
+  assert.strictEqual(response.status(), 200, 'affected view favicon should be reachable');
+}
+
 async function createPrivateGame(createPage, joinPage) {
   await createPage.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   await createPage.locator('#createBtn').click();
@@ -62,6 +69,9 @@ async function pointerDrag(page, source, target) {
   try {
     const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
     page.setDefaultTimeout(4000);
+    const pageErrors = [];
+    page.on('console', (message) => { if (message.type() === 'error') pageErrors.push(message.text()); });
+    page.on('pageerror', (error) => pageErrors.push(String(error)));
     await page.addInitScript(() => {
       window.__rpsAudioPlays = [];
       HTMLMediaElement.prototype.play = function () {
@@ -72,6 +82,7 @@ async function pointerDrag(page, source, target) {
 
     try {
       await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+      await assertFavicon(page);
       const navButtons = page.locator('.nav-links .nav-link-btn');
       const navMetrics = await navButtons.evaluateAll((els) => ({
         heights: els.map((el) => el.getBoundingClientRect().height),
@@ -85,6 +96,7 @@ async function pointerDrag(page, source, target) {
     try {
       await page.getByRole('button', { name: 'Analysis', exact: true }).click();
       await page.locator('#explorer').waitFor({ state: 'visible' });
+      await assertFavicon(page);
       assert.strictEqual(new URL(page.url()).searchParams.get('view'), 'analysis', 'Analysis should update the URL');
       await page.getByRole('button', { name: 'Board editor', exact: true }).click();
       await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible' });
@@ -98,6 +110,7 @@ async function pointerDrag(page, source, target) {
 
     try {
       await openEditor(page);
+      await assertFavicon(page);
       const actions = page.locator('#editor .editor-action');
       const styles = await actions.evaluateAll((els) => els.map((el) => {
         const s = getComputedStyle(el);
@@ -132,6 +145,18 @@ async function pointerDrag(page, source, target) {
       const outside = await page.locator('#editorClear').boundingBox();
       await page.mouse.move(outside.x + outside.width / 2, outside.y + outside.height / 2);
       await ghost.waitFor({ state: 'hidden', timeout: 1000 });
+      await page.mouse.up();
+      await page.getByRole('button', { name: 'Delete piece', exact: true }).first().click();
+      const eraseFirst = await page.locator('#editorBoard .sq[data-c="0"][data-r="4"]').boundingBox();
+      const eraseSecond = await page.locator('#editorBoard .sq[data-c="1"][data-r="4"]').boundingBox();
+      const eraseThird = await page.locator('#editorBoard .sq[data-c="2"][data-r="4"]').boundingBox();
+      await page.mouse.move(eraseFirst.x + eraseFirst.width / 2, eraseFirst.y + eraseFirst.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(eraseSecond.x + eraseSecond.width / 2, eraseSecond.y + eraseSecond.height / 2, { steps: 4 });
+      await page.mouse.move(eraseThird.x + eraseThird.width / 2, eraseThird.y + eraseThird.height / 2, { steps: 4 });
+      assert.strictEqual(await page.locator('#editorBoard .piece[data-c="0"][data-r="4"]').count(), 0, 'trash should erase the first traversed square');
+      assert.strictEqual(await page.locator('#editorBoard .piece[data-c="1"][data-r="4"]').count(), 0, 'trash should erase the middle traversed square');
+      assert.strictEqual(await page.locator('#editorBoard .piece[data-c="2"][data-r="4"]').count(), 0, 'trash should erase the final traversed square');
       await page.mouse.up();
     } catch (error) { failures.push('editor paint traversal/ghost: ' + error.message); await page.mouse.up(); }
 
@@ -182,6 +207,7 @@ async function pointerDrag(page, source, target) {
       const watch = await browser.newPage({ viewport: { width: 1366, height: 768 } });
       await watch.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
       await watch.getByRole('button', { name: 'Watch', exact: true }).click();
+      await assertFavicon(watch);
       await watch.locator('#watchList [data-game-id="' + gameId + '"]').waitFor();
       const card = watch.locator('#watchList [data-game-id="' + gameId + '"]');
       assert.strictEqual(await card.locator('.watch-game-preview').count(), 1, 'each Watch game should include a board preview');
@@ -209,6 +235,7 @@ async function pointerDrag(page, source, target) {
       const playersContext = await browser.newContext();
       const known = await registerUser(playersContext);
       await known.page.getByRole('button', { name: 'Players', exact: true }).click();
+      await assertFavicon(known.page);
       await known.page.locator('#playersSearch').fill(known.username);
       const row = known.page.locator('.player-directory-row').filter({ hasText: known.username });
       await row.waitFor();
@@ -219,6 +246,8 @@ async function pointerDrag(page, source, target) {
       for (const rating of ['Bullet', 'Blitz', 'Rapid', 'Classical']) assert.match(profileText, new RegExp(rating, 'i'), rating + ' rating should be shown');
       assert.strictEqual(await known.page.getByRole('button', { name: 'Log out', exact: true }).count(), 0, 'other player profile must not show Log out');
     } catch (error) { failures.push('Players profile/rating categories: ' + error.message); }
+    try { assert.deepStrictEqual(pageErrors, [], 'affected views should have no console/page errors'); }
+    catch (error) { failures.push(error.message); }
   } finally {
     await browser.close();
   }
