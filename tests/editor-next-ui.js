@@ -54,7 +54,9 @@ async function analysis(page) {
       await page.getByRole('button', { name: 'Blue Rock' }).click();
       await page.locator('#editorBoard .sq[data-c="4"][data-r="4"]').click();
       await page.getByRole('button', { name: 'Analysis board' }).click();
-      await page.getByText('Custom position').waitFor({ state: 'visible', timeout: 3000 });
+      await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible', timeout: 3000 });
+      assert.strictEqual(await page.locator('#explorerBoard .piece[data-c="4"][data-r="4"][data-color="blue"]').count(), 1,
+        'analysis board should preserve the custom editor position');
     } catch (error) { failures.push('Analysis board should preserve the current editor position: ' + error.message); }
 
     await page.goBack();

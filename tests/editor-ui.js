@@ -118,7 +118,7 @@ async function pageHealth(page) {
     assert.strictEqual(await page.locator('#editorBoard .piece').count(), initialCount, 'Starting position should restore pieces');
 
     await page.locator('#editorAnalysis').click();
-    await page.getByText('Custom position').waitFor({ state: 'visible' });
+    await page.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
     assert.strictEqual(await page.locator('#explorer').isVisible(), true);
     await page.goBack();
     await page.getByRole('heading', { name: 'Board editor', exact: true }).waitFor({ state: 'visible' });

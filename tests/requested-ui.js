@@ -185,7 +185,9 @@ async function dragWithinSquare(page, board, color) {
       await p.getByRole('button', { name: 'Red Scissors', exact: true }).click();
       await p.locator('#editorBoard .sq[data-c="1"][data-r="1"]').click();
       await p.getByRole('button', { name: 'Analysis board', exact: true }).click();
-      await p.getByText('Custom position').waitFor({ state: 'visible' });
+      await p.locator('#explorerBoard .sq').first().waitFor({ state: 'visible' });
+      assert.strictEqual(await p.locator('#explorerBoard .piece[data-c="0"][data-r="0"][data-color="blue"]').count(), 1,
+        'analysis board should preserve the custom editor position');
       await p.locator('#explorerBoard .sq[data-c="0"][data-r="0"] .piece').click();
       await p.locator('#explorerBoard .sq[data-c="1"][data-r="1"]').click();
       await p.locator('#explorerHistory .move').first().waitFor({ state: 'visible' });
