@@ -1893,6 +1893,17 @@
     explorerArrows.length = 0;
     if (pushHistory) history.pushState({ rpsScreen: 'analysis' }, '', '?view=analysis');
     showScreen(explorerEl);
+    // Render the supplied game history immediately; the opening request then
+    // enriches the same position with statistics without blanking the view.
+    const start = baseBoard ? engine.cloneBoard(baseBoard) : engine.initialBoard();
+    let board = start;
+    let currentTurn = explorer.baseTurn;
+    for (const move of gameHistory) {
+      board = applyMove(board, move);
+      currentTurn = currentTurn === 'blue' ? 'red' : 'blue';
+    }
+    explorer.position = { key: engine.boardToString(board) + ':' + currentTurn[0], board, turn: currentTurn };
+    renderExplorer();
     loadExplorer();
   }
 
