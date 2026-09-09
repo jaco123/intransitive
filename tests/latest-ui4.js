@@ -164,6 +164,7 @@ async function assertFavicon(page) {
       assert.doesNotMatch(await high.page.locator('body').innerText(), / · You\b/, 'user-facing player labels should not append You');
       await high.page.locator('#finishedAnalysis').click();
       await high.page.locator('#explorer').waitFor({ state: 'visible' });
+      await high.page.locator('#explorerHistory [data-analysis-step]').first().waitFor({ state: 'visible', timeout: 5000 });
       assert.ok(await high.page.locator('#explorerHistory [data-analysis-step]').count() >= 1, 'finished analysis should include the full game history');
       assert.ok(await high.page.locator('#explorerBoard .analysis-source, #explorerBoard .analysis-destination').count() >= 1, 'finished analysis should highlight the selected move');
     } catch (error) { failures.push('rated result labels/full finished analysis: ' + error.message); }
