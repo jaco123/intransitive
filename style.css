@@ -637,7 +637,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 #editor .editor-action { flex: none; width: 100%; border: 0; border-color: transparent; outline: 0; background: transparent; text-align: left; padding: 8px 4px; appearance: none; }
 #editor .editor-action:hover, #editor .editor-action:focus { background-color: var(--surface-3); }
 #editor .editor-action:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
-#editor .editor-action:disabled, #editor .editor-action:disabled:hover, #editor .editor-action:disabled:focus { color: #c8c3bc !important; -webkit-text-fill-color: #c8c3bc !important; opacity: 1; cursor: default; }
+#editor .editor-action:disabled, #editor .editor-action:disabled:hover, #editor .editor-action:disabled:focus { color: #c8c3bc !important; -webkit-text-fill-color: #c8c3bc !important; opacity: 1; cursor: default; transition: none; }
 #editor .btn.editor-action:disabled:hover { background: transparent; color: #c8c3bc !important; }
 
 .home-featured, .directory-panel { max-width: 920px; margin: var(--s4) auto 0; }
