@@ -99,9 +99,10 @@ async function analysis(page) {
       assert.ok(Math.abs((ghostBox.x + ghostBox.width / 2) - (to.x + to.width / 2)) < 2, 'analysis drag ghost should be centered horizontally');
       assert.ok(Math.abs((ghostBox.y + ghostBox.height / 2) - (to.y + to.height / 2)) < 2, 'analysis drag ghost should be centered vertically');
       await page.mouse.up();
-      await page.waitForFunction(() => document.getElementById('explorerPath').textContent !== 'Initial position');
-      assert.notStrictEqual(await page.locator('#explorerPath').textContent(), 'Initial position',
-        'dragging a legal analysis move should advance the path');
+      const currentMove = page.locator('#explorerHistory .move.current');
+      await currentMove.waitFor({ state: 'visible', timeout: 3000 });
+      assert.ok((await currentMove.textContent()).trim().length > 0,
+        'dragging a legal analysis move should advance the game history');
     } catch (error) { failures.push('Analysis pieces should support legal drag/drop: ' + error.message); }
 
     if (failures.length) throw new Error(failures.join(' | '));

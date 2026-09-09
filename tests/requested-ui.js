@@ -104,6 +104,9 @@ async function dragWithinSquare(page, board, color) {
       assert.ok(await p.locator('#explorerHistory').isVisible(), 'live analysis should show paired game history'); assert.ok(await p.locator('#explorerMoves').isVisible(), 'opening book should remain below game history');
       await playFirstLegalMove(p, 'blue', '#explorerBoard'); await playFirstLegalMove(p, 'red', '#explorerBoard');
       assert.strictEqual(await p.locator('#explorerHistory .move').count(), 2, 'analysis should collect moves in numbered history'); assert.strictEqual(await p.locator('#explorerBoard .lastmove').count(), 2, 'analysis should highlight the current move');
+      const duplicatePath = p.locator('#explorerPath');
+      assert.ok(await duplicatePath.count() === 0 || !(await duplicatePath.isVisible()), 'analysis should not show the obsolete duplicate move bar');
+      assert.strictEqual(await p.locator('#explorerHistory .move').count(), 2, 'only the intended paired move history should remain');
       assert.ok(await p.locator('#explorerMoves').evaluate((el) => !!document.querySelector('#explorerHistory') && document.querySelector('#explorerHistory').compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING), 'opening book must be below game history');
       await p.locator('#explorerHistory .move[data-step="0"]').click(); await p.locator('#explorerBoard .lastmove').nth(1).waitFor({ state: 'visible' }); assert.strictEqual(await p.locator('#explorerBoard .lastmove').count(), 2, 'back navigation should update the highlighted move');
       assert.ok(await p.locator('#explorerMoves .explorer-move').count() > 0, 'earlier position should have branch choices'); await p.locator('#explorerMoves .explorer-move').first().click(); await p.locator('#explorerHistory .move[data-step="1"]').waitFor({ state: 'visible' }); assert.strictEqual(await p.locator('#explorerBoard .lastmove').count(), 2, 'branching should update the highlighted move'); await p.close();

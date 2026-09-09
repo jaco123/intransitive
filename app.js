@@ -132,7 +132,6 @@
   const explorerHistoryEl = $('explorerHistory');
   const explorerHistoryLabelEl = $('explorerHistoryLabel');
   const explorerOpeningLabelEl = $('explorerOpeningLabel');
-  const explorerPathEl = $('explorerPath');
   const explorerBackEl = $('explorerBack');
   const explorerMoveNavEl = $('explorerMoveNav');
   const explorerMoveSettingsEl = $('explorerMoveSettings');
@@ -2211,7 +2210,6 @@
 
     updateMoveNavigation(explorerMoveNavEl, explorer.step, explorer.path.length);
 
-    renderExplorerPath();
     renderAnalysisHistory();
     renderExplorerMoves();
   }
@@ -2224,13 +2222,6 @@
     if (!history.length) return;
     renderMovesList(explorerHistoryEl, history, explorer.step - 1);
     explorerHistoryEl.querySelectorAll('.move[data-step]').forEach((el) => { el.dataset.analysisStep = el.dataset.step; });
-  }
-
-  function renderExplorerPath() {
-    explorerPathEl.textContent = explorer.path.length
-      ? explorer.path.join(' ')
-      : (explorer.baseBoard ? 'Custom position' : 'Initial position');
-
   }
 
   function renderExplorerMoves() {
