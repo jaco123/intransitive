@@ -94,6 +94,8 @@
   const rematchBtn = $('rematch');
   const finishedAnalysisBtn = $('finishedAnalysis');
   const gameActionsEl = $('gameActions');
+  const waitingActionsEl = $('waitingActions');
+  const cancelPrivateGameBtn = $('cancelPrivateGame');
   const actionConfirmEl = $('actionConfirm');
   const actionConfirmTextEl = $('actionConfirmText');
   const actionConfirmYesEl = $('actionConfirmYes');
@@ -834,10 +836,12 @@
   function renderActions() {
     const playing = !!(state && state.status === 'playing' && !state.spectating);
     const finished = !!(state && state.status === 'finished' && !state.spectating);
+    const waitingPrivate = !!(state && state.status === 'waiting' && !state.spectating && myColor === 'blue');
     if (!playing && confirmAction) confirmAction = null;
 
     const showIcons = playing && !confirmAction;
     gameActionsEl.classList.toggle('hidden', !showIcons);
+    waitingActionsEl.classList.toggle('hidden', !waitingPrivate);
     resignBtn.classList.toggle('hidden', !playing);
     offerDrawBtn.classList.toggle('hidden', !playing || !!state.drawOffer);
     // Abort is possible until both players have made their first move.
@@ -1271,6 +1275,28 @@
         clearSeek();
         showQueueStatus('Pairing cancelled.', 3500);
         queueBtn.disabled = false;
+        break;
+
+      case 'privateCancelled':
+        if (msg.gameId && gameId !== msg.gameId) break;
+        clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+        try {
+          if (gameId) {
+            sessionStorage.removeItem('rps_token_' + gameId);
+            sessionStorage.removeItem('rps_color_' + gameId);
+          }
+        } catch (e) {}
+        gameId = null;
+        myToken = null;
+        myColor = null;
+        state = null;
+        pending = null;
+        if (ws) { ws.close(); ws = null; }
+        history.replaceState({ rpsScreen: 'home' }, '', '?');
+        updateLink();
+        showHome(false);
+        showToast('Private game cancelled.');
         break;
 
       case 'lobby':
@@ -2653,6 +2679,12 @@
   abortBtn.addEventListener('click', () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'abort' }));
+    }
+  });
+
+  cancelPrivateGameBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN && gameId) {
+      ws.send(JSON.stringify({ type: 'cancelPrivate', gameId }));
     }
   });
 

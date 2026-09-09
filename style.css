@@ -1334,7 +1334,7 @@ input[type="range"]::-moz-range-thumb {
   background: rgba(0, 0, 0, 0.28);
 }
 .stat-bar .seg { height: 100%; }
-.stat-bar .seg.win { background: #7fd07f; }
+.stat-bar .seg.win { background: #4a86f7; }
 .stat-bar .seg.draw { background: #9b9b9b; }
 .stat-bar .seg.loss { background: #d64545; }
 .stat-text {

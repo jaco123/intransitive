@@ -852,8 +852,20 @@ function handleJoin(ws, msg) {
   // 2. Reclaim seat by account (solves "closed tab, come back later").
   const user = resolveUser(msg.session);
   if (user) {
-    if (g.blue && g.blue.userId === user.id) { attach(ws, g, 'blue'); return; }
-    if (g.red && g.red.userId === user.id) { attach(ws, g, 'red'); return; }
+    const ownColor = g.blue && g.blue.userId === user.id ? 'blue'
+      : g.red && g.red.userId === user.id ? 'red' : null;
+    if (ownColor) {
+      const ownSeat = g[ownColor];
+      // A live account session cannot occupy both seats. A disconnected seat
+      // may still be reclaimed for an in-progress game, which is the normal
+      // refresh/reconnect path.
+      if (ownSeat.ws && ownSeat.ws !== ws) {
+        send(ws, { type: 'error', message: "You can't play yourself." });
+        return;
+      }
+      attach(ws, g, ownColor);
+      return;
+    }
   }
 
   // 3. New player: take the first open seat.
@@ -906,6 +918,14 @@ function handleClose(ws) {
   if (!slot) return;
   const g = games.get(slot.gameId);
   if (!g) return;
+
+  // Directly-created games are private while waiting for the invited player.
+  // Removing them on disconnect prevents a stale invite URL from becoming a
+  // playable game later. Public seeks live in `queue` and are handled above.
+  if (g.status === 'waiting') {
+    games.delete(g.id);
+    return;
+  }
 
   const player = g[slot.color];
   if (player && player.ws === ws) {
@@ -1085,6 +1105,18 @@ function handleQueueCancel(ws) {
   }
 }
 
+function handleCancelPrivate(ws) {
+  const slot = slotBySocket.get(ws);
+  const g = slot ? games.get(slot.gameId) : null;
+  if (!g || g.status !== 'waiting' || slot.color !== 'blue' || !g.blue || g.blue.ws !== ws || g.red) {
+    send(ws, { type: 'error', message: 'This private game cannot be cancelled.' });
+    return;
+  }
+
+  games.delete(g.id);
+  send(ws, { type: 'privateCancelled', gameId: g.id });
+}
+
 function handleAcceptSeek(ws, msg) {
   const idx = queue.findIndex((e) => e.id === msg.seekId);
   if (idx === -1) {
@@ -1096,10 +1128,14 @@ function handleAcceptSeek(ws, msg) {
     send(ws, { type: 'error', message: "You can't play yourself." });
     return;
   }
+  const user = resolveUser(msg.session);
+  if (user && seek.user && user.id === seek.user.id) {
+    send(ws, { type: 'error', message: "You can't play yourself." });
+    return;
+  }
   queue.splice(idx, 1);
   leaveLobby(ws); // cancel any seek the acceptor had open
 
-  const user = resolveUser(msg.session);
   const g = newGame(seek.timeControl, seek.casual, seek.startPosition);
   games.set(g.id, g);
 
@@ -1403,6 +1439,7 @@ wss.on('connection', (ws) => {
       case 'resign': handleResign(ws); break;
       case 'queue': handleQueue(ws, msg); break;
       case 'queueCancel': handleQueueCancel(ws); break;
+      case 'cancelPrivate': handleCancelPrivate(ws); break;
       case 'acceptSeek': handleAcceptSeek(ws, msg); break;
       case 'challengeCreate': handleChallengeCreate(ws, msg); break;
       case 'challengeAccept': handleChallengeAccept(ws, msg); break;
@@ -1429,6 +1466,7 @@ wss.on('connection', (ws) => {
   ws.on('error', () => {
     clients.delete(ws);
     if (removeFromQueue(ws)) broadcastLobby();
+    handleClose(ws);
     removeSpectator(ws);
   });
 });

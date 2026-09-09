@@ -85,7 +85,7 @@ async function dragWithinSquare(page, board, color) {
       assert.ok(link.fontSize >= 17 && link.height >= 46, 'navigation controls should be larger'); await p.close();
     });
 
-    await check('opening book blue-win segment is green', async () => {
+    await check('opening book blue-win segment is blue', async () => {
       const p = await page();
       await p.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
       await p.getByRole('button', { name: 'Analysis', exact: true }).click();
@@ -93,8 +93,8 @@ async function dragWithinSquare(page, board, color) {
       const segment = p.locator('#explorerMoves .explorer-move .stat-bar .seg.win').first();
       await segment.waitFor({ state: 'visible' });
       const color = await segment.evaluate((el) => getComputedStyle(el).backgroundColor.match(/\d+/g).map(Number));
-      assert.ok(color[1] > color[0] * 1.15 && color[1] > color[2] * 1.15,
-        'blue-win segment should render green, got rgb(' + color.join(', ') + ')');
+      assert.ok(color[2] > color[0] * 1.15 && color[2] > color[1] * 1.15,
+        'blue-win segment should render blue, got rgb(' + color.join(', ') + ')');
       await p.close();
     });
 
@@ -151,6 +151,122 @@ async function dragWithinSquare(page, board, color) {
         assert.strictEqual(await reloadedVolume.inputValue(), next, 'sound volume should persist across reloads');
       } finally {
         await Promise.allSettled([p.close(), context.close()]);
+      }
+    });
+
+    await check('private game rejects self-join', async () => {
+      const context = await browser.newContext();
+      let creator = null; let joiner = null;
+      try {
+        const account = await register(context);
+        creator = account.page;
+        joiner = await context.newPage({ viewport: { width: 1366, height: 768 } });
+        await creator.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await creator.locator('#createBtn').click();
+        await creator.locator('#gameStatus').filter({ hasText: 'Waiting for opponent' }).waitFor();
+        const gameUrl = creator.url();
+        await joiner.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await joiner.locator('#joinInput').fill(gameUrl);
+        await joiner.locator('#joinBtn').click();
+        await joiner.waitForTimeout(1000);
+        assert.strictEqual(await joiner.locator('#game').isVisible(), false, 'a user must not start a private game against themselves');
+        assert.strictEqual(await creator.locator('#gameStatus').innerText(), 'Waiting for opponent', 'self-join must leave the private game waiting');
+        assert.strictEqual(await joiner.locator('#home').isVisible(), true, 'rejected self-join should remain in the lobby');
+      } finally {
+        await Promise.allSettled([creator && creator.close(), joiner && joiner.close(), context.close()]);
+      }
+    });
+
+    await check('lobby seek rejects self-acceptance', async () => {
+      const context = await browser.newContext();
+      let owner = null; let accepter = null;
+      try {
+        const account = await register(context);
+        owner = account.page;
+        accepter = await context.newPage({ viewport: { width: 1366, height: 768 } });
+        await owner.getByRole('button', { name: 'Play', exact: true }).click();
+        await owner.locator('#queueBtn').click();
+        await owner.locator('#queueStatus').waitFor({ state: 'visible' });
+        await owner.locator('#lobbyList .lpool').first().waitFor({ state: 'visible' });
+        await accepter.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await accepter.locator('#lobbyList .lpool').first().waitFor({ state: 'visible' });
+        await accepter.locator('#lobbyList .lpool').first().click();
+        await accepter.waitForTimeout(1000);
+        assert.strictEqual(await owner.locator('#game').isVisible(), false, 'a lobby seek must not pair a user with themselves');
+        assert.strictEqual(await accepter.locator('#game').isVisible(), false, 'self-accepted lobby seek must be rejected');
+      } finally {
+        await Promise.allSettled([owner && owner.close(), accepter && accepter.close(), context.close()]);
+      }
+    });
+
+    await check('challenge rejects self-acceptance', async () => {
+      const context = await browser.newContext();
+      let sender = null; let target = null;
+      try {
+        const account = await register(context);
+        sender = account.page;
+        target = await context.newPage({ viewport: { width: 1366, height: 768 } });
+        await target.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await sender.locator('#profileBtn').click();
+        await sender.locator('#profilePanel').waitFor({ state: 'visible' });
+        await sender.locator('#profileChallenge').click();
+        await sender.locator('#challengeSend').click();
+        await target.waitForTimeout(1000);
+        if (await target.locator('#challengeInbox').isVisible()) {
+          await target.locator('.challenge-incoming').first().getByRole('button', { name: 'Accept', exact: true }).click();
+        }
+        await target.waitForTimeout(1000);
+        assert.strictEqual(await sender.locator('#game').isVisible(), false, 'a challenge must not create a self-game');
+        assert.strictEqual(await target.locator('#game').isVisible(), false, 'self-challenge acceptance must be rejected');
+      } finally {
+        await Promise.allSettled([sender && sender.close(), target && target.close(), context.close()]);
+      }
+    });
+
+    await check('disconnected waiting private game cannot be joined', async () => {
+      const ownerContext = await browser.newContext(); const joinerContext = await browser.newContext();
+      let owner = null; let joiner = null;
+      try {
+        owner = await ownerContext.newPage({ viewport: { width: 1366, height: 768 } });
+        await owner.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await owner.locator('#createBtn').click();
+        await owner.locator('#gameStatus').filter({ hasText: 'Waiting for opponent' }).waitFor();
+        const gameUrl = owner.url();
+        await owner.close(); owner = null;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        joiner = await joinerContext.newPage({ viewport: { width: 1366, height: 768 } });
+        await joiner.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await joiner.locator('#joinInput').fill(gameUrl);
+        await joiner.locator('#joinBtn').click();
+        await joiner.waitForTimeout(1000);
+        assert.strictEqual(await joiner.locator('#game').isVisible(), false, 'a disconnected waiting private game must be removed');
+      } finally {
+        await Promise.allSettled([owner && owner.close(), joiner && joiner.close(), ownerContext.close(), joinerContext.close()]);
+      }
+    });
+
+    await check('waiting private game has server-backed cancel button', async () => {
+      const ownerContext = await browser.newContext(); const joinerContext = await browser.newContext();
+      let owner = null; let joiner = null;
+      try {
+        owner = await ownerContext.newPage({ viewport: { width: 1366, height: 768 } });
+        await owner.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await owner.locator('#createBtn').click();
+        await owner.locator('#gameStatus').filter({ hasText: 'Waiting for opponent' }).waitFor();
+        const gameUrl = owner.url();
+        const cancel = owner.getByRole('button', { name: 'Cancel game', exact: true });
+        assert.strictEqual(await cancel.count(), 1, 'waiting private games should expose one Cancel game button');
+        await cancel.click();
+        await owner.locator('#home').waitFor({ state: 'visible' });
+        assert.strictEqual(new URL(owner.url()).searchParams.has('game'), false, 'cancel should return to the lobby route');
+        joiner = await joinerContext.newPage({ viewport: { width: 1366, height: 768 } });
+        await joiner.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
+        await joiner.locator('#joinInput').fill(gameUrl);
+        await joiner.locator('#joinBtn').click();
+        await joiner.waitForTimeout(1000);
+        assert.strictEqual(await joiner.locator('#game').isVisible(), false, 'a cancelled private game must not be joinable');
+      } finally {
+        await Promise.allSettled([owner && owner.close(), joiner && joiner.close(), ownerContext.close(), joinerContext.close()]);
       }
     });
 
