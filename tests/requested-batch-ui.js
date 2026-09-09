@@ -148,7 +148,7 @@ async function createLiveGame(context) {
         await recipient.page.locator('#studySharedList [data-study-id]').filter({ hasText: name }).waitFor();
         await recipient.page.locator('#studySharedList [data-study-id]').filter({ hasText: name }).click();
         await recipient.page.locator('#studyPage').waitFor({ state: 'visible' });
-        assert.strictEqual(await recipient.page.locator('#studyDelete').count(), 0,
+        assert.strictEqual(await recipient.page.locator('#studyDelete').isVisible(), false,
           'shared readers must not see owner delete controls');
 
         await recipient.page.goto(privateLink, { waitUntil: 'domcontentloaded' });

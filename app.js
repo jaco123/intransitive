@@ -1726,6 +1726,7 @@
     const session = getSession();
     if (!session) { openAuth('login'); return; }
     await loadStudyList();
+    showScreen(studyEl);
     studyChooserListEl.innerHTML = '';
     if (!studyLists.owned.length) {
       studyChooserListEl.innerHTML = '<p class="history-empty">Create a study first.</p>';
@@ -3117,7 +3118,10 @@
   studyShareSubmitEl.addEventListener('click', shareCurrentStudy);
   studyPublishEl.addEventListener('click', publishCurrentStudy);
   studyDeleteEl.addEventListener('click', deleteCurrentStudy);
-  studyChooserCancelEl.addEventListener('click', () => studyChooserEl.classList.add('hidden'));
+  studyChooserCancelEl.addEventListener('click', () => {
+    studyChooserEl.classList.add('hidden');
+    openEditor(false);
+  });
   opponentNameEl.addEventListener('click', () => {
     if (!state || !myColor) return;
     const opponent = state.players[myColor === 'blue' ? 'red' : 'blue'];

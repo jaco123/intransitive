@@ -713,6 +713,13 @@ h1 span { color: var(--muted); font-weight: 400; }
 .featured-game-button { border-color: var(--primary); }
 .featured-game { max-width: 340px; }
 .featured-game .watch-game-preview { max-height: 280px; }
+@media (min-width: 900px) {
+  #watch .directory-panel { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--s4); align-items: start; }
+  #watch .directory-panel > h2, #watch .watch-filters { grid-column: 1 / -1; }
+  #watch .featured-game { grid-column: 1; margin: 0; }
+  #watch .watch-list { grid-column: 2; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; }
+  #watch #watchEmpty { grid-column: 2; }
+}
 .player-directory-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(300px, 2fr) 100px; align-items: center; gap: var(--s3); width: 100%; padding: 10px 12px; border: 0; background: var(--surface-2); border-radius: var(--r-sm); color: var(--text); text-align: left; cursor: pointer; }
 .player-directory-row:hover, .player-directory-row:focus-visible { background: var(--surface-3); color: var(--text-bright); }
 .player-directory-name { color: var(--text-bright); font-weight: 600; }
