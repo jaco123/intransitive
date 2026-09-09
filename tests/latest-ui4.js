@@ -155,6 +155,8 @@ async function assertFavicon(page) {
       const high = await registerUser(ratedHighContext);
       const low = await registerUser(ratedLowContext);
       await createPrivateGame(high.page, low.page);
+      await clickMove(high.page, '#board');
+      await high.page.locator('#moves li').waitFor();
       await low.page.locator('#resign').click();
       await low.page.locator('#actionConfirmYes').click();
       await high.page.locator('#gameStatus').filter({ hasText: /resignation/ }).waitFor();
