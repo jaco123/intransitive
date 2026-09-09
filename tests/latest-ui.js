@@ -95,7 +95,7 @@ async function dragWithPointer(page, boardSelector, sourceSelector, targetSelect
     catch (error) { failures.push(error.message); }
 
     await gotoEditor(page);
-    const actionIds = ['#editorReset', '#editorClear', '#editorFlip', '#editorAnalysis', '#editorToAnalysis'];
+    const actionIds = ['#editorReset', '#editorClear', '#editorFlip', '#editorAnalysis', '#editorToAnalysis', '#editorAddToStudy'];
     try {
       const boxes = await Promise.all(actionIds.map((id) => page.locator(id).boundingBox()));
       assert.ok(boxes.every((box) => box), 'all editor actions should be visible');

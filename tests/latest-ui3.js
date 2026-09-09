@@ -116,7 +116,7 @@ async function pointerDrag(page, source, target) {
         const s = getComputedStyle(el);
         return { background: s.backgroundColor, border: s.borderStyle, outline: s.outlineStyle };
       }));
-      assert.strictEqual(styles.length, 5, 'editor should expose five actions');
+      assert.strictEqual(styles.length, 6, 'editor should expose six actions including Add to study');
       assert.ok(styles.every((style) => style.background === styles[0].background), 'Continue should stay neutral by default');
       await page.locator('#editorToAnalysis').hover();
       assert.notStrictEqual(await page.locator('#editorToAnalysis').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgba(0, 0, 0, 0)', 'Continue hover should be visible');

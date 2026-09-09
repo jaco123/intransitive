@@ -97,7 +97,7 @@ async function createCustomCaptureGame(page, joinPage) {
         const rect = el.getBoundingClientRect();
         return { bg: s.backgroundColor, border: s.borderStyle, outline: s.outlineStyle, textAlign: s.textAlign, x: rect.x, y: rect.y, h: rect.height };
       }));
-      assert.strictEqual(checks.length, 5, 'editor should have five action buttons');
+      assert.strictEqual(checks.length, 6, 'editor should have six action buttons including Add to study');
       assert.ok(checks.every((x) => /rgba\(0, 0, 0, 0\)|transparent/.test(x.bg) && x.border === 'none' && x.outline === 'none' && x.textAlign === 'left'),
         'editor action buttons should be text/icon only by default');
       assert.ok(checks.every((x, i) => i === 0 || Math.abs((x.y - checks[i - 1].y) - checks[i - 1].h - 8) < 3), 'editor action spacing should be uniform');
