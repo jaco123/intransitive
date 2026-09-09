@@ -189,13 +189,23 @@ async function centerOf(locator) {
 
         await creator.page.locator('#navBrand').click();
         await creator.page.locator('#home').waitFor({ state: 'visible' });
-        assert.strictEqual(new URL(creator.page.url()).search, '?', 'title should route to the lobby');
+        const lobbyUrl = new URL(creator.page.url());
+        assert.strictEqual(lobbyUrl.searchParams.get('game'), null, 'title should leave the game route');
+        assert.strictEqual(lobbyUrl.searchParams.get('view'), null, 'title should leave the analysis route');
+        assert.strictEqual(lobbyUrl.searchParams.get('spectate'), null, 'title should leave the spectator route');
+        await creator.page.locator('#inGameNotice').waitFor({ state: 'visible' });
         assert.strictEqual(await creator.page.locator('#inGameNotice').innerText(), 'You are in a game\nReturn to game\nClose', 'active game notice should be shown after title navigation');
 
         await creator.page.getByRole('button', { name: 'Return to game', exact: true }).click();
         await creator.page.locator('#game').waitFor({ state: 'visible' });
         assert.strictEqual(new URL(creator.page.url()).searchParams.get('game'), gameId, 'return should restore the active game URL');
-        assert.strictEqual(await creator.page.locator('#gameStatus').isVisible(), true, 'return should restore the player game view');
+        await creator.page.waitForFunction((username) => {
+          const player = document.querySelector('#playerName');
+          const status = document.querySelector('#gameStatus');
+          return player && player.textContent.includes(username) && status && !/Connecting|Waiting/.test(status.textContent);
+        }, creator.username);
+        assert.notStrictEqual(await creator.page.locator('#gameMode').innerText(), 'Spectating', 'return should restore the participant view, not spectating');
+        assert.ok((await creator.page.locator('#playerName').innerText()).includes(creator.username), 'return should restore the creator seat');
 
         await creator.page.getByRole('button', { name: 'Analysis', exact: true }).click();
         await creator.page.locator('#explorer').waitFor({ state: 'visible' });
