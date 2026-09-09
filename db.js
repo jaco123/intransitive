@@ -64,7 +64,8 @@ CREATE TABLE IF NOT EXISTS games (
   result TEXT,
   reason TEXT,
   rated INTEGER NOT NULL DEFAULT 0,
-  history TEXT NOT NULL DEFAULT '[]'
+  history TEXT NOT NULL DEFAULT '[]',
+  start_position TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_games_blue ON games(blue_user_id, finished_at DESC);
@@ -104,6 +105,8 @@ function migrate() {
       }
     }
   }
+  const gameCols = new Set(db.prepare('PRAGMA table_info(games)').all().map((c) => c.name));
+  if (!gameCols.has('start_position')) db.prepare('ALTER TABLE games ADD COLUMN start_position TEXT').run();
 }
 migrate();
 
@@ -198,7 +201,7 @@ function listPlayers(search = '', limit = 50) {
       rating_bullet, rating_blitz, rating_rapid, rating_classical
     FROM users
     WHERE username LIKE ? ESCAPE '\\'
-    ORDER BY rating DESC, username ASC
+    ORDER BY username ASC
     LIMIT ?
   `).all('%' + escaped + '%', boundedLimit);
   return rows.map((row) => ({
@@ -214,6 +217,28 @@ function listPlayers(search = '', limit = 50) {
     losses: row.losses,
     draws: row.draws,
   }));
+}
+
+function listLeaderboards(limit = 10) {
+  const boundedLimit = Math.max(1, Math.min(10, Math.trunc(Number(limit) || 10)));
+  const result = {};
+  for (const cat of CATEGORIES) {
+    const rows = db.prepare(`
+      SELECT id, username, rating_${cat} AS rating, wins, losses, draws
+      FROM users
+      ORDER BY rating_${cat} DESC, username ASC
+      LIMIT ?
+    `).all(boundedLimit);
+    result[cat] = rows.map((row) => ({
+      id: row.id,
+      username: row.username,
+      rating: Math.round(row.rating),
+      wins: row.wins,
+      losses: row.losses,
+      draws: row.draws,
+    }));
+  }
+  return result;
 }
 
 function verifyCredentials(username, password) {
@@ -293,13 +318,15 @@ function saveGame(g) {
       blue_rating_before, red_rating_before,
       blue_rating_after, red_rating_after,
       status, result, reason, rated, history
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      , start_position
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     g.id, g.createdAt, g.finishedAt, g.tcInitial, g.tcIncrement,
     g.blueUserId, g.redUserId, g.blueName, g.redName,
     g.blueRatingBefore, g.redRatingBefore,
     g.blueRatingAfter, g.redRatingAfter,
-    g.status, g.result, g.reason, g.rated ? 1 : 0, g.history
+    g.status, g.result, g.reason, g.rated ? 1 : 0, g.history,
+    g.startPosition ? JSON.stringify(g.startPosition) : null
   );
 }
 
@@ -328,7 +355,12 @@ function listGames(userId, limit = 50) {
     reason: r.reason,
     rated: !!r.rated,
     history: safeParse(r.history),
+    startPosition: safeParse(r.start_position),
   }));
+}
+
+function listPublicGames(userId, limit = 50) {
+  return listGames(userId, Math.max(1, Math.min(50, Math.trunc(Number(limit) || 50))));
 }
 
 function getGame(id) {
@@ -353,6 +385,7 @@ function getGame(id) {
     reason: r.reason,
     rated: !!r.rated,
     history: safeParse(r.history),
+    startPosition: safeParse(r.start_position),
   };
 }
 
@@ -404,6 +437,7 @@ module.exports = {
   getUserById,
   getUserByUsername,
   listPlayers,
+  listLeaderboards,
   verifyCredentials,
   createSession,
   getSessionUser,
@@ -415,6 +449,7 @@ module.exports = {
   incrementStats,
   saveGame,
   listGames,
+  listPublicGames,
   getGame,
   recordOpening,
   getOpening,

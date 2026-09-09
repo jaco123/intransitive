@@ -42,6 +42,12 @@ if ! node "$project_dir/tests/latest-ui3.js"; then
   failed=1
 fi
 
+printf '\n===== latest UI4 naming/profile/premove regression test =====\n'
+if ! node "$project_dir/tests/latest-ui4.js"; then
+  printf 'FAILED: latest UI4 naming/profile/premove regression test\n'
+  failed=1
+fi
+
 printf '\n===== live deployment browser test =====\n'
 if ! node "$project_dir/tests/live-deployment.js"; then
   printf 'FAILED: live deployment browser test\n'

@@ -1,4 +1,4 @@
-/* RPS 9x9 — server: static files + WebSocket game rooms + REST auth/history.
+/* Intransitive 9x9 — server: static files + WebSocket game rooms + REST auth/history.
  * The server is the single authority on game state and move legality.
  * Accounts, ratings (Glicko-2), and game history are persisted in SQLite.
  */
@@ -208,6 +208,7 @@ function snapshot(g, color, spectating) {
     ratingDelta: g.ratingDelta || null,
     turn: g.game.turn,
     board: engine.cloneBoard(g.game.board),
+    startPosition: { board: engine.cloneBoard(g.startPosition.board), turn: g.startPosition.turn },
     history: g.game.history.slice(),
     lastMove: g.game.lastMove,
     clocks: {
@@ -429,6 +430,7 @@ function persistGame(g) {
     reason: g.reason,
     rated: g.rated,
     history: JSON.stringify(g.game.history),
+    startPosition: g.startPosition,
   });
 }
 
@@ -1095,6 +1097,11 @@ async function handleApi(req, res, urlPath, query) {
       return;
     }
 
+    if (req.method === 'GET' && urlPath === '/api/leaderboard') {
+      sendJson(res, 200, { leaderboards: db.listLeaderboards(10) });
+      return;
+    }
+
     const playerMatch = urlPath.match(/^\/api\/players\/([A-Za-z0-9_-]{2,20})$/);
     if (req.method === 'GET' && playerMatch) {
       const user = db.getUserByUsername(playerMatch[1]);
@@ -1102,7 +1109,7 @@ async function handleApi(req, res, urlPath, query) {
         sendJson(res, 404, { error: 'Player not found.' });
         return;
       }
-      sendJson(res, 200, { user: db.publicUser(user) });
+      sendJson(res, 200, { user: db.publicUser(user), games: db.listPublicGames(user.id, 50) });
       return;
     }
 
@@ -1297,7 +1304,7 @@ wss.on('connection', (ws) => {
 });
 
 httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log('RPS server on http://0.0.0.0:' + PORT);
+  console.log('Intransitive server on http://0.0.0.0:' + PORT);
 });
 
 // Opportunistic cleanup of long-finished games (keeps memory bounded).

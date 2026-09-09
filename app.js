@@ -14,6 +14,7 @@
   const editorEl = $('editor');
   const watchEl = $('watch');
   const playersEl = $('players');
+  const leaderboardEl = $('leaderboard');
 
   // Nav
   const navGuestEl = $('navGuest');
@@ -27,6 +28,8 @@
   const playBtn = $('playBtn');
   const watchBtn = $('watchBtn');
   const playersBtn = $('playersBtn');
+  const leaderboardBtn = $('leaderboardBtn');
+  const leaderboardBackEl = $('leaderboardBack');
 
   // Auth modal
   const authModalEl = $('authModal');
@@ -94,6 +97,7 @@
   // History & replay
   const historyListEl = $('historyList');
   const profilePanelEl = $('profilePanel');
+  const profileHistoryEl = $('profileHistory');
   const historyBackEl = $('historyBack');
   const profileLogoutEl = $('profileLogout');
   const replayBoardEl = $('replayBoard');
@@ -123,6 +127,9 @@
   const explorerEl = $('explorer');
   const explorerBoardEl = $('explorerBoard');
   const explorerMovesEl = $('explorerMoves');
+  const explorerHistoryEl = $('explorerHistory');
+  const explorerHistoryLabelEl = $('explorerHistoryLabel');
+  const explorerOpeningLabelEl = $('explorerOpeningLabel');
   const explorerPathEl = $('explorerPath');
   const explorerBackEl = $('explorerBack');
   const explorerMoveNavEl = $('explorerMoveNav');
@@ -589,14 +596,7 @@
     else if (state.reason === 'resign') s = winner + ' wins by resignation';
     else if (state.reason === 'noMoves') s = winner + ' wins — opponent has no legal moves';
     else s = winner + ' wins';
-    return s + ratingDeltaSuffix();
-  }
-
-  function ratingDeltaSuffix() {
-    if (!state || !state.ratingDelta || myColor !== 'blue' && myColor !== 'red') return '';
-    const d = state.ratingDelta[myColor];
-    if (d == null) return '';
-    return d > 0 ? '  ·  +' + d : d < 0 ? '  ·  ' + d : '';
+    return s;
   }
 
   function renderStatus() {
@@ -744,8 +744,16 @@
   function renderPlayers() {
     if (!state) return;
     const opp = myColor === 'blue' ? 'red' : 'blue';
-    playerNameEl.textContent = formatPlayer(state.players[myColor], state.spectating ? '' : 'You');
+    playerNameEl.textContent = formatPlayer(state.players[myColor]);
     opponentNameEl.textContent = formatPlayer(state.players[opp]);
+    for (const [el, color] of [[playerNameEl, myColor], [opponentNameEl, opp]]) {
+      const delta = state.ratingDelta && state.ratingDelta[color];
+      if (delta != null && state.players[color] && state.players[color].rating != null) {
+        el.textContent += ' ' + (delta > 0 ? '+' : '') + delta;
+        el.classList.toggle('rating-up', delta > 0);
+        el.classList.toggle('rating-down', delta < 0);
+      }
+    }
     playerNameEl.className = 'pname ' + myColor;
     opponentNameEl.className = 'pname ' + opp;
   }
@@ -870,9 +878,18 @@
     render();
   }
 
+  function isPremoveShape(fromC, fromR, toC, toR) {
+    return Math.abs(toC - fromC) <= 1 && Math.abs(toR - fromR) <= 1 && (toC !== fromC || toR !== fromR);
+  }
+
   // Play a move now if it's our turn, otherwise queue it as a premove.
   function tryPlayMove(fromC, fromR, toC, toR) {
     if (!isLegalTarget(fromC, fromR, toC, toR)) {
+      const ownPiece = state && state.board[fromR] && state.board[fromR][fromC];
+      if (premoveAllowed() && ownPiece && ownPiece.color === myColor && isPremoveShape(fromC, fromR, toC, toR)) {
+        setPremove(fromC, fromR, toC, toR);
+        return;
+      }
       clearSelection();
       render();
       return;
@@ -1330,7 +1347,7 @@
       '<button type="button" class="player-directory-row" data-player-username="' + escapeHtml(player.username) + '">' +
       '<span class="player-directory-name">' + escapeHtml(player.username) + '</span>' +
       '<span class="player-ratings-inline">' + ['bullet', 'blitz', 'rapid', 'classical'].map((cat) =>
-        '<span class="player-rating-inline"><span class="rating-category">' + cat + '</span> ' +
+        '<span class="player-rating-inline" title="' + cat + '"><span class="time-control-symbol" data-time-control="' + cat + '" aria-label="' + cat + '">&#xe00' + ({ bullet: '1', blitz: '2', rapid: '3', classical: '4' }[cat]) + ';</span> ' +
         (player.ratings && player.ratings[cat] != null ? player.ratings[cat] : '—') + '</span>'
       ).join('') + '</span>' +
       '<span class="player-record">' + player.wins + 'W ' + player.losses + 'L ' + player.draws + 'D</span></button>'
@@ -1346,7 +1363,7 @@
   }
 
   function showScreen(el) {
-    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl, watchEl, playersEl].forEach((s) => s.classList.add('hidden'));
+    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl, watchEl, playersEl, leaderboardEl].forEach((s) => s.classList.add('hidden'));
     el.classList.remove('hidden');
     if (el === homeEl || el === watchEl) startActiveGamesRefresh();
     else stopActiveGamesRefresh();
@@ -1528,6 +1545,7 @@
     }
     historyListEl.innerHTML = '<p class="history-empty">Loading…</p>';
     profileLogoutEl.classList.remove('hidden');
+    profileHistoryEl.innerHTML = '';
     try {
       const res = await fetch('/api/games', { headers: { Authorization: 'Bearer ' + s.token } });
       if (res.status === 401) { clearSession(); renderNav(); openAuth('login'); return; }
@@ -1557,14 +1575,17 @@
     if (pushHistory) history.pushState({ rpsScreen: 'profile', username }, '', '?view=profile&player=' + encodeURIComponent(username));
     showScreen(historyEl);
     profileLogoutEl.classList.add('hidden');
-    historyListEl.innerHTML = '<p class="history-empty">Player profile</p>';
+    historyListEl.innerHTML = '';
+    profileHistoryEl.innerHTML = '<p class="history-empty">Loading games…</p>';
     try {
       const res = await fetch('/api/players/' + encodeURIComponent(username), { cache: 'no-store' });
       if (!res.ok) throw new Error('not found');
       const data = await res.json();
       renderProfile(data.user);
+      renderPublicHistory(data.games || []);
     } catch (e) {
       profilePanelEl.innerHTML = '<p class="history-empty">Player not found.</p>';
+      profileHistoryEl.innerHTML = '';
     }
   }
 
@@ -1602,6 +1623,37 @@
     card.appendChild(grid);
     profilePanelEl.innerHTML = '';
     profilePanelEl.appendChild(card);
+  }
+
+  function renderPublicHistory(games) {
+    profileHistoryEl.innerHTML = '';
+    if (!games.length) {
+      profileHistoryEl.innerHTML = '<p class="history-empty">No finished games yet.</p>';
+      return;
+    }
+    for (const g of games) {
+      const row = document.createElement('div');
+      row.className = 'history-row';
+      row.innerHTML = '<span class="hist-outcome">' + (g.result === 'draw' ? 'Draw' : (g.result === 'blue' ? 'Blue' : 'Red') + ' win') + '</span>' +
+        '<span class="hist-opp">' + escapeHtml(g.blueName) + ' vs ' + escapeHtml(g.redName) + '</span>' +
+        '<span class="hist-tc">' + tcLabel(g) + '</span><span class="hist-rating">' + (g.rated ? 'Rated' : 'Casual') + '</span>' +
+        '<span class="hist-date">' + new Date(g.finishedAt).toLocaleString() + '</span>';
+      row.addEventListener('click', () => openReplay(g.id));
+      profileHistoryEl.appendChild(row);
+    }
+  }
+
+  async function refreshLeaderboards() {
+    try {
+      const response = await fetch('/api/leaderboard', { cache: 'no-store' });
+      if (!response.ok) return;
+      const data = await response.json();
+      for (const [cat, rows] of Object.entries(data.leaderboards || {})) {
+        const panel = leaderboardEl.querySelector('[data-category="' + cat + '"] tbody');
+        if (!panel) continue;
+        panel.innerHTML = rows.map((row, i) => '<tr><td>' + (i + 1) + '</td><td><button type="button" class="leaderboard-player" data-player-username="' + escapeHtml(row.username) + '">' + escapeHtml(row.username) + '</button></td><td>' + row.rating + '</td></tr>').join('');
+      }
+    } catch (e) { showToast('Could not load leaderboards.'); }
   }
 
   function tcLabel(g) {
@@ -1832,10 +1884,12 @@
   }
 
   function openAnalysis(baseBoard, turn, pushHistory = true) {
+    const gameHistory = arguments.length > 3 && Array.isArray(arguments[3]) ? arguments[3].slice() : [];
     explorer.baseBoard = baseBoard || null;
     explorer.baseTurn = turn || 'blue';
-    explorer.path = [];
-    explorer.step = 0;
+    explorer.history = gameHistory;
+    explorer.path = gameHistory.map(moveStringFor);
+    explorer.step = gameHistory.length;
     explorerArrows.length = 0;
     if (pushHistory) history.pushState({ rpsScreen: 'analysis' }, '', '?view=analysis');
     showScreen(explorerEl);
@@ -1858,13 +1912,32 @@
       legalTargets = engine.legalMovesFrom(pos.board, pos.turn, selected.c, selected.r);
     }
 
-    drawBoard(explorerBoardEl, pos.board, 'blue', null, selected, legalTargets);
+    const lastMove = explorer.history && explorer.step > 0 ? explorer.history[explorer.step - 1] : null;
+    drawBoard(explorerBoardEl, pos.board, 'blue', lastMove, selected, legalTargets);
+    if (lastMove) {
+      const source = explorerBoardEl.querySelector('.sq[data-c="' + lastMove.fromC + '"][data-r="' + lastMove.fromR + '"]');
+      const destination = explorerBoardEl.querySelector('.sq[data-c="' + lastMove.toC + '"][data-r="' + lastMove.toR + '"]');
+      if (source) source.classList.add('analysis-source');
+      if (destination) destination.classList.add('analysis-destination');
+    }
     renderArrows(explorerArrowsEl, explorerArrows, 'blue');
 
     updateMoveNavigation(explorerMoveNavEl, explorer.step, explorer.path.length);
 
     renderExplorerPath();
+    renderAnalysisHistory();
     renderExplorerMoves();
+  }
+
+  function renderAnalysisHistory() {
+    const history = explorer.history || [];
+    explorerHistoryEl.innerHTML = '';
+    explorerHistoryLabelEl.classList.toggle('hidden', !history.length);
+    explorerHistoryEl.classList.toggle('hidden', !history.length);
+    if (history.length) {
+      renderMovesList(explorerHistoryEl, history, explorer.step - 1);
+      explorerHistoryEl.querySelectorAll('.move[data-step]').forEach((el) => { el.dataset.analysisStep = el.dataset.step; });
+    }
   }
 
   function renderExplorerPath() {
@@ -1876,6 +1949,10 @@
 
   function renderExplorerMoves() {
     explorerMovesEl.innerHTML = '';
+    const hasGameHistory = !!(explorer.history && explorer.history.length);
+    explorerOpeningLabelEl.classList.toggle('hidden', hasGameHistory);
+    explorerMovesEl.classList.toggle('hidden', hasGameHistory);
+    if (hasGameHistory) return;
 
     // Build a stats map keyed by move string.
     const stats = new Map();
@@ -2254,7 +2331,8 @@
 
   finishedAnalysisBtn.addEventListener('click', () => {
     if (!state || state.status !== 'finished') return;
-    openAnalysis(state.board, state.turn);
+    const start = state.startPosition || { board: engine.initialBoard(), turn: 'blue' };
+    openAnalysis(start.board, start.turn, true, state.history || []);
   });
 
   copyLinkBtn.addEventListener('click', () => {
@@ -2376,6 +2454,11 @@
     showScreen(watchEl);
     refreshActiveGames();
   });
+  leaderboardBtn.addEventListener('click', () => {
+    history.pushState({ rpsScreen: 'leaderboard' }, '', '?view=leaderboard');
+    showScreen(leaderboardEl);
+    refreshLeaderboards();
+  });
   playersBtn.addEventListener('click', () => {
     history.pushState({ rpsScreen: 'players' }, '', '?view=players');
     showScreen(playersEl);
@@ -2389,11 +2472,16 @@
   explorerBackEl.addEventListener('click', () => showHome());
   watchBackEl.addEventListener('click', () => showHome());
   playersBackEl.addEventListener('click', () => showHome());
+  leaderboardBackEl.addEventListener('click', () => showHome());
   [watchListEl, featuredGameEl, homeFeaturedGameEl].forEach((root) => root.addEventListener('click', (e) => {
     const button = e.target.closest('[data-game-id]');
     if (button) spectateGame(button.dataset.gameId);
   }));
   playersListEl.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-player-username]');
+    if (row) loadPlayerProfile(row.dataset.playerUsername);
+  });
+  leaderboardEl.addEventListener('click', (e) => {
     const row = e.target.closest('[data-player-username]');
     if (row) loadPlayerProfile(row.dataset.playerUsername);
   });
@@ -2405,6 +2493,12 @@
     const li = e.target.closest('.explorer-move[data-move]');
     if (!li) return;
     descendExplorer(li.dataset.move);
+  });
+  explorerHistoryEl.addEventListener('click', (e) => {
+    const move = e.target.closest('.move[data-step]');
+    if (!move || !explorer.history) return;
+    explorer.step = +move.dataset.step + 1;
+    loadExplorer();
   });
   explorerBoardEl.addEventListener('wheel', (e) => {
     if (!explorer.position) return;
@@ -2553,6 +2647,7 @@
     else if (e.state && e.state.rpsScreen === 'analysis') openAnalysis(null, 'blue', false);
     else if (e.state && e.state.rpsScreen === 'watch') { showScreen(watchEl); refreshActiveGames(); }
     else if (e.state && e.state.rpsScreen === 'players') { showScreen(playersEl); refreshPlayers(playersSearchEl.value); }
+    else if (e.state && e.state.rpsScreen === 'leaderboard') { showScreen(leaderboardEl); refreshLeaderboards(); }
     else if (e.state && e.state.rpsScreen === 'profile') {
       const username = e.state.username || new URLSearchParams(location.search).get('player');
       if (username) loadPlayerProfile(username, false);
@@ -2604,6 +2699,10 @@
     } else if (view === 'players') {
       showScreen(playersEl);
       refreshPlayers('');
+      connect();
+    } else if (view === 'leaderboard') {
+      showScreen(leaderboardEl);
+      refreshLeaderboards();
       connect();
     } else if (view === 'profile') {
       const username = params.get('player');
