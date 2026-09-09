@@ -1,5 +1,5 @@
 /* RPS 9x9 — persistence layer (SQLite via better-sqlite3).
- * Stores users, sessions, ratings, and finished-game history.
+ * Stores users, sessions, ratings, finished-game history, and studies.
  */
 'use strict';
 
@@ -88,6 +88,38 @@ CREATE TABLE IF NOT EXISTS opening_moves (
 );
 
 CREATE INDEX IF NOT EXISTS idx_opening_moves_position ON opening_moves(position_key);
+
+CREATE TABLE IF NOT EXISTS studies (
+  id TEXT PRIMARY KEY,
+  owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  private_token TEXT NOT NULL UNIQUE,
+  published INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS study_positions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  study_id TEXT NOT NULL REFERENCES studies(id) ON DELETE CASCADE,
+  position_index INTEGER NOT NULL,
+  board TEXT NOT NULL,
+  turn TEXT NOT NULL,
+  variation TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL,
+  UNIQUE(study_id, position_index)
+);
+
+CREATE TABLE IF NOT EXISTS study_shares (
+  study_id TEXT NOT NULL REFERENCES studies(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (study_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_studies_owner ON studies(owner_id, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_studies_public ON studies(published, updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_study_shares_user ON study_shares(user_id, created_at DESC);
 `);
 
 // Per-time-control rating categories (Lichess definitions).
@@ -406,6 +438,178 @@ function safeParse(s) {
 }
 
 // ---------------------------------------------------------------------------
+// Persistent studies
+// ---------------------------------------------------------------------------
+const STUDY_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,79}$/;
+const STUDY_ID_RE = /^[A-Za-z0-9_-]{24,64}$/;
+
+function assertStudyName(name) {
+  if (typeof name !== 'string' || !STUDY_NAME_RE.test(name.trim())) {
+    const error = new Error('Invalid study name.');
+    error.code = 'BAD_STUDY_NAME';
+    throw error;
+  }
+  return name.trim();
+}
+
+function normalizeStudyPosition(position) {
+  if (!position || !Array.isArray(position.board) || position.board.length !== 9 ||
+      !['blue', 'red'].includes(position.turn)) {
+    const error = new Error('Invalid study position.');
+    error.code = 'BAD_STUDY_POSITION';
+    throw error;
+  }
+  const board = position.board.map((row) => {
+    if (!Array.isArray(row) || row.length !== 9) {
+      const error = new Error('Invalid study position.');
+      error.code = 'BAD_STUDY_POSITION';
+      throw error;
+    }
+    return row.map((piece) => {
+      if (piece === null) return null;
+      if (!piece || typeof piece !== 'object' ||
+          !['blue', 'red'].includes(piece.color) ||
+          !['rock', 'paper', 'scissors'].includes(piece.type)) {
+        const error = new Error('Invalid study position.');
+        error.code = 'BAD_STUDY_POSITION';
+        throw error;
+      }
+      return { color: piece.color, type: piece.type };
+    });
+  });
+  return { board, turn: position.turn };
+}
+
+function studyId() { return crypto.randomBytes(18).toString('base64url'); }
+function studyToken() { return crypto.randomBytes(32).toString('base64url'); }
+
+function studySummary(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    ownerId: row.owner_id,
+    ownerUsername: row.owner_username,
+    published: !!row.published,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+function studyPositionRows(studyIdValue) {
+  return db.prepare(`
+    SELECT id, position_index, board, turn, variation, created_at
+    FROM study_positions WHERE study_id = ? ORDER BY position_index ASC
+  `).all(studyIdValue).map((row) => ({
+    id: row.id,
+    index: row.position_index,
+    board: safeParse(row.board),
+    turn: row.turn,
+    variation: safeParse(row.variation),
+    createdAt: row.created_at,
+  }));
+}
+
+function studyAccess(row, viewerId, token) {
+  if (!row) return false;
+  if (viewerId != null && row.owner_id === viewerId) return true;
+  if (row.published) return true;
+  if (typeof token === 'string' && token.length >= 32 && token === row.private_token) return true;
+  if (viewerId == null) return false;
+  return !!db.prepare('SELECT 1 FROM study_shares WHERE study_id = ? AND user_id = ?').get(row.id, viewerId);
+}
+
+function getStudyRow(id) {
+  if (typeof id !== 'string' || !STUDY_ID_RE.test(id)) return null;
+  return db.prepare(`
+    SELECT s.*, u.username AS owner_username
+    FROM studies s JOIN users u ON u.id = s.owner_id WHERE s.id = ?
+  `).get(id) || null;
+}
+
+function createStudy(ownerId, name, position) {
+  const cleanName = assertStudyName(name);
+  const cleanPosition = normalizeStudyPosition(position);
+  const now = Date.now();
+  const id = studyId();
+  const token = studyToken();
+  const insert = db.transaction(() => {
+    db.prepare(`INSERT INTO studies (id, owner_id, name, private_token, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(id, ownerId, cleanName, token, now, now);
+    db.prepare(`INSERT INTO study_positions
+      (study_id, position_index, board, turn, variation, created_at)
+      VALUES (?, 0, ?, ?, '[]', ?)`).run(id, JSON.stringify(cleanPosition.board), cleanPosition.turn, now);
+  });
+  insert();
+  return getStudy(id, ownerId, null);
+}
+
+function listStudies(viewerId) {
+  const owned = viewerId == null ? [] : db.prepare(`
+    SELECT s.*, u.username AS owner_username FROM studies s
+    JOIN users u ON u.id = s.owner_id WHERE s.owner_id = ? ORDER BY s.updated_at DESC
+  `).all(viewerId).map(studySummary);
+  const shared = viewerId == null ? [] : db.prepare(`
+    SELECT s.*, u.username AS owner_username FROM studies s
+    JOIN users u ON u.id = s.owner_id JOIN study_shares sh ON sh.study_id = s.id
+    WHERE sh.user_id = ? ORDER BY s.updated_at DESC
+  `).all(viewerId).map(studySummary);
+  const publicStudies = db.prepare(`
+    SELECT s.*, u.username AS owner_username FROM studies s
+    JOIN users u ON u.id = s.owner_id WHERE s.published = 1
+    ORDER BY s.updated_at DESC LIMIT 100
+  `).all().map(studySummary);
+  return { owned, shared, public: publicStudies };
+}
+
+function getStudy(id, viewerId, token) {
+  const row = getStudyRow(id);
+  if (!studyAccess(row, viewerId, token)) return null;
+  const result = studySummary(row);
+  result.positions = studyPositionRows(row.id);
+  result.canEdit = viewerId != null && row.owner_id === viewerId;
+  if (result.canEdit) result.privateToken = row.private_token;
+  return result;
+}
+
+function addStudyPosition(id, ownerId, position) {
+  const row = getStudyRow(id);
+  if (!row || row.owner_id !== ownerId) return null;
+  const cleanPosition = normalizeStudyPosition(position);
+  const now = Date.now();
+  const insert = db.transaction(() => {
+    const next = db.prepare('SELECT COALESCE(MAX(position_index), -1) + 1 AS next FROM study_positions WHERE study_id = ?').get(id).next;
+    db.prepare(`INSERT INTO study_positions
+      (study_id, position_index, board, turn, variation, created_at)
+      VALUES (?, ?, ?, ?, '[]', ?)`).run(id, next, JSON.stringify(cleanPosition.board), cleanPosition.turn, now);
+    db.prepare('UPDATE studies SET updated_at = ? WHERE id = ?').run(now, id);
+  });
+  insert();
+  return getStudy(id, ownerId, null);
+}
+
+function deleteStudy(id, ownerId) {
+  const row = getStudyRow(id);
+  if (!row || row.owner_id !== ownerId) return false;
+  return db.prepare('DELETE FROM studies WHERE id = ? AND owner_id = ?').run(id, ownerId).changes === 1;
+}
+
+function shareStudy(id, ownerId, targetUserId) {
+  const row = getStudyRow(id);
+  if (!row || row.owner_id !== ownerId || targetUserId === ownerId) return null;
+  db.prepare('INSERT OR IGNORE INTO study_shares (study_id, user_id, created_at) VALUES (?, ?, ?)')
+    .run(id, targetUserId, Date.now());
+  return getStudy(id, ownerId, null);
+}
+
+function setStudyPublished(id, ownerId, published) {
+  const row = getStudyRow(id);
+  if (!row || row.owner_id !== ownerId) return null;
+  db.prepare('UPDATE studies SET published = ?, updated_at = ? WHERE id = ? AND owner_id = ?')
+    .run(published ? 1 : 0, Date.now(), id, ownerId);
+  return getStudy(id, ownerId, null);
+}
+
+// ---------------------------------------------------------------------------
 // Opening book (positions + aggregated move stats)
 // ---------------------------------------------------------------------------
 function recordOpening({ key, board, turn, move, wins, draws, losses }) {
@@ -467,5 +671,12 @@ module.exports = {
   getOpening,
   publicUser,
   topCategoriesForUser,
+  createStudy,
+  listStudies,
+  getStudy,
+  addStudyPosition,
+  deleteStudy,
+  shareStudy,
+  setStudyPublished,
   USERNAME_RE,
 };

@@ -28,6 +28,7 @@
   const editorBtn = $('editorBtn');
   const playBtn = $('playBtn');
   const watchBtn = $('watchBtn');
+  const studyBtn = $('studyBtn');
   const playersBtn = $('playersBtn');
   const leaderboardBtn = $('leaderboardBtn');
   const leaderboardBackEl = $('leaderboardBack');
@@ -70,6 +71,10 @@
   const tcMinutesValEl = $('tcMinutesVal');
   const tcIncrementValEl = $('tcIncrementVal');
   const tcPresetsEl = $('tcPresets');
+  const timeControlSummaryEl = $('timeControlSummary');
+  const timeControlSummarySymbolEl = $('timeControlSummarySymbol');
+  const timeControlCategoryEl = $('timeControlCategory');
+  const timeControlRatingEl = $('timeControlRating');
   const modeRatedEl = $('modeRated');
   const modeCasualEl = $('modeCasual');
   const playFromPositionEl = $('playFromPosition');
@@ -153,8 +158,40 @@
   const editorFlipEl = $('editorFlip');
   const editorAnalysisEl = $('editorAnalysis');
   const editorToAnalysisEl = $('editorToAnalysis');
+  const editorAddToStudyEl = $('editorAddToStudy');
   const editorBackEl = $('editorBack');
   const explorerArrowsEl = $('explorerArrows');
+
+  // Studies
+  const studyEl = $('study');
+  const studyBackEl = $('studyBack');
+  const studyListEl = $('studyList');
+  const studyCreateButtonEl = $('studyCreateButton');
+  const studyCreatePanelEl = $('studyCreatePanel');
+  const studyNameEl = $('studyName');
+  const studyCreateSubmitEl = $('studyCreateSubmit');
+  const studyCreateCancelEl = $('studyCreateCancel');
+  const studyCreateErrorEl = $('studyCreateError');
+  const studyOwnedListEl = $('studyOwnedList');
+  const studySharedListEl = $('studySharedList');
+  const studyPublicListEl = $('studyPublicList');
+  const studyPageEl = $('studyPage');
+  const studyNameHeadingEl = $('studyNameHeading');
+  const studyOwnerEl = $('studyOwner');
+  const studyOwnerActionsEl = $('studyOwnerActions');
+  const studyShareEl = $('studyShare');
+  const studyPublishEl = $('studyPublish');
+  const studyDeleteEl = $('studyDelete');
+  const studySharePanelEl = $('studySharePanel');
+  const studyShareUsernameEl = $('studyShareUsername');
+  const studyShareSubmitEl = $('studyShareSubmit');
+  const studyPrivateLinkEl = $('studyPrivateLink');
+  const studyShareStatusEl = $('studyShareStatus');
+  const studyPublicStatusEl = $('studyPublicStatus');
+  const studyPositionsEl = $('studyPositions');
+  const studyChooserEl = $('studyChooser');
+  const studyChooserListEl = $('studyChooserList');
+  const studyChooserCancelEl = $('studyChooserCancel');
 
   // Lobby
   const lobbyListEl = $('lobbyList');
@@ -231,6 +268,8 @@
   let watchCategory = 'all';
   let playersSearchTimer = null;
   let dismissedInGameNoticeId = null;
+  let studyLists = { owned: [], shared: [], public: [] };
+  let currentStudy = null;
 
   let explorer = {        // analysis / opening explorer state
     baseBoard: null,      // custom start board (null = standard initial position)
@@ -1517,6 +1556,199 @@
     activeGamesTimer = null;
   }
 
+  function studyHeaders() {
+    const token = sessionToken();
+    return token ? { Authorization: 'Bearer ' + token } : {};
+  }
+
+  async function studyRequest(url, options = {}) {
+    const headers = { ...studyHeaders(), ...(options.headers || {}) };
+    if (options.body && !headers['Content-Type']) headers['Content-Type'] = 'application/json';
+    return fetch(url, { ...options, headers, cache: 'no-store' });
+  }
+
+  function studyCard(study, kind, onClick = () => openStudy(study.id)) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'study-card';
+    card.dataset.studyId = study.id;
+    card.dataset.studyKind = kind;
+    card.innerHTML = '<span class="study-card-name">' + escapeHtml(study.name) + '</span>' +
+      '<span class="study-card-owner">' + (kind === 'owned' ? 'Your study' : 'by ' + escapeHtml(study.ownerUsername || 'Intransitive player')) + '</span>' +
+      '<span class="study-card-state">' + (study.published ? 'Public' : kind === 'owned' ? 'Private' : 'Shared') + '</span>';
+    card.addEventListener('click', onClick);
+    return card;
+  }
+
+  function renderStudyCards(container, studies, kind, emptyText) {
+    container.innerHTML = '';
+    if (!studies.length) {
+      container.innerHTML = '<p class="history-empty">' + escapeHtml(emptyText) + '</p>';
+      return;
+    }
+    for (const study of studies) container.appendChild(studyCard(study, kind));
+  }
+
+  async function loadStudyList() {
+    try {
+      const response = await studyRequest('/api/studies');
+      if (!response.ok) throw new Error('Could not load studies.');
+      studyLists = await response.json();
+      renderStudyCards(studyOwnedListEl, studyLists.owned || [], 'owned', 'Log in to create studies.');
+      renderStudyCards(studySharedListEl, studyLists.shared || [], 'shared', 'No studies have been shared with you.');
+      renderStudyCards(studyPublicListEl, studyLists.public || [], 'public', 'No public studies yet.');
+    } catch (e) {
+      studyOwnedListEl.innerHTML = '<p class="history-empty">Could not load studies.</p>';
+      studySharedListEl.innerHTML = '';
+      studyPublicListEl.innerHTML = '';
+    }
+  }
+
+  function showStudyList(pushHistory = true) {
+    if (pushHistory) history.pushState({ rpsScreen: 'studies' }, '', '?view=studies');
+    currentStudy = null;
+    studyPageEl.classList.add('hidden');
+    studyListEl.classList.remove('hidden');
+    studyChooserEl.classList.add('hidden');
+    studyCreatePanelEl.classList.add('hidden');
+    showScreen(studyEl);
+    loadStudyList();
+  }
+
+  function renderStudyPosition(position) {
+    const article = document.createElement('article');
+    article.className = 'study-position';
+    article.dataset.positionId = position.id;
+    article.innerHTML = '<div class="study-position-head"><h3>Position ' + (position.index + 1) + '</h3>' +
+      '<span>' + (position.turn === 'blue' ? 'Blue' : 'Red') + ' to play</span></div>' +
+      '<div class="study-board">' + miniBoardMarkup(position.board) + '</div>';
+    return article;
+  }
+
+  function renderStudyPage(study) {
+    currentStudy = study;
+    studyListEl.classList.add('hidden');
+    studyChooserEl.classList.add('hidden');
+    studyPageEl.classList.remove('hidden');
+    studyNameHeadingEl.textContent = study.name;
+    studyOwnerEl.textContent = 'by ' + (study.ownerUsername || 'Intransitive player') + (study.published ? ' · Public' : ' · Private');
+    studyOwnerActionsEl.classList.toggle('hidden', !study.canEdit);
+    studySharePanelEl.classList.add('hidden');
+    studyShareStatusEl.textContent = '';
+    studyPublicStatusEl.textContent = '';
+    studyPositionsEl.innerHTML = '';
+    for (const position of study.positions || []) studyPositionsEl.appendChild(renderStudyPosition(position));
+    if (study.canEdit) {
+      studyPublishEl.textContent = study.published ? 'Unpublish' : 'Publish';
+      studyPrivateLinkEl.value = location.origin + '/?view=study&study=' + encodeURIComponent(study.id) + '&token=' + encodeURIComponent(study.privateToken);
+    } else {
+      studyPrivateLinkEl.value = '';
+    }
+  }
+
+  async function openStudy(id, token = null, pushHistory = true) {
+    if (!id) return;
+    const suffix = token ? '&token=' + encodeURIComponent(token) : '';
+    if (pushHistory) history.pushState({ rpsScreen: 'study', studyId: id }, '', '?view=study&study=' + encodeURIComponent(id) + suffix);
+    showScreen(studyEl);
+    studyListEl.classList.add('hidden');
+    studyPageEl.classList.remove('hidden');
+    studyNameHeadingEl.textContent = 'Loading study…';
+    try {
+      const response = await studyRequest('/api/studies/' + encodeURIComponent(id) + (token ? '?token=' + encodeURIComponent(token) : ''));
+      if (!response.ok) throw new Error('Study not found.');
+      renderStudyPage((await response.json()).study);
+    } catch (e) {
+      showToast('Study not found or unavailable.');
+      showStudyList(false);
+    }
+  }
+
+  async function createStudy() {
+    const name = studyNameEl.value.trim();
+    studyCreateErrorEl.classList.add('hidden');
+    const session = getSession();
+    if (!session) { openAuth('login'); return; }
+    try {
+      const response = await studyRequest('/api/studies', {
+        method: 'POST',
+        body: JSON.stringify({ name, position: { board: engine.initialBoard(), turn: 'blue' } }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not create study.');
+      await openStudy(data.study.id);
+    } catch (e) {
+      studyCreateErrorEl.textContent = e.message;
+      studyCreateErrorEl.classList.remove('hidden');
+    }
+  }
+
+  async function shareCurrentStudy() {
+    if (!currentStudy || !currentStudy.canEdit) return;
+    studyShareStatusEl.textContent = '';
+    try {
+      const response = await studyRequest('/api/studies/' + encodeURIComponent(currentStudy.id) + '/share', {
+        method: 'POST',
+        body: JSON.stringify({ username: studyShareUsernameEl.value.trim() }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not share study.');
+      studyShareStatusEl.textContent = 'Study shared with ' + data.sharedWith + '.';
+      studyShareUsernameEl.value = '';
+    } catch (e) { studyShareStatusEl.textContent = e.message; }
+  }
+
+  async function publishCurrentStudy() {
+    if (!currentStudy || !currentStudy.canEdit) return;
+    const published = !currentStudy.published;
+    try {
+      const response = await studyRequest('/api/studies/' + encodeURIComponent(currentStudy.id) + '/publish', {
+        method: 'POST', body: JSON.stringify({ published }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not update publication.');
+      renderStudyPage(data.study);
+      studyPublicStatusEl.textContent = published ? 'Study is public.' : 'Study is private.';
+      loadStudyList();
+    } catch (e) { studyPublicStatusEl.textContent = e.message; }
+  }
+
+  async function deleteCurrentStudy() {
+    if (!currentStudy || !currentStudy.canEdit || !window.confirm('Delete this study?')) return;
+    try {
+      const response = await studyRequest('/api/studies/' + encodeURIComponent(currentStudy.id), { method: 'DELETE' });
+      if (!response.ok) throw new Error('Could not delete study.');
+      showStudyList(false);
+    } catch (e) { showToast(e.message); }
+  }
+
+  async function openStudyChooser() {
+    const session = getSession();
+    if (!session) { openAuth('login'); return; }
+    await loadStudyList();
+    studyChooserListEl.innerHTML = '';
+    if (!studyLists.owned.length) {
+      studyChooserListEl.innerHTML = '<p class="history-empty">Create a study first.</p>';
+    } else {
+      for (const study of studyLists.owned) {
+        studyChooserListEl.appendChild(studyCard(study, 'owned', () => addEditorPosition(study.id)));
+      }
+    }
+    studyChooserEl.classList.remove('hidden');
+  }
+
+  async function addEditorPosition(studyId) {
+    try {
+      const response = await studyRequest('/api/studies/' + encodeURIComponent(studyId) + '/positions', {
+        method: 'POST',
+        body: JSON.stringify({ position: { board: editor.board, turn: editor.turn } }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not add position.');
+      await openStudy(data.study.id);
+    } catch (e) { showToast(e.message); }
+  }
+
   function spectateGame(id) {
     if (!id) return;
     connectToGame(id, true, true);
@@ -1579,7 +1811,7 @@
   }
 
   function showScreen(el) {
-    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl, watchEl, playersEl, leaderboardEl].forEach((s) => s.classList.add('hidden'));
+    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl, watchEl, playersEl, leaderboardEl, studyEl].forEach((s) => s.classList.add('hidden'));
     el.classList.remove('hidden');
     if (el === homeEl || el === watchEl) startActiveGamesRefresh();
     else stopActiveGamesRefresh();
@@ -1722,6 +1954,19 @@
     for (const b of tcPresetsEl.querySelectorAll('.tc-preset')) {
       b.classList.toggle('active', b.dataset.min === min && b.dataset.inc === inc);
     }
+    renderTimeControlSummary();
+  }
+
+  function renderTimeControlSummary() {
+    if (!timeControlSummaryEl) return;
+    const category = timeControlCategory(parseTimeControl());
+    const session = getSession();
+    const rating = session && session.user && session.user.ratings && session.user.ratings[category]
+      ? session.user.ratings[category].rating : null;
+    timeControlSummarySymbolEl.dataset.timeControl = category;
+    timeControlSummarySymbolEl.dataset.icon = TIME_CONTROL_SYMBOLS[category];
+    timeControlCategoryEl.textContent = TIME_CONTROL_LABELS[category];
+    timeControlRatingEl.textContent = rating == null ? '—' : String(Math.round(rating));
   }
 
   function setRatedMode(rated) {
@@ -1759,6 +2004,7 @@
       navGuestEl.classList.remove('hidden');
       navUserEl.classList.add('hidden');
     }
+    renderTimeControlSummary();
   }
 
   function openAuth(mode) {
@@ -2839,6 +3085,7 @@
 
   // Analysis (opening explorer) + board editor events
   analysisBtn.addEventListener('click', () => openAnalysis(null, 'blue'));
+  studyBtn.addEventListener('click', () => showStudyList());
   editorBtn.addEventListener('click', () => openEditor());
   watchBtn.addEventListener('click', () => {
     history.pushState({ rpsScreen: 'watch' }, '', '?view=watch');
@@ -2855,6 +3102,22 @@
     showScreen(playersEl);
     refreshPlayers(playersSearchEl.value);
   });
+  studyBackEl.addEventListener('click', () => showHome());
+  studyCreateButtonEl.addEventListener('click', () => {
+    studyCreatePanelEl.classList.remove('hidden');
+    studyNameEl.focus();
+  });
+  studyCreateCancelEl.addEventListener('click', () => studyCreatePanelEl.classList.add('hidden'));
+  studyCreateSubmitEl.addEventListener('click', createStudy);
+  studyNameEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') createStudy(); });
+  studyShareEl.addEventListener('click', () => {
+    studySharePanelEl.classList.toggle('hidden');
+    if (!studySharePanelEl.classList.contains('hidden')) studyShareUsernameEl.focus();
+  });
+  studyShareSubmitEl.addEventListener('click', shareCurrentStudy);
+  studyPublishEl.addEventListener('click', publishCurrentStudy);
+  studyDeleteEl.addEventListener('click', deleteCurrentStudy);
+  studyChooserCancelEl.addEventListener('click', () => studyChooserEl.classList.add('hidden'));
   opponentNameEl.addEventListener('click', () => {
     if (!state || !myColor) return;
     const opponent = state.players[myColor === 'blue' ? 'red' : 'blue'];
@@ -2986,6 +3249,7 @@
     history.pushState({ rpsScreen: 'home' }, '', '?');
     showHome(false);
   });
+  editorAddToStudyEl.addEventListener('click', openStudyChooser);
 
   setupPieceDragging({
     boardEl,
@@ -3134,6 +3398,11 @@
     else if (e.state && e.state.rpsScreen === 'watch') { showScreen(watchEl); refreshActiveGames(); }
     else if (e.state && e.state.rpsScreen === 'players') { showScreen(playersEl); refreshPlayers(playersSearchEl.value); }
     else if (e.state && e.state.rpsScreen === 'leaderboard') { showScreen(leaderboardEl); refreshLeaderboards(); }
+    else if (e.state && e.state.rpsScreen === 'studies') showStudyList(false);
+    else if (e.state && e.state.rpsScreen === 'study') {
+      const id = e.state.studyId || params.get('study');
+      openStudy(id, params.get('token'), false);
+    }
     else if (e.state && e.state.rpsScreen === 'profile') {
       const username = e.state.username || new URLSearchParams(location.search).get('player');
       if (username) loadPlayerProfile(username, false);
@@ -3189,6 +3458,12 @@
     } else if (view === 'leaderboard') {
       showScreen(leaderboardEl);
       refreshLeaderboards();
+      connect();
+    } else if (view === 'studies') {
+      showStudyList(false);
+      connect();
+    } else if (view === 'study') {
+      openStudy(params.get('study'), params.get('token'), false);
       connect();
     } else if (view === 'profile') {
       const username = params.get('player');

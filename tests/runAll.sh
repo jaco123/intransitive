@@ -18,6 +18,12 @@ if ! node "$project_dir/tests/requested-ui.js"; then
   failed=1
 fi
 
+printf '\n===== requested batch UI regression test =====\n'
+if ! node "$project_dir/tests/requested-batch-ui.js"; then
+  printf 'FAILED: requested batch UI regression test\n'
+  failed=1
+fi
+
 printf '\n===== editor UI regression and interaction test =====\n'
 if ! node "$project_dir/tests/editor-ui.js"; then
   printf 'FAILED: editor UI regression and interaction test\n'
