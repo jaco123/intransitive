@@ -339,7 +339,10 @@ async function dragWithinSquare(page, board, color) {
 
         const activeRow = opponent.page.locator('#profileHistory [data-game-id]').first();
         const activeText = await activeRow.innerText();
-        const activeStructure = await activeRow.evaluate((el) => [...el.children].map((child) => child.className.replace(' history-row-active', '')));
+        const activeStructure = await activeRow.evaluate((el) => [...el.children].map((child) => ({
+          tag: child.tagName,
+          classes: [...child.classList].filter((name) => !['playing', 'win', 'loss', 'draw'].includes(name)).sort(),
+        })));
         assert.strictEqual((activeText.match(/\bPlaying\b/g) || []).length, 1,
           'active profile rows should show Playing once, not duplicate it');
         assert.strictEqual(await activeRow.locator('.hist-tc .time-control-symbol').count(), 1,
@@ -355,7 +358,10 @@ async function dragWithinSquare(page, board, color) {
 
         const finishedRow = opponent.page.locator('#profileHistory .history-row').first();
         const finishedOutcome = await finishedRow.locator('.hist-outcome').innerText();
-        const finishedStructure = await finishedRow.evaluate((el) => [...el.children].map((child) => child.className));
+        const finishedStructure = await finishedRow.evaluate((el) => [...el.children].map((child) => ({
+          tag: child.tagName,
+          classes: [...child.classList].filter((name) => !['playing', 'win', 'loss', 'draw'].includes(name)).sort(),
+        })));
         assert.deepStrictEqual(finishedStructure, activeStructure, 'active and finished profile rows should share one structure');
         assert.match(finishedOutcome, /^(Win|Loss|Draw)$/, 'finished outcome should be relative to the profiled player');
         assert.doesNotMatch(finishedOutcome, /Blue|Red/, 'finished profile outcome should not expose board colors');
