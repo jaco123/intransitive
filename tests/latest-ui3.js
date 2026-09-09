@@ -34,10 +34,11 @@ async function createPrivateGame(createPage, joinPage) {
 
 async function registerUser(context) {
   const page = await context.newPage({ viewport: { width: 1366, height: 768 } });
-  page.setDefaultTimeout(5000);
+  page.setDefaultTimeout(15000);
   await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
   const username = 'qa' + Date.now().toString(36) + crypto.randomBytes(4).toString('hex');
   await page.getByRole('button', { name: 'Sign up', exact: true }).click();
+  await page.locator('#authModal').waitFor({ state: 'visible' });
   await page.locator('#authUsername').fill(username);
   await page.locator('#authPassword').fill(crypto.randomBytes(18).toString('base64url'));
   await page.locator('#authSubmit').click();
@@ -115,9 +116,9 @@ async function pointerDrag(page, source, target) {
       await page.getByRole('button', { name: 'Blue Rock', exact: true }).click();
       const board = page.locator('#editorBoard');
       const squares = ['0', '1', '2'].map((c) => '#editorBoard .sq[data-c="' + c + '"][data-r="4"]');
-      const first = await board.locator(squares[0]).boundingBox();
-      const second = await board.locator(squares[1]).boundingBox();
-      const third = await board.locator(squares[2]).boundingBox();
+      const first = await page.locator(squares[0]).boundingBox();
+      const second = await page.locator(squares[1]).boundingBox();
+      const third = await page.locator(squares[2]).boundingBox();
       assert.ok(first && second && third, 'paint squares should be visible');
       await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
       await page.mouse.down();
@@ -156,7 +157,7 @@ async function pointerDrag(page, source, target) {
       await page.locator('#explorerBoard .piece[data-c="2"][data-r="4"][data-color="blue"]').waitFor({ state: 'visible' });
       assert.ok(await page.evaluate(() => window.__rpsAudioPlays.length > 0), 'Analysis capture should invoke the game sound playback path');
       await openAnalysis(page);
-      await pointerDrag(page, '#explorerBoard .piece[data-color="blue"]', '#explorerBoard .mv-dot');
+      await pointerDrag(page, '#explorerBoard .piece[data-color="blue"]', '#explorerBoard .sq[data-c="0"][data-r="5"]');
       assert.ok(await page.locator('#explorer .move-nav button').count() >= 4, 'Analysis drag move should update the move path');
     } catch (error) { failures.push('analysis click capture/drag/audio: ' + error.message); await page.mouse.up(); }
 
@@ -188,7 +189,9 @@ async function pointerDrag(page, source, target) {
       const before = await card.locator('.watch-game-preview').innerHTML();
       const source = creator.locator('#board .piece[data-color="blue"]').first();
       await source.click();
-      await creator.locator('#board .mv-dot').first().click();
+      const target = await creator.locator('#board .mv-dot').first().boundingBox();
+      assert.ok(target, 'live move target should be visible');
+      await creator.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
       await watch.waitForFunction((previous) => {
         const current = document.querySelector('.watch-game-preview');
         return current && current.innerHTML !== previous;

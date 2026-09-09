@@ -957,6 +957,7 @@
           beginPieceDrag(config, sq, paintPiece,
             config.boardEl.querySelector(`.sq[data-c="${sq.c}"][data-r="${sq.r}"]`), e, 'paint');
           if (config.onStart) config.onStart(sq, paintPiece);
+          if (config.onPaint) config.onPaint(sq, paintPiece);
           return;
         }
       }
