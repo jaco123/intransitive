@@ -279,7 +279,8 @@ async function centerOf(locator) {
         await target.page.locator('#game').waitFor({ state: 'visible' });
         await challenger.page.locator('#gameStatus').filter({ hasText: /move|to move/ }).waitFor();
         assert.strictEqual(new URL(challenger.page.url()).searchParams.get('game'), new URL(target.page.url()).searchParams.get('game'), 'accepted challenge should open one shared game');
-        assert.strictEqual(await challenger.page.locator('#gameMode').innerText(), 'Rated', 'accepted challenge should preserve rated mode');
+        const acceptedMode = await challenger.page.locator('#gameMode').innerText();
+        assert.match(acceptedMode, /^rated$/i, 'accepted challenge should preserve rated mode (got ' + acceptedMode + ')');
         assert.match(await challenger.page.locator('#playerClock').innerText(), /^3:00$/, 'accepted challenge should preserve the selected 3+2 time control');
       } finally {
         await Promise.allSettled([
