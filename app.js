@@ -1373,7 +1373,14 @@
   }
 
   function timeControlCategory(game) {
-    return game.category;
+    if (game.category && TIME_CONTROL_LABELS[game.category]) return game.category;
+    const initial = Number(game.tcInitial) || 0;
+    const increment = Number(game.tcIncrement) || 0;
+    const estimated = initial + 40 * increment;
+    if (estimated < 180) return 'bullet';
+    if (estimated < 480) return 'blitz';
+    if (estimated < 1500) return 'rapid';
+    return 'classical';
   }
 
   function gameRating(game) {
@@ -1798,7 +1805,7 @@
       if (res.status === 401) { clearSession(); renderNav(); openAuth('login'); return; }
       const data = await res.json();
       renderProfile(data.user);
-      renderProfileGames(data.activeGames || [], finishedGames);
+      renderProfileGames(data.activeGames || [], finishedGames, data.user.id);
     } catch (e) {
       profilePanelEl.innerHTML = '';
       profileRatingsEl.innerHTML = '';
@@ -1818,7 +1825,7 @@
       if (!res.ok) throw new Error('not found');
       const data = await res.json();
       renderProfile(data.user);
-      renderProfileGames(data.activeGames || [], data.games || []);
+      renderProfileGames(data.activeGames || [], data.games || [], data.user.id);
     } catch (e) {
       profilePanelEl.innerHTML = '<p class="history-empty">Player not found.</p>';
       profileHistoryEl.innerHTML = '';
@@ -1826,7 +1833,15 @@
     }
   }
 
-  function profileGameRow(game, active) {
+  function profileOutcome(game, active, profileUserId) {
+    if (active) return { label: 'Playing', className: 'playing' };
+    if (game.result === 'draw') return { label: 'Draw', className: 'draw' };
+    const won = (game.result === 'blue' && game.blueUserId === profileUserId) ||
+      (game.result === 'red' && game.redUserId === profileUserId);
+    return won ? { label: 'Win', className: 'win' } : { label: 'Loss', className: 'loss' };
+  }
+
+  function profileGameRow(game, active, profileUserId) {
     const row = document.createElement(active ? 'button' : 'div');
     if (active) row.type = 'button';
     row.className = 'history-row' + (active ? ' history-row-active' : '');
@@ -1838,20 +1853,22 @@
     const blue = active ? (game.players.blue ? game.players.blue.name : 'Waiting for player') : game.blueName;
     const red = active ? (game.players.red ? game.players.red.name : 'Waiting for player') : game.redName;
     const category = timeControlCategory(game);
+    const outcome = profileOutcome(game, active, profileUserId);
+    const timestamp = active ? game.createdAt : game.finishedAt;
     row.innerHTML =
-      '<span class="hist-outcome ' + (active ? 'playing' : '') + '">' + (active ? 'Playing' : (game.result === 'draw' ? 'Draw' : (game.result === 'blue' ? 'Blue' : 'Red') + ' win')) + '</span>' +
+      '<span class="hist-outcome ' + outcome.className + '">' + outcome.label + '</span>' +
       '<span class="history-main"><span class="hist-opp">' + (active ? escapeHtml(blue + ' vs ' + red) : escapeHtml(blue + ' vs ' + red)) + '</span>' +
-        '<span class="hist-tc">' + (active ? timeControlIconMarkup(category) + ' ' + TIME_CONTROL_LABELS[category] : tcLabel(game)) + '</span></span>' +
+        '<span class="hist-tc">' + timeControlIconMarkup(category) + ' ' + tcLabel(game) + '</span></span>' +
       '<span class="hist-rating">' + (game.rated ? 'Rated' : 'Casual') + '</span>' +
-      '<span class="hist-date">' + (active ? 'Playing' : new Date(game.finishedAt).toLocaleString()) + '</span>';
+      '<span class="hist-date">' + (timestamp ? new Date(timestamp).toLocaleString() : '—') + '</span>';
     if (!active) row.addEventListener('click', () => openReplay(game.id));
     return row;
   }
 
-  function renderProfileGames(activeGames, finishedGames) {
+  function renderProfileGames(activeGames, finishedGames, profileUserId) {
     profileHistoryEl.innerHTML = '';
-    for (const game of activeGames) profileHistoryEl.appendChild(profileGameRow(game, true));
-    for (const game of finishedGames) profileHistoryEl.appendChild(profileGameRow(game, false));
+    for (const game of activeGames) profileHistoryEl.appendChild(profileGameRow(game, true, profileUserId));
+    for (const game of finishedGames) profileHistoryEl.appendChild(profileGameRow(game, false, profileUserId));
     if (!activeGames.length && !finishedGames.length) {
       profileHistoryEl.innerHTML = '<p class="history-empty">No finished games yet.</p>';
     }

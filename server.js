@@ -958,6 +958,8 @@ function activeGameInfo(g) {
     rated: !!g.rated,
     casual: !!g.casual,
     category: timeControlCategory(g.timeControl),
+    tcInitial: g.timeControl.initial,
+    tcIncrement: g.timeControl.increment,
     createdAt: g.createdAt,
     board: engine.cloneBoard(g.game.board),
     turn: g.game.turn,

@@ -328,6 +328,48 @@ async function dragWithinSquare(page, board, color) {
       }
     });
 
+    await check('profile history uses one shared row presentation', async () => {
+      const cc = await browser.newContext(); const oc = await browser.newContext();
+      let creator = null; let opponent = null;
+      try {
+        creator = await register(cc); opponent = await register(oc);
+        const gameUrl = await createGame(creator.page, opponent.page);
+        await opponent.page.locator('#opponentName').click();
+        await opponent.page.locator('#profileHistory [data-game-id]').first().waitFor({ state: 'visible' });
+
+        const activeRow = opponent.page.locator('#profileHistory [data-game-id]').first();
+        const activeText = await activeRow.innerText();
+        const activeStructure = await activeRow.evaluate((el) => [...el.children].map((child) => child.className.replace(' history-row-active', '')));
+        assert.strictEqual((activeText.match(/\bPlaying\b/g) || []).length, 1,
+          'active profile rows should show Playing once, not duplicate it');
+        assert.strictEqual(await activeRow.locator('.hist-tc .time-control-symbol').count(), 1,
+          'active profile rows should show the time-control symbol');
+
+        await opponent.page.goto(gameUrl, { waitUntil: 'domcontentloaded' });
+        await opponent.page.locator('#game').waitFor({ state: 'visible' });
+        await opponent.page.locator('#resign').click();
+        await opponent.page.getByRole('button', { name: 'Yes', exact: true }).click();
+        await creator.page.locator('#gameStatus').filter({ hasText: /resign/ }).waitFor();
+        await opponent.page.goto(BASE + '/?view=profile&player=' + encodeURIComponent(creator.username), { waitUntil: 'domcontentloaded' });
+        await opponent.page.locator('#profileHistory .history-row').first().waitFor({ state: 'visible' });
+
+        const finishedRow = opponent.page.locator('#profileHistory .history-row').first();
+        const finishedOutcome = await finishedRow.locator('.hist-outcome').innerText();
+        const finishedStructure = await finishedRow.evaluate((el) => [...el.children].map((child) => child.className));
+        assert.deepStrictEqual(finishedStructure, activeStructure, 'active and finished profile rows should share one structure');
+        assert.match(finishedOutcome, /^(Win|Loss|Draw)$/, 'finished outcome should be relative to the profiled player');
+        assert.doesNotMatch(finishedOutcome, /Blue|Red/, 'finished profile outcome should not expose board colors');
+        assert.strictEqual(await finishedRow.locator('.hist-tc .time-control-symbol').count(), 1,
+          'finished profile rows should show the same time-control symbol');
+      } finally {
+        await Promise.allSettled([
+          creator && creator.page ? creator.page.close() : Promise.resolve(),
+          opponent && opponent.page ? opponent.page.close() : Promise.resolve(),
+          cc.close(), oc.close(),
+        ]);
+      }
+    });
+
     await check('Intransitive title preserves active game and history', async () => {
       const cc = await browser.newContext(); const oc = await browser.newContext();
       let creator = null; let opponent = null;
