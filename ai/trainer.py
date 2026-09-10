@@ -257,11 +257,21 @@ class Trainer:
         self.model.eval()
         evaluator = NetworkEvaluator(self.model, self.device, self.amp)
         started = time.monotonic()
+        last_progress_status = [0.0]
+
+        def report_self_play(progress):
+            now = time.monotonic()
+            interval = float(self.config.get('status_interval_seconds', 10))
+            if now - last_progress_status[0] >= interval:
+                last_progress_status[0] = now
+                self._write_status('running', 'self-play in progress', self_play=progress)
+
         episodes = generate_self_play(
             evaluator, int(self.config['self_play_games']), int(self.config['mcts_simulations']),
             int(self.config.get('self_play_batch_games', 4)), int(self.config.get('temperature_plies', 12)),
             float(self.config.get('temperature', 1.0)), self.rng, True, int(self.config.get('max_game_plies', 2000)),
             lambda: self.stop_requested,
+            report_self_play,
         )
         next_episode = max([int(path.stem.split('-')[1]) for path in self.replay.paths()] or [0]) + 1
         for episode in episodes:

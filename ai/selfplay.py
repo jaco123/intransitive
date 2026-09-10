@@ -28,7 +28,7 @@ def _value_for_player(state: GameState, player: int) -> float:
 def generate_self_play(
     evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
     temperature_plies: int, temperature: float, rng: np.random.Generator,
-    root_noise: bool = True, max_game_plies: int = 2000, should_stop=None,
+    root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
 ) -> list[Episode]:
     """Advance several games in lockstep so leaf evaluations are GPU-batched."""
     episodes: list[Episode] = []
@@ -62,6 +62,8 @@ def generate_self_play(
                     next_records.append(record)
             active, records = next_active, next_records
             ply += 1
+            if progress is not None:
+                progress({'active_games': len(active), 'completed_games': len(episodes), 'ply': ply})
             if ply > max_game_plies:
                 raise RuntimeError('self-play exceeded configured safety horizon without an engine terminal result')
         remaining -= count
