@@ -84,6 +84,16 @@ if ! node "$project_dir/tests/live-deployment.js"; then
   failed=1
 fi
 
+printf '\n===== AlphaZero AI conformance/training tests =====\n'
+ai_python="${INTRANSITIVE_AI_PYTHON:-/home/ubuntu/intransitive-ai-venv/bin/python}"
+if [ ! -x "$ai_python" ]; then
+  printf 'AI Python environment not found: %s\n' "$ai_python"
+  failed=1
+elif ! "$ai_python" "$project_dir/tests/ai_tests.py"; then
+  printf 'FAILED: AlphaZero AI conformance/training tests\n'
+  failed=1
+fi
+
 if [ "$failed" -ne 0 ]; then
   printf '\nOne or more tests failed.\n'
   exit 1

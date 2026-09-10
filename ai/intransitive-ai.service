@@ -1,0 +1,42 @@
+[Unit]
+Description=Intransitive AlphaZero self-play trainer
+After=network.target rps.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/rps-prod
+Environment=PYTHONUNBUFFERED=1
+Environment=OMP_NUM_THREADS=2
+Environment=MKL_NUM_THREADS=2
+Environment=CUDA_VISIBLE_DEVICES=0
+ExecStart=/home/ubuntu/intransitive-ai-venv/bin/python -m ai.trainer --data-dir /home/ubuntu/intransitive-ai-data --config /home/ubuntu/rps-prod/ai/config.json
+Restart=always
+RestartSec=10
+KillMode=mixed
+TimeoutStopSec=30
+Nice=10
+CPUQuota=200%
+MemoryMax=12G
+TasksMax=32
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX
+ReadWritePaths=/home/ubuntu/intransitive-ai-data
+DeviceAllow=/dev/nvidia0 rw
+DeviceAllow=/dev/nvidiactl rw
+DeviceAllow=/dev/nvidia-uvm rw
+DeviceAllow=/dev/nvidia-uvm-tools rw
+
+[Install]
+WantedBy=multi-user.target
