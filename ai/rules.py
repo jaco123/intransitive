@@ -13,6 +13,7 @@ from typing import Iterable
 import numpy as np
 
 SIZE = 9
+BOARD_HISTORY_LIMIT = 4
 DIRS = ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (1, -1), (-1, 1), (-1, -1))
 BLUE, RED = 1, -1
 ROCK, PAPER, SCISSORS = 1, 2, 3
@@ -154,15 +155,39 @@ class GameState:
         other.history = list(self.history)
         other.last_move = self.last_move
         other.position_counts = dict(self.position_counts)
-        other.board_history = [board.copy() for board in self.board_history]
+        # The rule engine keeps complete position_counts/history. Only the
+        # bounded observation tail is copied for neural input; old snapshots
+        # cannot affect a rule transition.
+        other.board_history = list(self.board_history)
         return other
 
     def position_key(self) -> str:
         return board_string(self.board) + (':b' if self.turn == BLUE else ':r')
 
+    def next_position_key_trusted(self, action: int, current_board_string: str | None = None) -> str:
+        """Return the next repetition key for a known legal action.
+
+        This is used only by the rule-derived observation encoder after it has
+        obtained the public legal-action list. It does not mutate the state.
+        """
+        from_c, from_r, to_c, to_r = decode_action(action)
+        board_string_value = board_string(self.board) if current_board_string is None else current_board_string
+        characters = list(board_string_value)
+        source_index = (SIZE - 1 - from_r) * SIZE + from_c
+        target_index = (SIZE - 1 - to_r) * SIZE + to_c
+        piece = int(self.board[from_r, from_c])
+        characters[source_index] = '.'
+        characters[target_index] = {1: 'R', 2: 'P', 3: 'S', -1: 'r', -2: 'p', -3: 's'}[piece]
+        goal = piece > 0 and to_c == SIZE - 1 and to_r == SIZE - 1 or piece < 0 and to_c == 0 and to_r == 0
+        next_turn = self.turn if goal else OTHER[self.turn]
+        return ''.join(characters) + (':b' if next_turn == BLUE else ':r')
+
     def _record_position(self) -> None:
-        self.position_counts[self.position_key()] = self.position_counts.get(self.position_key(), 0) + 1
+        key = self.position_key()
+        self.position_counts[key] = self.position_counts.get(key, 0) + 1
         self.board_history.append(self.board.copy())
+        if len(self.board_history) > BOARD_HISTORY_LIMIT:
+            self.board_history.pop(0)
 
     def legal_actions(self) -> list[int]:
         return legal_actions(self.board, self.turn)
@@ -190,6 +215,20 @@ class GameState:
             raise ValueError('game is over')
         if action not in set(self.legal_actions()):
             raise ValueError('illegal move')
+        return self._play_unchecked(action)
+
+    def play_trusted(self, action: int) -> Move:
+        """Apply an action already selected from this state's legal actions.
+
+        Search uses this narrow internal path after the public state has been
+        generated and masked. It retains every transition/terminal check but
+        avoids recomputing the same legal list at the start of the transition.
+        """
+        if self.is_terminal():
+            raise ValueError('game is over')
+        return self._play_unchecked(action)
+
+    def _play_unchecked(self, action: int) -> Move:
         from_c, from_r, to_c, to_r = decode_action(action)
         piece = int(self.board[from_r, from_c])
         target = int(self.board[to_r, to_c])
@@ -233,4 +272,4 @@ class GameState:
 
 
 def state_from_positions(board: Iterable[Iterable[int]], turn: int = BLUE) -> GameState:
-    return GameState(np.asarray(list(board), dtype=np.int8), turn)
+    return GameState(np.asarray(list(board)), turn)

@@ -24,12 +24,17 @@ def benchmark(device_name: str = 'auto') -> dict:
         evaluator.predict(states)  # warm up kernels/allocators
         started = time.perf_counter(); evaluator.predict(states); elapsed = time.perf_counter() - started
         rows.append({'batch': batch_size, 'inferences_per_second': batch_size / max(elapsed, 1e-9), 'seconds': elapsed})
-    states = [GameState() for _ in range(4)]
-    started = time.perf_counter(); search_batch(states, evaluator, 8, add_noise=False, rng=np.random.default_rng(2)); elapsed = time.perf_counter() - started
+    searches = []
+    for algorithm in ('puct', 'gumbel'):
+        states = [GameState() for _ in range(4)]
+        started = time.perf_counter()
+        search_batch(states, evaluator, 8, add_noise=False, rng=np.random.default_rng(2), algorithm=algorithm)
+        elapsed = time.perf_counter() - started
+        searches.append({'algorithm': algorithm, 'roots': 4, 'simulations': 8, 'seconds': elapsed,
+                         'root_searches_per_second': 4 / max(elapsed, 1e-9)})
     return {'device': str(device), 'cuda': torch.cuda.is_available(), 'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             'network_parameters': sum(parameter.numel() for parameter in model.parameters()), 'inference': rows,
-            'batch_mcts_roots': 4, 'batch_mcts_simulations': 8, 'batch_mcts_seconds': elapsed,
-            'batch_mcts_root_searches_per_second': 4 / max(elapsed, 1e-9)}
+            'search_comparison': searches}
 
 
 if __name__ == '__main__':

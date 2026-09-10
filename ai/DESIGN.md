@@ -21,12 +21,18 @@ MCTS nodes are never transposition-merged across histories.
 
 The network is a randomly initialized residual convolutional policy/value
 network. Its 648 policy outputs encode source square plus one of the eight
-canonical directions. Search masks to legal actions before softmax, uses PUCT,
-adds Dirichlet root noise only for self-play, and backs up value with the
-player-to-move perspective (including goal states where the engine retains the
-turn). Self-play samples visit distributions with a configurable temperature;
-later plies are greedy. Samples store encoded history planes, visit policy, and
-the final outcome from the player-to-move perspective. Draws are zero.
+canonical directions. Search masks to legal actions. The default low-budget
+search is Full Gumbel: Gumbel-Top-k samples root actions without replacement,
+the official sequential-halving visit schedule allocates the small budget,
+unvisited actions receive mixed-value completed Q values, and the completed
+`softmax(logit + Q)` policy is the training target. Interior selection uses the
+deterministic completed-policy rule. Classic PUCT remains available as an
+explicit benchmark option; it is not used for self-play. Values are backed up
+with the player-to-move perspective, including goal states where the engine
+retains the turn. Self-play samples the improved policy with a configurable
+temperature; later plies are greedy. Samples store encoded history planes,
+improved policy, and the final outcome from the player-to-move perspective.
+Draws are zero.
 
 Training uses AdamW, policy cross-entropy plus value MSE, gradient clipping,
 fixed-shape GPU batches, and CUDA AMP when CUDA is available. Candidate models
@@ -43,20 +49,30 @@ Checkpoints include model, optimizer, scaler, counters, configuration, Python,
 NumPy, Torch, CUDA, and local generator RNG state. `checkpoint-latest.pt` and
 numbered checkpoints are atomically written; only the configured recent
 numbered set plus `promoted.pt` are retained. Status JSON and JSONL metrics
-include progress, losses, throughput, checkpoint/promotion state, CUDA device,
-and disk headroom. A service restart loads the latest checkpoint and existing
-replay shards; a crash cannot expose a partially written shard/checkpoint.
+include progress, losses, throughput, outcome distribution, game-length
+statistics, arena outcomes, checkpoint/model ages, recovery events, CUDA
+device, staleness, and disk headroom. A corrupt latest checkpoint is repaired
+from the newest valid numbered checkpoint inside the owner-controlled
+directory. A service restart loads that checkpoint and existing replay shards;
+a crash cannot expose a partially written shard/checkpoint. Fatal errors exit
+for systemd recovery, while only the configured low-disk condition is paused.
 
 ## Hardware decisions
 
 Measured host facts are four CPUs, 26 GiB RAM, and a Quadro RTX 5000 with
 15,360 MiB visible VRAM, driver CUDA 13.2. The default network (48 filters, 2
-residual blocks) and 8 simulations are intentionally modest. Four self-play
-roots advance in lockstep and each MCTS simulation batches its leaves for GPU
-inference; optimizer batches are also GPU-resident. Torch threads are capped at
-2 and the service is CPU-limited to leave capacity for the website. Fixed board
-shapes enable cuDNN benchmarking. The included `benchmark.py` measures both
-inference batches and batched MCTS on this host.
+residual blocks), four Gumbel candidates, and 8 simulations are intentionally
+modest. Four self-play roots advance in lockstep and each search step batches
+its leaves for GPU inference; optimizer batches are also GPU-resident. Torch
+threads are capped at 2 and the service is CPU-limited to leave capacity for
+the website. Fixed board shapes enable cuDNN benchmarking. Lazy edges avoid
+materializing unvisited successors, trusted internal transitions avoid
+repeating public legal validation, and only the four-board observation tail is
+copied; complete move/repetition state remains exact. The old path spent
+41.3s in eager expansion for one 222-ply profiled game; the optimized path
+spent 8.45s for one 158-ply profiled game under the same 8-simulation CUDA
+diagnostic. The random episode lengths differ, so trainer positions/sec and
+the included benchmark are the meaningful ongoing measures.
 
 KataGo's domain-independent efficiency ideas were considered from its paper.
 The implementation adopts batched inference, bounded replay, and explicit
@@ -66,6 +82,15 @@ budget, and excessive actors would create stale data and compete with the
 website. Tree reuse is also not used across moves because repetition/clock
 history is part of the state; each tree is path-safe.
 
+The neural input contains four recent board snapshots, side to move, the
+halfmove clock, current-position count, and 16 rule-derived action planes: for
+each direction they identify moves revisiting a prior position once or at
+least twice. This is a principled bounded representation of every imminent
+threefold consequence while exact unbounded counts remain in the rules and
+MCTS. Replay shards written with the earlier 27-channel representation are
+zero-padded on load, and old model stems/optimizer moments are migrated once
+to the 43-channel representation.
+
 The design follows the AlphaZero paper's tabula-rasa policy/value plus MCTS
 loop, the OpenSpiel decomposition into actors, evaluator, learner, replay,
 checkpoints, and arena evaluators, and PyTorch's guidance on pinned/batched
@@ -73,6 +98,8 @@ work, `set_to_none`, AMP, and fixed-shape kernels. References:
 
 - https://arxiv.org/abs/1712.01815
 - https://arxiv.org/abs/1902.10565
+- https://openreview.net/forum?id=bERaNdoegnO
+- https://github.com/google-deepmind/mctx/blob/main/mctx/_src/policies.py
 - https://openspiel.readthedocs.io/en/stable/alpha_zero.html
 - https://docs.pytorch.org/tutorials/recipes/recipes/tuning_guide.html
 

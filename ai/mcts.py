@@ -1,4 +1,13 @@
-"""PUCT search with batched leaf evaluation and path-safe tree nodes."""
+"""Batched neural search with PUCT and Full Gumbel root policy improvement.
+
+The Gumbel path follows DeepMind mctx's Full Gumbel MuZero structure: legal
+root actions are sampled without replacement with Gumbel-Top-k, simulations
+are allocated by sequential halving, unvisited root Q values are completed by
+the mixed value estimate, and the resulting improved policy is trained.
+Interior nodes use the deterministic completed-policy selection rule. Nodes
+are never transposition-merged because repetition and the halfmove clock are
+path-dependent.
+"""
 
 from __future__ import annotations
 
@@ -10,15 +19,16 @@ import numpy as np
 import torch
 
 from .encoding import encode_batch
-from .rules import BLUE, GameState
+from .rules import GameState
 
 
 @dataclass
 class Edge:
     action: int
     parent_turn: int
-    child: 'Node'
+    child: 'Node | None'
     prior: float
+    prior_logit: float
     visits: int = 0
     value_sum: float = 0.0
 
@@ -31,6 +41,13 @@ class Edge:
 class Node:
     state: GameState
     children: dict[int, Edge] = field(default_factory=dict)
+    expanded: bool = False
+    raw_value: float = 0.0
+    legal_actions: tuple[int, ...] = ()
+    root_prior_logits: dict[int, float] = field(default_factory=dict)
+    root_gumbel: dict[int, float] = field(default_factory=dict)
+    root_actions: tuple[int, ...] = ()
+    root_schedule: tuple[int, ...] = ()
 
     @property
     def visits(self) -> int:
@@ -52,21 +69,36 @@ class NetworkEvaluator:
         return logits.float().cpu().numpy(), values.float().cpu().numpy()
 
 
-def _expand(node: Node, logits: np.ndarray) -> None:
-    if node.state.is_terminal() or node.children:
+def _softmax(values: np.ndarray) -> np.ndarray:
+    shifted = values - np.max(values)
+    probabilities = np.exp(shifted)
+    total = probabilities.sum()
+    return probabilities / total if total > 0 and np.isfinite(total) else np.full_like(values, 1.0 / len(values))
+
+
+def _expand(node: Node, logits: np.ndarray, value: float, actions: Sequence[int] | None = None) -> None:
+    """Create edge statistics; successor states are created on selection."""
+    if node.state.is_terminal() or node.expanded:
         return
-    legal = node.state.legal_actions()
+    legal = tuple(node.state.legal_actions() if actions is None else actions)
+    node.legal_actions = legal
+    node.raw_value = float(value)
+    node.expanded = True
     if not legal:
         return
     selected = np.asarray(legal, dtype=np.int64)
-    values = logits[selected].astype(np.float64)
-    values -= np.max(values)
-    priors = np.exp(values)
-    priors /= np.sum(priors)
-    for action, prior in zip(legal, priors):
-        child_state = node.state.copy()
-        child_state.play(action)
-        node.children[action] = Edge(action, node.state.turn, Node(child_state), float(prior))
+    selected_logits = np.asarray(logits[selected], dtype=np.float64)
+    priors = _softmax(selected_logits)
+    for action, prior, logit in zip(legal, priors, selected_logits):
+        node.children[action] = Edge(action, node.state.turn, None, float(prior), float(logit))
+
+
+def _materialize_child(edge: Edge, parent: Node) -> Node:
+    if edge.child is None:
+        child_state = parent.state.copy()
+        child_state.play_trusted(edge.action)
+        edge.child = Node(child_state)
+    return edge.child
 
 
 def _select(node: Node, c_puct: float) -> Edge:
@@ -75,6 +107,93 @@ def _select(node: Node, c_puct: float) -> Edge:
         node.children.values(),
         key=lambda edge: edge.q + c_puct * edge.prior * math.sqrt(parent_visits) / (1 + edge.visits),
     )
+
+
+def _completed_qvalues(node: Node, edges: Sequence[Edge] | None = None) -> np.ndarray:
+    """Return mixed-value completed Q values in the current node perspective."""
+    edges = list(node.children.values()) if edges is None else list(edges)
+    if not edges:
+        return np.empty((0,), dtype=np.float64)
+    visits = np.asarray([edge.visits for edge in edges], dtype=np.float64)
+    qvalues = np.asarray([edge.q for edge in edges], dtype=np.float64)
+    priors = _softmax(np.asarray([edge.prior_logit for edge in edges], dtype=np.float64))
+    visited_probability = float(np.sum(priors * (visits > 0)))
+    weighted_q = float(np.sum(np.where(visits > 0, priors * qvalues, 0.0))) / max(visited_probability, 1e-12)
+    mixed_value = (float(node.raw_value) + float(np.sum(visits)) * weighted_q) / (float(np.sum(visits)) + 1.0)
+    completed = np.where(visits > 0, qvalues, mixed_value)
+    low, high = float(np.min(completed)), float(np.max(completed))
+    return (completed - low) / max(high - low, 1e-8)
+
+
+def _select_gumbel_interior(node: Node) -> Edge:
+    edges = list(node.children.values())
+    completed = _completed_qvalues(node, edges)
+    logits = np.asarray([edge.prior_logit for edge in edges], dtype=np.float64)
+    improved = _softmax(logits + completed)
+    visits = np.asarray([edge.visits for edge in edges], dtype=np.float64)
+    scores = improved - visits / (1.0 + float(visits.sum()))
+    return edges[int(np.argmax(scores))]
+
+
+def sequential_halving_schedule(max_num_considered_actions: int, simulations: int) -> tuple[int, ...]:
+    """Return mctx-compatible considered-visit counts for each simulation."""
+    max_num_considered_actions = int(max_num_considered_actions)
+    simulations = int(simulations)
+    if max_num_considered_actions < 1 or simulations < 1:
+        raise ValueError('sequential-halving counts must be positive')
+    if max_num_considered_actions == 1:
+        return tuple(range(simulations))
+    log2_max = int(math.ceil(math.log2(max_num_considered_actions)))
+    sequence: list[int] = []
+    visits = [0] * max_num_considered_actions
+    considered = max_num_considered_actions
+    while len(sequence) < simulations:
+        extra = max(1, int(simulations / (log2_max * considered)))
+        for _ in range(extra):
+            sequence.extend(visits[:considered])
+        for index in range(considered):
+            visits[index] += 1
+        considered = max(2, considered // 2)
+    return tuple(sequence[:simulations])
+
+
+def _initialize_gumbel_root(node: Node, logits: np.ndarray, value: float, simulations: int,
+                            max_num_considered_actions: int, gumbel_scale: float,
+                            rng: np.random.Generator) -> None:
+    legal = tuple(node.state.legal_actions())
+    node.legal_actions = legal
+    node.raw_value = float(value)
+    node.expanded = True
+    if not legal:
+        return
+    legal_logits = np.asarray(logits[list(legal)], dtype=np.float64)
+    node.root_prior_logits = {action: float(logit) for action, logit in zip(legal, legal_logits)}
+    gumbels = rng.gumbel(0.0, 1.0, len(legal)) * float(gumbel_scale)
+    ranking = np.argsort(-(gumbels + legal_logits), kind='stable')
+    considered = min(int(max_num_considered_actions), len(legal))
+    node.root_actions = tuple(legal[int(index)] for index in ranking[:considered])
+    node.root_gumbel = {action: float(gumbel) for action, gumbel in zip(legal, gumbels)}
+    node.root_schedule = sequential_halving_schedule(considered, simulations)
+    priors = _softmax(legal_logits)
+    for action, prior, logit in zip(legal, priors, legal_logits):
+        # Keep all legal root edges as statistics. Sequential halving's visit
+        # count mask naturally confines later rounds to the Gumbel-Top-k set,
+        # while unvisited actions remain available for completed-Q targets.
+        node.children[action] = Edge(action, node.state.turn, None, float(prior), float(logit))
+
+
+def _select_gumbel_root(node: Node) -> Edge:
+    simulation_index = node.visits
+    considered_visit = node.root_schedule[min(simulation_index, len(node.root_schedule) - 1)]
+    edges = list(node.children.values())
+    completed = _completed_qvalues(node, edges)
+    scores = np.asarray([node.root_gumbel[edge.action] + edge.prior_logit + qvalue
+                         for edge, qvalue in zip(edges, completed)], dtype=np.float64)
+    eligible = [index for index, edge in enumerate(edges) if edge.visits == considered_visit]
+    if not eligible:
+        minimum = min(edge.visits for edge in edges)
+        eligible = [index for index, edge in enumerate(edges) if edge.visits == minimum]
+    return edges[eligible[int(np.argmax(scores[eligible]))]]
 
 
 def _add_root_noise(node: Node, rng: np.random.Generator, alpha: float, epsilon: float) -> None:
@@ -87,30 +206,57 @@ def _add_root_noise(node: Node, rng: np.random.Generator, alpha: float, epsilon:
 
 def _backup(path: list[Edge], leaf_value: float) -> None:
     value = float(leaf_value)
+    if not np.isfinite(value):
+        raise FloatingPointError('non-finite MCTS leaf value')
     for edge in reversed(path):
-        if edge.parent_turn != edge.child.state.turn:
+        child_turn = edge.child.state.turn if edge.child is not None else edge.parent_turn
+        if edge.parent_turn != child_turn:
             value = -value
         edge.visits += 1
         edge.value_sum += value
+
+
+def _gumbel_policy_target(root: Node) -> np.ndarray:
+    policy = np.zeros(648, dtype=np.float32)
+    if not root.legal_actions:
+        return policy
+    edges = list(root.children.values())
+    completed = _completed_qvalues(root, edges)
+    # The candidate edges retain exact network logits; unvisited actions still
+    # participate in the improved policy with their exact original logits.
+    logits = np.asarray([root.root_prior_logits[action] for action in root.legal_actions], dtype=np.float64)
+    values = completed
+    values -= np.min(values)
+    target = _softmax(logits + values)
+    for action, probability in zip(root.legal_actions, target):
+        policy[action] = float(probability)
+    return policy
 
 
 def search_batch(
     states: Sequence[GameState], evaluator: NetworkEvaluator, simulations: int,
     c_puct: float = 1.5, add_noise: bool = False, rng: np.random.Generator | None = None,
     dirichlet_alpha: float = 0.3, noise_epsilon: float = 0.25,
+    algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
+    gumbel_scale: float = 1.0,
 ) -> list[np.ndarray]:
-    """Run equal-depth PUCT searches for multiple roots, batching leaf NN calls."""
+    """Run batched searches and return legal, normalized policy targets."""
     if simulations < 1:
         raise ValueError('simulations must be positive')
+    if algorithm not in ('gumbel', 'puct'):
+        raise ValueError('unknown search algorithm')
     rng = rng or np.random.default_rng()
     roots = [Node(state.copy()) for state in states]
     nonterminal = [root for root in roots if not root.state.is_terminal()]
     if nonterminal:
-        logits, _ = evaluator.predict([root.state for root in nonterminal])
-        for root, row in zip(nonterminal, logits):
-            _expand(root, row)
-            if add_noise:
-                _add_root_noise(root, rng, dirichlet_alpha, noise_epsilon)
+        logits, values = evaluator.predict([root.state for root in nonterminal])
+        for root, row, value in zip(nonterminal, logits, values):
+            if algorithm == 'gumbel':
+                _initialize_gumbel_root(root, row, float(value), simulations, max_num_considered_actions, gumbel_scale, rng)
+            else:
+                _expand(root, row, float(value))
+                if add_noise:
+                    _add_root_noise(root, rng, dirichlet_alpha, noise_epsilon)
 
     for _ in range(simulations):
         leaves: list[Node] = []
@@ -119,10 +265,17 @@ def search_batch(
         for root in roots:
             node = root
             path: list[Edge] = []
-            while node.children:
-                edge = _select(node, c_puct)
+            while node.expanded and node.children:
+                if node is root and algorithm == 'gumbel':
+                    edge = _select_gumbel_root(node)
+                elif algorithm == 'gumbel':
+                    edge = _select_gumbel_interior(node)
+                else:
+                    edge = _select(node, c_puct)
                 path.append(edge)
-                node = edge.child
+                node = _materialize_child(edge, node)
+                if node.state.is_terminal() or not node.expanded:
+                    break
             if node.state.is_terminal():
                 terminal_values.append((path, node.state.terminal_value()))
             else:
@@ -131,13 +284,16 @@ def search_batch(
         if leaves:
             logits, values = evaluator.predict([leaf.state for leaf in leaves])
             for leaf, path, row, value in zip(leaves, paths, logits, values):
-                _expand(leaf, row)
+                _expand(leaf, row, float(value))
                 _backup(path, float(value))
         for path, value in terminal_values:
             _backup(path, value)
 
     policies: list[np.ndarray] = []
     for root in roots:
+        if algorithm == 'gumbel':
+            policies.append(_gumbel_policy_target(root))
+            continue
         policy = np.zeros(648, dtype=np.float32)
         if root.children:
             visits = np.asarray([edge.visits for edge in root.children.values()], dtype=np.float64)

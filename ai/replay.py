@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .encoding import CHANNELS
+from .encoding import ACTION_COUNT, CHANNELS, LEGACY_CHANNELS
 
 
 class ReplayBuffer:
@@ -25,18 +25,36 @@ class ReplayBuffer:
     def sample_count(self) -> int:
         total = 0
         for path in self.paths():
-            try:
-                with np.load(path, allow_pickle=False) as data:
-                    total += int(data['values'].shape[0])
-            except (OSError, ValueError, KeyError):
-                continue
+            loaded = self._read(path)
+            if loaded is not None:
+                total += loaded[0].shape[0]
+        return total
+
+    @staticmethod
+    def _read(path: Path) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        try:
+            with np.load(path, allow_pickle=False) as data:
+                states = np.asarray(data['states'], dtype=np.float32)
+                policies = np.asarray(data['policies'], dtype=np.float32)
+                values = np.asarray(data['values'], dtype=np.float32).reshape(-1)
+        except (OSError, ValueError, KeyError, TypeError):
+            return None
+        if (states.ndim != 4 or states.shape[1] not in (CHANNELS, LEGACY_CHANNELS) or states.shape[2:] != (9, 9)
+                or policies.ndim != 2 or policies.shape[1] != ACTION_COUNT or policies.shape[0] != states.shape[0]
+                or values.shape[0] != states.shape[0] or not np.isfinite(states).all()
+                or not np.isfinite(policies).all() or not np.isfinite(values).all()
+                or np.any(policies < 0) or not np.allclose(policies.sum(axis=1), 1.0, atol=1e-4)):
+            return None
+        return states, policies, values
         return total
 
     def append(self, states: np.ndarray, policies: np.ndarray, values: np.ndarray, episode_id: int) -> Path:
         states = np.asarray(states, dtype=np.float16)
         policies = np.asarray(policies, dtype=np.float32)
         values = np.asarray(values, dtype=np.float32).reshape(-1)
-        if states.ndim != 4 or policies.ndim != 2 or states.shape[0] != policies.shape[0] or values.shape[0] != states.shape[0]:
+        if (states.ndim != 4 or states.shape[1] not in (CHANNELS, LEGACY_CHANNELS) or states.shape[2:] != (9, 9)
+                or policies.ndim != 2 or policies.shape[1] != ACTION_COUNT or states.shape[0] != policies.shape[0]
+                or values.shape[0] != states.shape[0]):
             raise ValueError('episode arrays have incompatible shapes')
         if not np.isfinite(states).all() or not np.isfinite(policies).all() or not np.isfinite(values).all():
             raise ValueError('episode contains non-finite data')
@@ -60,13 +78,14 @@ class ReplayBuffer:
     def load(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         states, policies, values = [], [], []
         for path in self.paths():
-            try:
-                with np.load(path, allow_pickle=False) as data:
-                    states.append(np.asarray(data['states'], dtype=np.float32))
-                    policies.append(np.asarray(data['policies'], dtype=np.float32))
-                    values.append(np.asarray(data['values'], dtype=np.float32))
-            except (OSError, ValueError, KeyError):
+            loaded = self._read(path)
+            if loaded is None:
                 continue
+            loaded_states, loaded_policies, loaded_values = loaded
+            if loaded_states.shape[1] == LEGACY_CHANNELS:
+                padding = np.zeros((loaded_states.shape[0], CHANNELS - LEGACY_CHANNELS, 9, 9), dtype=np.float32)
+                loaded_states = np.concatenate((loaded_states, padding), axis=1)
+            states.append(loaded_states); policies.append(loaded_policies); values.append(loaded_values)
         if not states:
             return np.empty((0, CHANNELS, 9, 9), np.float32), np.empty((0, 648), np.float32), np.empty((0,), np.float32)
         return np.concatenate(states), np.concatenate(policies), np.concatenate(values)
@@ -76,28 +95,19 @@ class ReplayBuffer:
         removed = 0
         keep: list[Path] = []
         bytes_used = 0
+        samples_used = 0
         for path in reversed(paths):
             size = path.stat().st_size if path.exists() else 0
-            try:
-                with np.load(path, allow_pickle=False) as data:
-                    count = int(data['values'].shape[0])
-            except (OSError, ValueError, KeyError):
-                count = 0
-            if len(keep) < self.max_episodes and sum(self._count(p) for p in keep) + count <= self.max_samples and bytes_used + size <= self.max_bytes:
+            loaded = self._read(path)
+            count = loaded[0].shape[0] if loaded is not None else 0
+            if len(keep) < self.max_episodes and samples_used + count <= self.max_samples and bytes_used + size <= self.max_bytes:
                 keep.append(path)
                 bytes_used += size
+                samples_used += count
             else:
                 path.unlink(missing_ok=True)
                 removed += 1
         return removed
-
-    @staticmethod
-    def _count(path: Path) -> int:
-        try:
-            with np.load(path, allow_pickle=False) as data:
-                return int(data['values'].shape[0])
-        except (OSError, ValueError, KeyError):
-            return 0
 
     def _fsync_directory(self) -> None:
         try:

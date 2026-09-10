@@ -16,6 +16,7 @@ import shutil
 import signal
 import tempfile
 import time
+from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,7 +25,7 @@ import torch
 from torch import nn
 
 from .checkpoint import CheckpointManager, atomic_torch_save, restore_rng, rng_state
-from .encoding import CHANNELS
+from .encoding import CHANNELS, LEGACY_CHANNELS
 from .mcts import NetworkEvaluator
 from .model import PolicyValueNet
 from .replay import ReplayBuffer
@@ -55,15 +56,74 @@ def atomic_json(payload: dict, destination: Path) -> None:
             os.unlink(temporary)
 
 
+class LowDiskPause(RuntimeError):
+    """Expected operational pause while the configured disk floor is reached."""
+
+
+def _validate_config(config: dict) -> dict:
+    required = {
+        'seed', 'network_width', 'network_blocks', 'mcts_simulations', 'self_play_games',
+        'self_play_batch_games', 'temperature_plies', 'temperature', 'max_game_plies',
+        'c_puct', 'dirichlet_alpha', 'root_noise_epsilon', 'search_algorithm',
+        'gumbel_max_num_considered_actions', 'gumbel_scale', 'train_min_samples',
+        'train_batch_size', 'train_epochs', 'learning_rate', 'weight_decay',
+        'value_loss_weight', 'gradient_clip', 'arena_games', 'arena_simulations',
+        'promotion_threshold', 'replay_max_episodes', 'replay_max_samples',
+        'replay_max_bytes', 'checkpoint_keep', 'min_free_bytes', 'amp',
+        'status_interval_seconds', 'log_max_bytes',
+    }
+    missing = sorted(required - config.keys())
+    if missing:
+        raise ValueError('training config is missing required fields: ' + ', '.join(missing))
+
+    def integer(name: str, minimum: int = 1) -> None:
+        value = config[name]
+        if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+            raise ValueError(f'{name} must be an integer >= {minimum}')
+
+    def number(name: str, minimum: float | None = None, maximum: float | None = None) -> None:
+        value = config[name]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not np.isfinite(value):
+            raise ValueError(f'{name} must be finite')
+        if minimum is not None and value < minimum or maximum is not None and value > maximum:
+            raise ValueError(f'{name} is outside the allowed range')
+
+    for name, minimum in {
+        'seed': 0, 'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1,
+        'self_play_games': 1, 'self_play_batch_games': 1, 'temperature_plies': 0,
+        'max_game_plies': 1, 'gumbel_max_num_considered_actions': 1,
+        'train_min_samples': 1, 'train_batch_size': 1, 'train_epochs': 1,
+        'arena_games': 2, 'arena_simulations': 1, 'replay_max_episodes': 1,
+        'replay_max_samples': 1, 'replay_max_bytes': 1, 'checkpoint_keep': 2,
+        'min_free_bytes': 0,
+    }.items():
+        integer(name, minimum)
+    for name, minimum, maximum in (
+        ('temperature', 0.0, None), ('c_puct', 0.0, None), ('dirichlet_alpha', 0.0, None),
+        ('root_noise_epsilon', 0.0, 1.0), ('gumbel_scale', 0.0, None),
+        ('learning_rate', 0.0, None), ('weight_decay', 0.0, None),
+        ('value_loss_weight', 0.0, None), ('gradient_clip', 0.0, None),
+        ('promotion_threshold', 0.5, 1.0), ('status_interval_seconds', 0.1, None),
+        ('log_max_bytes', 1024.0, None),
+    ):
+        number(name, minimum, maximum)
+    if config['search_algorithm'] != 'gumbel':
+        raise ValueError('search_algorithm must be gumbel for self-play training')
+    if config['self_play_batch_games'] > config['self_play_games']:
+        raise ValueError('self_play_batch_games cannot exceed self_play_games')
+    if config['gumbel_max_num_considered_actions'] > 648:
+        raise ValueError('gumbel_max_num_considered_actions exceeds action space')
+    if not isinstance(config['amp'], bool):
+        raise ValueError('amp must be boolean')
+    return config
+
+
 def load_config(path: Path) -> dict:
     with path.open(encoding='utf-8') as source:
         config = json.load(source)
-    required = ('network_width', 'network_blocks', 'mcts_simulations', 'self_play_games', 'train_batch_size')
-    if any(key not in config for key in required):
-        raise ValueError('training config is missing required fields')
-    if config['self_play_games'] < 1 or config['mcts_simulations'] < 1:
-        raise ValueError('self-play and MCTS counts must be positive')
-    return config
+    if not isinstance(config, dict):
+        raise ValueError('training config must be a JSON object')
+    return _validate_config(config)
 
 
 def cpu_state_dict(state: dict) -> dict:
@@ -77,6 +137,20 @@ def cpu_optimizer_state(state: dict) -> dict:
             if torch.is_tensor(item):
                 value[key] = item.cpu()
     return result
+
+
+def migrate_input_channels(model_state: dict, saved_config: dict, expected: dict) -> dict:
+    """Zero-pad only the new rule-derived observation planes for old models."""
+    if saved_config == expected:
+        return model_state
+    compatible = all(saved_config.get(key) == expected.get(key) for key in ('width', 'blocks', 'action_count'))
+    stem_weight = model_state.get('stem.0.weight')
+    if not (compatible and saved_config.get('in_channels') == LEGACY_CHANNELS and expected['in_channels'] == CHANNELS and stem_weight is not None):
+        raise RuntimeError(f'checkpoint model config {saved_config} does not match {expected}')
+    padding = torch.zeros((stem_weight.shape[0], CHANNELS - LEGACY_CHANNELS, *stem_weight.shape[2:]), dtype=stem_weight.dtype)
+    migrated = dict(model_state)
+    migrated['stem.0.weight'] = torch.cat((stem_weight, padding), dim=1)
+    return migrated
 
 
 class Trainer:
@@ -113,7 +187,18 @@ class Trainer:
         self.promoted_step = 0
         self.last_losses: dict = {}
         self.started_at = utc_now()
+        self.last_progress_at = time.time()
+        self.last_checkpoint_at: float | None = None
+        self.last_error: str | None = None
+        self.recovery_info: dict | None = None
+        self.outcomes = Counter({'blue': 0, 'red': 0, 'draw': 0})
+        self.game_length_total = 0
+        self.game_length_min: int | None = None
+        self.game_length_max: int | None = None
+        self.last_arena: dict = {}
         self._restore()
+        if self.recovery_info:
+            self._log('checkpoint_recovery', **self.recovery_info)
         self._write_status('running', 'trainer initialized')
 
     def _select_device(self, requested: str) -> torch.device:
@@ -127,6 +212,7 @@ class Trainer:
 
     def _restore(self) -> None:
         payload = self.checkpoints.load_latest()
+        self.recovery_info = self.checkpoints.last_recovery
         if payload is None:
             seed = int(self.config.get('seed', 1))
             random.seed(seed)
@@ -137,10 +223,22 @@ class Trainer:
             return
         saved_config = payload.get('model_config', {})
         expected = self.model.config
+        model_state = payload['model']
+        optimizer_state = payload['optimizer']
+        migrated_representation = False
         if saved_config and saved_config != expected:
-            raise RuntimeError(f'checkpoint model config {saved_config} does not match {expected}')
-        self.model.load_state_dict(payload['model'])
-        self.optimizer.load_state_dict(payload['optimizer'])
+            if saved_config.get('in_channels') == LEGACY_CHANNELS:
+                model_state = migrate_input_channels(model_state, saved_config, expected)
+                optimizer_state = copy.deepcopy(optimizer_state)
+                for state in optimizer_state.get('state', {}).values():
+                    for key, value in list(state.items()):
+                        if torch.is_tensor(value) and value.ndim == 4 and value.shape[1] == LEGACY_CHANNELS:
+                            state[key] = torch.cat((value, torch.zeros((value.shape[0], CHANNELS - LEGACY_CHANNELS, *value.shape[2:]), dtype=value.dtype)), dim=1)
+                migrated_representation = True
+            else:
+                raise RuntimeError(f'checkpoint model config {saved_config} does not match {expected}')
+        self.model.load_state_dict(model_state)
+        self.optimizer.load_state_dict(optimizer_state)
         for state in self.optimizer.state.values():
             for key, value in list(state.items()):
                 if torch.is_tensor(value):
@@ -153,6 +251,13 @@ class Trainer:
         self.total_positions = int(payload.get('total_positions', 0))
         self.promoted_step = int(payload.get('promoted_step', 0))
         self.last_losses = payload.get('last_losses', {})
+        self.outcomes.update(payload.get('outcomes', {}))
+        self.game_length_total = int(payload.get('game_length_total', 0))
+        self.game_length_min = payload.get('game_length_min')
+        self.game_length_max = payload.get('game_length_max')
+        self.last_arena = payload.get('last_arena', {})
+        if migrated_representation:
+            self.recovery_info = {**(self.recovery_info or {}), 'representation_migration': f'{LEGACY_CHANNELS}->{CHANNELS} channels'}
         restore_rng(payload.get('rng', {}))
         if payload.get('generator_state'):
             self.rng.bit_generator.state = payload['generator_state']
@@ -166,6 +271,11 @@ class Trainer:
             rotated = self.log_path.with_suffix('.jsonl.1')
             rotated.unlink(missing_ok=True)
             os.replace(self.log_path, rotated)
+            fd_dir = os.open(self.log_path.parent, os.O_RDONLY)
+            try:
+                os.fsync(fd_dir)
+            finally:
+                os.close(fd_dir)
         with self.log_path.open('a', encoding='utf-8') as output:
             output.write(json.dumps(record, sort_keys=True) + '\n')
             output.flush()
@@ -173,6 +283,10 @@ class Trainer:
 
     def _write_status(self, state: str, message: str = '', **fields) -> None:
         usage = shutil.disk_usage(self.data_dir)
+        now = time.time()
+        checkpoint_age = now - self.checkpoints.latest.stat().st_mtime if self.checkpoints.latest.exists() else None
+        promoted_age = now - self.checkpoints.promoted.stat().st_mtime if self.checkpoints.promoted.exists() else None
+        average_length = self.game_length_total / self.total_games if self.total_games else None
         payload = {
             'status': state, 'message': message, 'pid': os.getpid(), 'started_at': self.started_at,
             'updated_at': utc_now(), 'iteration': self.iteration, 'optimizer_step': self.optimizer_step,
@@ -183,13 +297,18 @@ class Trainer:
             'cuda_available': torch.cuda.is_available(), 'gpu_name': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             'gpu_memory_allocated_bytes': torch.cuda.memory_allocated() if torch.cuda.is_available() else 0,
             'disk_free_bytes': usage.free, 'disk_total_bytes': usage.total, 'last_losses': self.last_losses,
+            'outcomes': dict(self.outcomes),
+            'game_length': {'average': average_length, 'min': self.game_length_min, 'max': self.game_length_max},
+            'last_arena': self.last_arena, 'checkpoint_age_seconds': checkpoint_age,
+            'promoted_age_seconds': promoted_age, 'stale_seconds': max(0.0, now - self.last_progress_at),
+            'last_error': self.last_error, 'checkpoint_recovery': self.recovery_info,
             'config_sha256': hashlib.sha256(self.config_path.read_bytes()).hexdigest(), **fields,
         }
         atomic_json(payload, self.status_path)
 
     def _guard_disk(self) -> None:
         if shutil.disk_usage(self.data_dir).free < int(self.config.get('min_free_bytes', 5_000_000_000)):
-            raise RuntimeError('training paused: configured minimum free disk space reached')
+            raise LowDiskPause('configured minimum free disk space reached')
 
     def _payload(self) -> dict:
         return {
@@ -197,6 +316,9 @@ class Trainer:
             'optimizer': cpu_optimizer_state(self.optimizer.state_dict()), 'scaler': self.scaler.state_dict(),
             'iteration': self.iteration, 'optimizer_step': self.optimizer_step, 'total_games': self.total_games,
             'total_positions': self.total_positions, 'promoted_step': self.promoted_step, 'last_losses': self.last_losses,
+            'outcomes': dict(self.outcomes), 'game_length_total': self.game_length_total,
+            'game_length_min': self.game_length_min, 'game_length_max': self.game_length_max,
+            'last_arena': self.last_arena,
             'config': self.config, 'rng': rng_state(), 'generator_state': self.rng.bit_generator.state,
         }
 
@@ -244,11 +366,12 @@ class Trainer:
             self.promoted_step = self.optimizer_step
             return {'promoted': True, 'reason': 'initial_model', 'score': None}
         old_model = PolicyValueNet(**{key: incumbent_payload['model_config'][key] for key in ('width', 'blocks')}).to(self.device)
-        old_model.load_state_dict(incumbent_payload['model'])
+        old_model.load_state_dict(migrate_input_channels(incumbent_payload['model'], incumbent_payload.get('model_config', {}), old_model.config))
         old_model.eval()
         result = arena(candidate, NetworkEvaluator(old_model, self.device, self.amp), int(self.config.get('arena_games', 4)),
-                       int(self.config.get('arena_simulations', 24)), self.rng, int(self.config.get('max_game_plies', 2000)))
-        promoted = result['score'] >= float(self.config.get('promotion_threshold', 0.55))
+                       int(self.config.get('arena_simulations', 24)), self.rng, int(self.config.get('max_game_plies', 2000)),
+                       self.config['search_algorithm'], self.config['gumbel_max_num_considered_actions'], lambda: self.stop_requested)
+        promoted = not result.get('interrupted') and result['games'] == int(self.config['arena_games']) and result['score'] >= float(self.config.get('promotion_threshold', 0.55))
         if promoted:
             self.promoted_step = self.optimizer_step
         result.update({'promoted': promoted, 'incumbent_step': int(incumbent_payload.get('optimizer_step', 0))})
@@ -269,14 +392,15 @@ class Trainer:
             interval = float(self.config.get('status_interval_seconds', 10))
             if now - last_progress_status[0] >= interval:
                 last_progress_status[0] = now
+                self.last_progress_at = time.time()
                 self._write_status('running', 'self-play in progress', self_play=progress)
 
         episodes = generate_self_play(
             evaluator, int(self.config['self_play_games']), int(self.config['mcts_simulations']),
             int(self.config.get('self_play_batch_games', 4)), int(self.config.get('temperature_plies', 12)),
             float(self.config.get('temperature', 1.0)), self.rng, True, int(self.config.get('max_game_plies', 2000)),
-            lambda: self.stop_requested,
-            report_self_play,
+            lambda: self.stop_requested, report_self_play, self.config['search_algorithm'],
+            self.config['gumbel_max_num_considered_actions'], self.config['gumbel_scale'],
         )
         next_episode = max([int(path.stem.split('-')[1]) for path in self.replay.paths()] or [0]) + 1
         for episode in episodes:
@@ -284,18 +408,36 @@ class Trainer:
             next_episode += 1
         self.total_games += len(episodes)
         self.total_positions += sum(episode.plies for episode in episodes)
+        batch_outcomes = Counter()
+        batch_lengths = []
+        for episode in episodes:
+            batch_outcomes[episode.result] += 1
+            batch_lengths.append(episode.plies)
+            self.outcomes[episode.result] += 1
+            self.game_length_total += episode.plies
+            self.game_length_min = episode.plies if self.game_length_min is None else min(self.game_length_min, episode.plies)
+            self.game_length_max = episode.plies if self.game_length_max is None else max(self.game_length_max, episode.plies)
         states, policies, values = self.replay.load()
         self.last_losses = self._train(states, policies, values) if len(states) >= int(self.config.get('train_min_samples', 64)) else {}
-        self.iteration += 1
-        promotion = self._promote_or_retain() if self.last_losses else {'promoted': False, 'reason': 'replay_warming'}
+        stopped = self.stop_requested
+        if not stopped:
+            self.iteration += 1
+        promotion = self._promote_or_retain() if self.last_losses and not stopped else {'promoted': False, 'reason': 'stop_requested' if stopped else 'replay_warming'}
+        self.last_arena = promotion if 'games' in promotion else self.last_arena
         payload = self._payload()
         checkpoint = self.checkpoints.save(payload, self.optimizer_step or self.iteration, promote=bool(promotion.get('promoted')))
+        self.last_checkpoint_at = time.time()
         elapsed = max(time.monotonic() - started, 1e-6)
         metrics = {'games': len(episodes), 'positions': sum(episode.plies for episode in episodes),
                    'games_per_second': len(episodes) / elapsed, 'positions_per_second': sum(episode.plies for episode in episodes) / elapsed,
-                   'replay_samples': len(states), 'checkpoint': str(checkpoint), 'promotion': promotion}
-        self._log('iteration', elapsed_seconds=elapsed, **metrics)
-        self._write_status('running', 'iteration complete', throughput=metrics)
+                   'replay_samples': len(states), 'checkpoint': str(checkpoint), 'promotion': promotion,
+                   'outcomes': dict(batch_outcomes), 'game_length': {
+                       'average': sum(batch_lengths) / len(batch_lengths) if batch_lengths else None,
+                       'min': min(batch_lengths) if batch_lengths else None, 'max': max(batch_lengths) if batch_lengths else None,
+                   }, 'cumulative_outcomes': dict(self.outcomes)}
+        self.last_progress_at = time.time()
+        self._log('stop_checkpoint' if stopped else 'iteration', elapsed_seconds=elapsed, **metrics)
+        self._write_status('stopped' if stopped else 'running', 'checkpoint saved after stop request' if stopped else 'iteration complete', throughput=metrics)
 
     def run(self, once: bool = False, max_iterations: int | None = None) -> None:
         if once:
@@ -304,12 +446,17 @@ class Trainer:
         while not self.stop_requested and (max_iterations is None or self.iteration < max_iterations):
             try:
                 self.run_iteration()
+            except LowDiskPause as error:
+                self.last_error = str(error)
+                self.last_progress_at = time.time()
+                self._log('low_disk_pause', error=str(error))
+                self._write_status('paused_low_disk', str(error))
+                time.sleep(60)
             except Exception as error:
-                self._log('error', error=repr(error))
-                self._write_status('error', str(error))
-                if once:
-                    raise
-                time.sleep(30)
+                self.last_error = repr(error)
+                self._log('fatal_error', error=repr(error))
+                self._write_status('fatal_error', str(error))
+                raise
         self._write_status('stopped', 'stop requested')
 
 

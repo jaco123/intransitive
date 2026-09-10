@@ -29,6 +29,7 @@ def generate_self_play(
     evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
     temperature_plies: int, temperature: float, rng: np.random.Generator,
     root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
+    search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4, gumbel_scale: float = 1.0,
 ) -> list[Episode]:
     """Advance several games in lockstep so leaf evaluations are GPU-batched."""
     episodes: list[Episode] = []
@@ -41,7 +42,9 @@ def generate_self_play(
         while active:
             if should_stop is not None and should_stop():
                 return episodes
-            policies = search_batch(active, evaluator, simulations, add_noise=root_noise, rng=rng)
+            policies = search_batch(active, evaluator, simulations, add_noise=root_noise, rng=rng,
+                                    algorithm=search_algorithm, max_num_considered_actions=max_num_considered_actions,
+                                    gumbel_scale=gumbel_scale)
             next_active: list[GameState] = []
             next_records: list[list[tuple[np.ndarray, np.ndarray, int]]] = []
             for state, policy, record in zip(active, policies, records):
@@ -73,11 +76,14 @@ def generate_self_play(
 def play_arena_game(
     blue_evaluator: NetworkEvaluator, red_evaluator: NetworkEvaluator,
     simulations: int, rng: np.random.Generator, max_game_plies: int = 2000,
+    search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
 ) -> str:
     state = GameState()
     while not state.is_terminal():
         evaluator = blue_evaluator if state.turn == BLUE else red_evaluator
-        policy = search_batch([state], evaluator, simulations, add_noise=False, rng=rng)[0]
+        policy = search_batch([state], evaluator, simulations, add_noise=False, rng=rng,
+                              algorithm=search_algorithm, max_num_considered_actions=max_num_considered_actions,
+                              gumbel_scale=0.0)[0]
         state.play(choose_from_policy(policy, 0.0, rng))
         if len(state.history) > max_game_plies:
             raise RuntimeError('arena exceeded configured safety horizon without an engine terminal result')
@@ -87,11 +93,15 @@ def play_arena_game(
 def arena(
     candidate: NetworkEvaluator, incumbent: NetworkEvaluator, games: int,
     simulations: int, rng: np.random.Generator, max_game_plies: int = 2000,
+    search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4, should_stop=None,
 ) -> dict:
     wins = draws = losses = 0
     for index in range(int(games)):
+        if should_stop is not None and should_stop():
+            break
         result = play_arena_game(candidate if index % 2 == 0 else incumbent,
-                                 incumbent if index % 2 == 0 else candidate, simulations, rng, max_game_plies)
+                                 incumbent if index % 2 == 0 else candidate, simulations, rng, max_game_plies,
+                                 search_algorithm, max_num_considered_actions)
         candidate_blue = index % 2 == 0
         if result == 'draw':
             draws += 1
@@ -99,5 +109,7 @@ def arena(
             wins += 1
         else:
             losses += 1
-    score = (wins + 0.5 * draws) / max(1, wins + draws + losses)
-    return {'games': wins + draws + losses, 'wins': wins, 'draws': draws, 'losses': losses, 'score': score}
+    completed = wins + draws + losses
+    score = (wins + 0.5 * draws) / max(1, completed)
+    return {'games': completed, 'wins': wins, 'draws': draws, 'losses': losses, 'score': score,
+            'interrupted': bool(should_stop is not None and should_stop())}

@@ -17,11 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from ai.checkpoint import CheckpointManager
-from ai.encoding import ACTION_COUNT, CHANNELS, decode_action, encode_action, encode_state
-from ai.mcts import NetworkEvaluator, search_batch
+from ai.encoding import ACTION_COUNT, CHANNELS, REPETITION_PLANES, decode_action, encode_action, encode_state
+from ai.mcts import Edge, NetworkEvaluator, Node, _backup, _completed_qvalues, _initialize_gumbel_root, search_batch, sequential_halving_schedule
 from ai.model import PolicyValueNet
 from ai.replay import ReplayBuffer
-from ai.rules import BLUE, RED, GameState, initial_board, piece_value
+from ai.rules import BLUE, RED, GameState, initial_board, piece_value, state_from_positions
 from ai.selfplay import generate_self_play
 from ai.trainer import Trainer
 
@@ -83,7 +83,7 @@ def test_rules_and_differential():
     js_differential(cases)
 
     state = GameState(goal); state.play(encode_action(7, 7, 8, 8)); check(state.status == 'blue_won' and state.turn == BLUE, 'goal semantics mismatch')
-    state = GameState(cycle); 
+    state = GameState(cycle)
     for action in cycle_actions: state.play(action)
     check(state.status == 'draw' and state.draw_reason == 'threefold', 'threefold semantics mismatch')
     state = GameState(clock); state.halfmove_clock = 99; state.play(encode_action(1, 1, 2, 1))
@@ -95,6 +95,12 @@ def test_rules_and_differential():
         pass
     else:
         raise AssertionError('invalid board values were accepted')
+    try:
+        state_from_positions([[256] + [0] * 8] + [[0] * 9 for _ in range(8)])
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('state_from_positions narrowed invalid values before validation')
 
 
 def test_encoding_mcts_selfplay():
@@ -112,6 +118,44 @@ def test_encoding_mcts_selfplay():
     check(len(episodes) == 2 and all(np.isfinite(ep.states).all() and np.isfinite(ep.policies).all() and np.isfinite(ep.values).all() for ep in episodes), 'self-play sample is non-finite')
     check(all(np.allclose(ep.policies.sum(axis=1), 1, atol=1e-5) for ep in episodes), 'self-play policy target not normalized')
 
+    state = GameState()
+    action = state.legal_actions()[0]
+    first = state.copy(); second = state.copy()
+    next_key = state.next_position_key_trusted(action)
+    first.position_counts[next_key] = 1
+    second.position_counts[next_key] = 2
+    difference = encode_state(first)[-REPETITION_PLANES:] != encode_state(second)[-REPETITION_PLANES:]
+    check(difference.any(), 'encoding omitted rule-derived imminent repetition differences')
+
+
+def test_gumbel_policy_improvement_and_backup():
+    check(sequential_halving_schedule(4, 8) == (0, 0, 0, 0, 1, 1, 1, 1), 'sequential halving schedule mismatch')
+    root = Node(GameState())
+    _initialize_gumbel_root(root, np.zeros(ACTION_COUNT, dtype=np.float32), 0.0, 8, 4, 1.0, np.random.default_rng(12))
+    check(len(root.legal_actions) == 36 and len(root.root_actions) == 4 and len(root.children) == 36,
+          'Gumbel root did not sample a small legal candidate canvas while retaining completed-Q actions')
+    model = PolicyValueNet(8, 1); model.eval(); evaluator = NetworkEvaluator(model, torch.device('cpu'), False)
+    state = GameState(); legal = set(state.legal_actions())
+    target = search_batch([state], evaluator, 8, rng=np.random.default_rng(11), max_num_considered_actions=4)[0]
+    check(np.isfinite(target).all() and abs(float(target.sum()) - 1.0) < 1e-5, 'Gumbel target is not normalized')
+    check(set(np.flatnonzero(target)).issubset(legal) and len(np.flatnonzero(target)) == len(legal), 'Gumbel target did not complete unvisited legal actions')
+
+    parent = GameState(); child = parent.copy(); action = parent.legal_actions()[0]; child.play_trusted(action)
+    edge = Edge(action, BLUE, Node(child), 1.0, 0.0)
+    _backup([edge], -1.0)
+    check(edge.visits == 1 and edge.value_sum == 1.0, 'backup failed to flip child-perspective value')
+    goal = np.zeros((9, 9), dtype=np.int8); goal[7, 7] = piece_value(BLUE, 1)
+    goal_parent = GameState(goal); goal_action = encode_action(7, 7, 8, 8); goal_child = goal_parent.copy(); goal_child.play_trusted(goal_action)
+    goal_edge = Edge(goal_action, BLUE, Node(goal_child), 1.0, 0.0); _backup([goal_edge], 1.0)
+    check(goal_edge.value_sum == 1.0, 'goal terminal backup incorrectly flipped retained-turn value')
+    draw_edge = Edge(action, BLUE, Node(child), 1.0, 0.0); _backup([draw_edge], 0.0)
+    check(draw_edge.value_sum == 0.0, 'draw backup was not neutral')
+    node = Node(parent, raw_value=0.25)
+    a = Edge(action, BLUE, None, 0.5, 0.0); b = Edge(parent.legal_actions()[1], BLUE, None, 0.5, 0.0)
+    node.children = {a.action: a, b.action: b}
+    completed = _completed_qvalues(node)
+    check(np.allclose(completed, 0.0), 'unvisited completed Q values were not neutral and normalized')
+
 
 def test_replay_checkpoint_and_tiny_training():
     with tempfile.TemporaryDirectory(prefix='intransitive-ai-test-') as temporary:
@@ -120,13 +164,17 @@ def test_replay_checkpoint_and_tiny_training():
         replay.append(states, policies, values, 1); replay.append(states, policies, values, 2); replay.append(states, policies, values, 3)
         check(len(replay.paths()) == 2 and replay.load()[0].shape[0] == 6, 'replay retention/load mismatch')
         manager = CheckpointManager(root / 'checkpoints', keep=2)
-        manager.save({'model': {'x': torch.tensor([1.0])}}, 1)
+        manager.save({'model': {'x': torch.tensor([1.0])}, 'optimizer': {}}, 1)
         check(manager.load_latest()['model']['x'].item() == 1, 'checkpoint reload mismatch')
+        manager.latest.write_bytes(b'corrupted checkpoint')
+        recovered = manager.load_latest()
+        check(recovered['model']['x'].item() == 1 and manager.last_recovery and manager.latest.stat().st_size > 0,
+              'corrupt latest checkpoint did not recover from numbered checkpoint')
 
         config = json.loads((ROOT / 'ai' / 'config.json').read_text())
         config.update({'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1, 'self_play_games': 1,
                        'self_play_batch_games': 1, 'train_min_samples': 1, 'train_batch_size': 8,
-                       'train_epochs': 1, 'arena_games': 1, 'arena_simulations': 1, 'max_game_plies': 300,
+                       'train_epochs': 1, 'arena_games': 2, 'arena_simulations': 1, 'max_game_plies': 300,
                        'replay_max_episodes': 4, 'replay_max_samples': 1000})
         config_path = root / 'config.json'; config_path.write_text(json.dumps(config))
         trainer = Trainer(root / 'data', config_path, 'cpu')
@@ -140,11 +188,23 @@ def test_replay_checkpoint_and_tiny_training():
         check(resumed.optimizer_step == trainer.optimizer_step and resumed.total_games == trainer.total_games, 'checkpoint resume counters mismatch')
         check(not list((root / 'data' / 'checkpoints').glob('.*.tmp')), 'temporary checkpoint remained')
 
+        bad = dict(config); bad['mcts_simulations'] = 0
+        bad_path = root / 'bad-config.json'; bad_path.write_text(json.dumps(bad))
+        missing_data = root / 'must-not-be-created'
+        try:
+            Trainer(missing_data, bad_path, 'cpu')
+        except ValueError:
+            pass
+        else:
+            raise AssertionError('invalid config was accepted')
+        check(not missing_data.exists(), 'invalid config mutated trainer data directory')
+
 
 def main():
     torch.set_num_threads(1)
     test_rules_and_differential(); print('PASS AI rules and JS differential conformance')
     test_encoding_mcts_selfplay(); print('PASS AI encoding, MCTS, and self-play')
+    test_gumbel_policy_improvement_and_backup(); print('PASS Gumbel policy improvement and MCTS backup semantics')
     test_replay_checkpoint_and_tiny_training(); print('PASS AI replay, atomic checkpoint, tiny training, and resume')
     print('ALL AI TESTS PASSED')
 

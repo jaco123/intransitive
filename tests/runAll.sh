@@ -93,6 +93,10 @@ elif ! "$ai_python" "$project_dir/tests/ai_tests.py"; then
   printf 'FAILED: AlphaZero AI conformance/training tests\n'
   failed=1
 fi
+if [ -x "$ai_python" ] && ! "$ai_python" "$project_dir/tests/ai_service_recovery.py"; then
+  printf 'FAILED: AlphaZero service installation/status verification\n'
+  failed=1
+fi
 
 if [ "$failed" -ne 0 ]; then
   printf '\nOne or more tests failed.\n'

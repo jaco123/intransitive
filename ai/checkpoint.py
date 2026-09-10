@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import pickle
 import random
 import tempfile
 from pathlib import Path
@@ -52,6 +53,7 @@ class CheckpointManager:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
         self.keep = max(2, int(keep))
+        self.last_recovery: dict | None = None
 
     @property
     def latest(self) -> Path:
@@ -71,9 +73,34 @@ class CheckpointManager:
         return numbered
 
     def load_latest(self) -> dict | None:
-        if not self.latest.exists():
-            return None
-        return torch.load(self.latest, map_location='cpu', weights_only=False)
+        self.last_recovery = None
+        candidates = [self.latest] + list(reversed(sorted(self.root.glob('checkpoint-[0-9]*.pt'))))
+        saw_checkpoint = False
+        errors: list[str] = []
+        seen: set[Path] = set()
+        for path in candidates:
+            path = path.resolve()
+            if path in seen or path.parent != self.root.resolve():
+                continue
+            seen.add(path)
+            if not path.exists():
+                continue
+            saw_checkpoint = True
+            try:
+                payload = torch.load(path, map_location='cpu', weights_only=False)
+                if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict) or not isinstance(payload.get('optimizer'), dict):
+                    raise ValueError('checkpoint payload is incomplete')
+            except (OSError, EOFError, RuntimeError, ValueError, KeyError, pickle.UnpicklingError) as error:
+                errors.append(f'{path.name}: {error}')
+                continue
+            if path != self.latest.resolve():
+                self.last_recovery = {'invalid_latest': errors[0] if errors else 'latest checkpoint was unavailable',
+                                      'recovered_from': str(path)}
+                atomic_torch_save(payload, self.latest)
+            return payload
+        if saw_checkpoint:
+            raise RuntimeError('no valid checkpoint available: ' + '; '.join(errors))
+        return None
 
     def load_promoted(self) -> dict | None:
         if not self.promoted.exists():
