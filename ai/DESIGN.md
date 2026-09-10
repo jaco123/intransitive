@@ -89,15 +89,16 @@ transitions avoid repeating public legal validation, byte position keys avoid
 rebuilding board strings, and only the four-board observation tail is copied;
 complete move/repetition state remains exact.
 
-The pre-change three-run diagnostic averaged 72.3 positions/sec with one
-in-process actor. The same model/search budget after byte-key and vectorized
-encoding changes averaged 99.0 positions/sec (three different seeds). A
-separate fixed-checkpoint process-actor probe measured one process at 89.3,
-two at 120.5, three at 138.0, and four at 133.2 positions/sec over repeated
-8-game runs. The production default is therefore three actors; games/sec is
-not used as the selection criterion. The random episode lengths differ, so
-positions/sec and repeated fixed-workload measurements are the meaningful
-ongoing measures.
+The same-checkpoint, same-seed, same-budget comparison of the pre-change and
+current single-process path measured 114.1 and 114.1 positions/sec,
+respectively, so the byte-key/vectorized-encoding change is not claimed as an
+end-to-end speedup. It remains a rule-neutral hot-path cleanup with no
+conformance difference. A separate fixed-checkpoint process-actor probe
+measured one process at 89.3, two at 120.5, three at 138.0, and four at 133.2
+positions/sec over repeated 8-game runs. The production default is therefore
+three actors; games/sec is not used as the selection criterion. The random
+episode lengths differ, so positions/sec and repeated fixed-workload
+measurements are the meaningful ongoing measures.
 
 Torch 2.7.1+cu128 was tested with warmed eager inference and both
 `torch.compile` `reduce-overhead` and `max-autotune` modes. The compiler could
