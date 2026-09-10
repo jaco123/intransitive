@@ -180,9 +180,20 @@ async function createCustomCaptureGame(page, joinPage) {
         '/api/watch should not expose a separately featured game');
 
       await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-      await page.locator('#homeFeaturedGame [data-game-id="' + highGameId + '"]').waitFor({ timeout: 5000 });
-      assert.strictEqual(await page.locator('#homeFeaturedGame [data-game-id="' + highGameId + '"]').isVisible(), true,
-        'home should render one ongoing game card');
+      const homeCard = page.locator('#homeFeaturedGame [data-game-id]');
+      await homeCard.waitFor({ timeout: 5000 });
+      assert.strictEqual(await homeCard.count(), 1, 'home should render one ongoing game card');
+      const shownGameId = await homeCard.getAttribute('data-game-id');
+      assert.ok(watchData.games.some((game) => game.id === shownGameId),
+        'home ongoing game should come from the active-game directory');
+      const rating = (game) => Math.max(...['blue', 'red'].map((color) => {
+        const value = game.players && game.players[color] && game.players[color].rating;
+        return Number.isFinite(value) ? value : -1;
+      }));
+      const expectedGame = watchData.games.slice().sort((a, b) =>
+        (rating(b) - rating(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id))[0];
+      assert.strictEqual(shownGameId, expectedGame.id,
+        'home ongoing game should be the highest-rated active game');
     } catch (error) { failures.push('uniform active-game rendering: ' + error.message); }
 
     try {
