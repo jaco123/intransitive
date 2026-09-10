@@ -1007,18 +1007,6 @@ function activeGamesForUser(userId) {
     .map(activeGameInfo);
 }
 
-function featuredGame() {
-  const playing = Array.from(games.values()).filter((g) => g.status === 'playing');
-  playing.sort((a, b) => {
-    const rating = (g) => Math.max(...['blue', 'red'].map((color) => {
-      const value = g[color] && g[color].rating;
-      return Number.isFinite(value) ? value : -1;
-    }));
-    return (rating(b) - rating(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id);
-  });
-  return playing[0] ? activeGameInfo(playing[0]) : null;
-}
-
 // ---------------------------------------------------------------------------
 // Public chat
 // ---------------------------------------------------------------------------
@@ -1243,7 +1231,7 @@ async function handleApi(req, res, urlPath, query) {
     }
 
     if (req.method === 'GET' && urlPath === '/api/watch') {
-      sendJson(res, 200, { games: activeGames(), featured: featuredGame() });
+      sendJson(res, 200, { games: activeGames() });
       return;
     }
 
@@ -1255,107 +1243,6 @@ async function handleApi(req, res, urlPath, query) {
 
     if (req.method === 'GET' && urlPath === '/api/leaderboard') {
       sendJson(res, 200, { leaderboards: db.listLeaderboards(10) });
-      return;
-    }
-
-    // --- studies ---
-    if (req.method === 'GET' && urlPath === '/api/studies') {
-      const user = db.getSessionUser(getAuthToken(req));
-      sendJson(res, 200, db.listStudies(user ? user.id : null));
-      return;
-    }
-
-    if (req.method === 'POST' && urlPath === '/api/studies') {
-      const user = db.getSessionUser(getAuthToken(req));
-      if (!user) {
-        sendJson(res, 401, { error: 'You must be logged in to create a study.' });
-        return;
-      }
-      const body = await readBody(req);
-      const study = db.createStudy(user.id, body && body.name, body && body.position);
-      sendJson(res, 201, { study });
-      return;
-    }
-
-    const studyMatch = urlPath.match(/^\/api\/studies\/([A-Za-z0-9_-]{24,64})$/);
-    if (studyMatch && req.method === 'GET') {
-      const user = db.getSessionUser(getAuthToken(req));
-      const study = db.getStudy(studyMatch[1], user ? user.id : null, query.get('token'));
-      if (!study) {
-        sendJson(res, 404, { error: 'Study not found.' });
-        return;
-      }
-      sendJson(res, 200, { study });
-      return;
-    }
-
-    if (studyMatch && req.method === 'DELETE') {
-      const user = db.getSessionUser(getAuthToken(req));
-      if (!user || !db.deleteStudy(studyMatch[1], user.id)) {
-        sendJson(res, 404, { error: 'Study not found.' });
-        return;
-      }
-      sendJson(res, 200, { ok: true });
-      return;
-    }
-
-    const studyPositionMatch = urlPath.match(/^\/api\/studies\/([A-Za-z0-9_-]{24,64})\/positions$/);
-    if (studyPositionMatch && req.method === 'POST') {
-      const user = db.getSessionUser(getAuthToken(req));
-      if (!user) {
-        sendJson(res, 401, { error: 'You must be logged in to edit a study.' });
-        return;
-      }
-      const body = await readBody(req);
-      const study = db.addStudyPosition(studyPositionMatch[1], user.id, body && body.position);
-      if (!study) {
-        sendJson(res, 404, { error: 'Study not found.' });
-        return;
-      }
-      sendJson(res, 200, { study });
-      return;
-    }
-
-    const studyShareMatch = urlPath.match(/^\/api\/studies\/([A-Za-z0-9_-]{24,64})\/share$/);
-    if (studyShareMatch && req.method === 'POST') {
-      const user = db.getSessionUser(getAuthToken(req));
-      if (!user) {
-        sendJson(res, 401, { error: 'You must be logged in to share a study.' });
-        return;
-      }
-      const body = await readBody(req);
-      if (!body || typeof body.username !== 'string' || !db.USERNAME_RE.test(body.username)) {
-        sendJson(res, 400, { error: 'Invalid study recipient.' });
-        return;
-      }
-      const target = db.getUserByUsername(body.username);
-      const study = target ? db.shareStudy(studyShareMatch[1], user.id, target.id) : null;
-      if (!study) {
-        sendJson(res, 404, { error: 'Study not found.' });
-        return;
-      }
-      sendJson(res, 200, { study, sharedWith: target.username });
-      return;
-    }
-
-    const studyPublishMatch = urlPath.match(/^\/api\/studies\/([A-Za-z0-9_-]{24,64})\/publish$/);
-    if (studyPublishMatch && req.method === 'POST') {
-      const user = db.getSessionUser(getAuthToken(req));
-      if (!user) {
-        sendJson(res, 401, { error: 'You must be logged in to publish a study.' });
-        return;
-      }
-      const body = await readBody(req);
-      if (!body || typeof body.published !== 'boolean') {
-        sendJson(res, 400, { error: 'Invalid publication setting.' });
-        return;
-      }
-      const study = db.setStudyPublished(studyPublishMatch[1], user.id, body.published);
-      if (!study) {
-        sendJson(res, 404, { error: 'Study not found.' });
-        return;
-      }
-      sendJson(res, 200, { study });
       return;
     }
 
@@ -1447,8 +1334,7 @@ async function handleApi(req, res, urlPath, query) {
 
     sendJson(res, 404, { error: 'Not found.' });
   } catch (e) {
-    if (e.code === 'USERNAME_TAKEN' || e.code === 'BAD_USERNAME' || e.code === 'BAD_PASSWORD' ||
-        e.code === 'BAD_STUDY_NAME' || e.code === 'BAD_STUDY_POSITION' || e.code === 'INVALID_JSON') {
+    if (e.code === 'USERNAME_TAKEN' || e.code === 'BAD_USERNAME' || e.code === 'BAD_PASSWORD' || e.code === 'INVALID_JSON') {
       sendJson(res, 400, { error: e.message });
       return;
     }

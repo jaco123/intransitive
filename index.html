@@ -16,7 +16,6 @@
         <nav class="nav-links">
           <button id="playBtn" class="nav-link-btn">Play</button>
           <button id="analysisBtn" class="nav-link-btn">Analysis</button>
-          <button id="studyBtn" class="nav-link-btn">Study</button>
           <button id="editorBtn" class="nav-link-btn">Board editor</button>
           <button id="watchBtn" class="nav-link-btn">Watch</button>
           <button id="playersBtn" class="nav-link-btn">Players</button>
@@ -65,7 +64,7 @@
         </div>
 
         <div class="lobby__box discord-box">
-          <div class="lobby__box__top"><span class="title">Discord</span></div>
+          <div class="lobby__box__top"><span class="title">Come join us:</span></div>
           <div class="lobby__box__content">
             <a class="discord-link" href="https://discord.gg/8wUcgkRFRC" target="_blank" rel="noopener noreferrer">Discord</a>
           </div>
@@ -81,6 +80,8 @@
             </div>
           </div>
         </div>
+
+        <section id="homeFeaturedGame" class="home-featured hidden" aria-label="Ongoing game"></section>
       </div>
 
       <div class="lobby__app">
@@ -166,7 +167,6 @@
         <div class="lobby__counters"><span id="lobbyCount" class="lobby-count"></span></div>
       </div>
     </main>
-    <section id="homeFeaturedGame" class="home-featured hidden" aria-label="Featured ongoing game"></section>
   </div>
 
   <!-- Active games -->
@@ -184,7 +184,6 @@
         <button type="button" class="watch-filter" data-category="rapid"><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</button>
         <button type="button" class="watch-filter" data-category="classical"><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</button>
       </div>
-      <div id="featuredGame" class="featured-game hidden"></div>
       <div id="watchList" class="watch-list"></div>
       <p id="watchEmpty" class="history-empty">No active games right now.</p>
     </section>
@@ -216,61 +215,6 @@
       <section class="leaderboard-panel" data-category="rapid"><h2><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
       <section class="leaderboard-panel" data-category="classical"><h2><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
     </section>
-  </div>
-
-  <!-- Studies -->
-  <div id="study" class="screen hidden">
-    <div class="screen-head">
-      <button id="studyBack" class="btn small" aria-label="Back" title="Back"><span class="back-arrow" aria-hidden="true">‹</span></button>
-      <h1>Study</h1>
-    </div>
-    <section id="studyList" class="study-list-view">
-      <div class="study-toolbar">
-        <p>Save positions, explore variations, and share your studies.</p>
-        <button id="studyCreateButton" class="btn primary" type="button">Create study</button>
-      </div>
-      <div id="studyCreatePanel" class="study-create-panel hidden">
-        <label class="field-label" for="studyName">Study name</label>
-        <input id="studyName" class="input" maxlength="80" autocomplete="off" />
-        <div class="study-form-actions">
-          <button id="studyCreateSubmit" class="btn primary" type="button">Create</button>
-          <button id="studyCreateCancel" class="btn" type="button">Cancel</button>
-        </div>
-        <div id="studyCreateError" class="error hidden"></div>
-      </div>
-      <div class="study-list-columns">
-        <section><h2>My studies</h2><div id="studyOwnedList" class="study-cards"></div></section>
-        <section><h2>Shared with me</h2><div id="studySharedList" class="study-cards"></div></section>
-        <section><h2>Public studies</h2><div id="studyPublicList" class="study-cards"></div></section>
-      </div>
-    </section>
-    <section id="studyPage" class="study-page hidden">
-      <div class="study-page-head">
-        <div><h2 id="studyNameHeading"></h2><p id="studyOwner"></p></div>
-        <div id="studyOwnerActions" class="study-owner-actions hidden">
-          <button id="studyShare" class="btn" type="button">Share</button>
-          <button id="studyPublish" class="btn" type="button">Publish</button>
-          <button id="studyDelete" class="btn danger" type="button">Delete</button>
-        </div>
-      </div>
-      <div id="studySharePanel" class="study-share-panel hidden">
-        <label class="field-label" for="studyShareUsername">Share with player</label>
-        <div class="join-row">
-          <input id="studyShareUsername" class="input" maxlength="20" autocomplete="off" />
-          <button id="studyShareSubmit" class="btn primary" type="button">Share</button>
-        </div>
-        <label class="field-label" for="studyPrivateLink">Private link</label>
-        <input id="studyPrivateLink" class="input" readonly />
-        <div id="studyShareStatus" class="study-status" aria-live="polite"></div>
-      </div>
-      <div id="studyPublicStatus" class="study-status" aria-live="polite"></div>
-      <div id="studyPositions" class="study-positions"></div>
-    </section>
-    <div id="studyChooser" class="study-chooser hidden" role="dialog" aria-label="Add position to study">
-      <h2>Add to study</h2>
-      <div id="studyChooserList" class="study-cards"></div>
-      <button id="studyChooserCancel" class="btn" type="button">Cancel</button>
-    </div>
   </div>
 
   <!-- Game -->
@@ -483,7 +427,6 @@
         </div>
         <button id="editorAnalysis" class="btn editor-action" style="width:100%"><span class="editor-action-icon" data-icon="&#xe01f;" aria-hidden="true"></span><span>Analysis board</span></button>
         <button id="editorToAnalysis" class="btn editor-action" style="width:100%"><span class="editor-action-icon" data-icon="&#xe033;" aria-hidden="true"></span><span>Continue from here</span></button>
-        <button id="editorAddToStudy" class="btn editor-action" style="width:100%"><span class="editor-action-icon" data-icon="&#xe03b;" aria-hidden="true"></span><span>Add to study</span></button>
       </aside>
     </div>
   </div>

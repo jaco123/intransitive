@@ -97,7 +97,7 @@ async function createCustomCaptureGame(page, joinPage) {
         const rect = el.getBoundingClientRect();
         return { bg: s.backgroundColor, border: s.borderStyle, outline: s.outlineStyle, textAlign: s.textAlign, x: rect.x, y: rect.y, h: rect.height };
       }));
-      assert.strictEqual(checks.length, 6, 'editor should have six action buttons including Add to study');
+      assert.strictEqual(checks.length, 5, 'editor should have five action buttons');
       assert.ok(checks.every((x) => /rgba\(0, 0, 0, 0\)|transparent/.test(x.bg) && x.border === 'none' && x.outline === 'none' && x.textAlign === 'left'),
         'editor action buttons should be text/icon only by default');
       assert.ok(checks.every((x, i) => i === 0 || Math.abs((x.y - checks[i - 1].y) - checks[i - 1].h - 8) < 3), 'editor action spacing should be uniform');
@@ -151,7 +151,6 @@ async function createCustomCaptureGame(page, joinPage) {
     try { await joinCreatedGame(activeCreator, activeOpponent); }
     catch (error) { failures.push('active game setup for Watch: ' + error.message); }
 
-    let featuredId = null;
     try {
       // Use separate browser contexts so the two authenticated users have independent sessions.
       const highContext = await browser.newContext();
@@ -168,37 +167,28 @@ async function createCustomCaptureGame(page, joinPage) {
       const lowGuestContext = await browser.newContext();
       const highGuest = await highGuestContext.newPage({ viewport: { width: 1366, height: 768 } });
       const lowGuest = await lowGuestContext.newPage({ viewport: { width: 1366, height: 768 } });
-      featuredId = await createPrivateGame(high.page, highGuest);
+      const highGameId = await createPrivateGame(high.page, highGuest);
       const lowGameId = await createPrivateGame(low.page, lowGuest);
-      assert.notStrictEqual(featuredId, lowGameId, 'featured regression needs two different active games');
+      assert.notStrictEqual(highGameId, lowGameId, 'active-game regression needs two different active games');
 
       const watchResponse = await page.request.get(BASE + '/api/watch', { timeout: 5000 });
       assert.strictEqual(watchResponse.status(), 200, '/api/watch should be available');
       const watchData = await watchResponse.json();
       const active = watchData.games.filter((game) => game.status === 'playing');
-      const score = (game) => Math.max(...['blue', 'red'].map((color) => {
-        const rating = game.players[color] && game.players[color].rating;
-        return Number.isFinite(rating) ? rating : -1;
-      }));
-      const expected = active.slice().sort((a, b) =>
-        (score(b) - score(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id)
-      )[0];
-      assert.ok(expected, '/api/watch should expose active playing games');
-      assert.ok(score(active.find((game) => game.id === featuredId)) !== score(active.find((game) => game.id === lowGameId)),
-        'featured regression games should have distinct player ratings');
-      assert.ok(watchData.featured, '/api/watch should select a featured game');
-      assert.strictEqual(watchData.featured.id, expected.id, '/api/watch featured game should be highest-rated with deterministic tie-breaks');
+      assert.ok(active.length >= 2, '/api/watch should expose active playing games');
+      assert.strictEqual(Object.prototype.hasOwnProperty.call(watchData, 'featured'), false,
+        '/api/watch should not expose a separately featured game');
 
       await page.goto(BASE + '/', { waitUntil: 'domcontentloaded' });
-      await page.locator('#homeFeaturedGame [data-game-id="' + watchData.featured.id + '"]').waitFor({ timeout: 5000 });
-      assert.strictEqual(await page.locator('#homeFeaturedGame [data-game-id="' + watchData.featured.id + '"]').isVisible(), true,
-        'home should render the exact /api/watch featured game');
-    } catch (error) { failures.push('highest-rated featured game selection: ' + error.message); }
+      await page.locator('#homeFeaturedGame [data-game-id="' + highGameId + '"]').waitFor({ timeout: 5000 });
+      assert.strictEqual(await page.locator('#homeFeaturedGame [data-game-id="' + highGameId + '"]').isVisible(), true,
+        'home should render one ongoing game card');
+    } catch (error) { failures.push('uniform active-game rendering: ' + error.message); }
 
     try {
-      assert.strictEqual(await page.getByRole('button', { name: /Highest-rated|Ongoing game|Watch/i }).count() > 0, true,
-        'home should expose a clickable highest-rated ongoing game');
-    } catch (error) { failures.push('highest-rated ongoing game: ' + error.message); }
+      assert.strictEqual(await page.getByRole('button', { name: /Ongoing game|Watch/i }).count() > 0, true,
+        'home should expose a clickable ongoing game');
+    } catch (error) { failures.push('home ongoing game: ' + error.message); }
 
     try {
       await page.getByRole('button', { name: 'Watch', exact: true }).click();
