@@ -93,6 +93,12 @@ if ! node "$project_dir/tests/live-deployment.js"; then
   printf 'FAILED: live deployment browser test\n'
   failed=1
 fi
+
+printf '\n===== promoted AI game UI test =====\n'
+if ! node "$project_dir/tests/ai-game-ui.js"; then
+  printf 'FAILED: promoted AI game UI test\n'
+  failed=1
+fi
 fi
 
 printf '\n===== AlphaZero AI conformance/training tests =====\n'
