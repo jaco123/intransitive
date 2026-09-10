@@ -154,7 +154,8 @@ async function main() {
       peer.send(create);
       const peerCreated = await peer.waitFor((message) => message.type === 'created');
       await peer.waitFor((message) => message.type === 'state' && message.status === 'playing');
-      admitted.push({ peer, gameId: peerCreated.gameId });
+      assert.ok(peerCreated.gameId);
+      admitted.push({ peer });
     }
     const overCapacity = await connect();
     overCapacity.send(create);
