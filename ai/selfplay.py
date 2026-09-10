@@ -7,7 +7,7 @@ import numpy as np
 
 from .encoding import encode_state
 from .mcts import NetworkEvaluator, choose_from_policy, search_batch
-from .rules import BLUE, GameState, RED
+from .rules import BLUE, GameState
 
 
 @dataclass

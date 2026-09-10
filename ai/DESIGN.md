@@ -51,7 +51,7 @@ replay shards; a crash cannot expose a partially written shard/checkpoint.
 
 Measured host facts are four CPUs, 26 GiB RAM, and a Quadro RTX 5000 with
 15,360 MiB visible VRAM, driver CUDA 13.2. The default network (48 filters, 2
-residual blocks) and 32 simulations are intentionally modest. Four self-play
+residual blocks) and 8 simulations are intentionally modest. Four self-play
 roots advance in lockstep and each MCTS simulation batches its leaves for GPU
 inference; optimizer batches are also GPU-resident. Torch threads are capped at
 2 and the service is CPU-limited to leave capacity for the website. Fixed board

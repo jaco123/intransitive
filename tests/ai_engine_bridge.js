@@ -22,13 +22,6 @@ function actionMove(action) {
 }
 
 function actionIds(game) {
-  const result = [];
-  for (const color of ['blue', 'red']) {
-    for (const move of game.allLegalMoves(color)) {
-      result.push((move.fromR * engine.SIZE + move.fromC) * engine.DIRS.length +
-        engine.DIRS.findIndex(([dc, dr]) => dc === move.toC - move.fromC && dr === move.toR - move.fromR));
-    }
-  }
   // The game exposes the side-to-move list to callers; use that ordering for exact comparison.
   return game.allLegalMoves().map((move) => (move.fromR * engine.SIZE + move.fromC) * engine.DIRS.length +
     engine.DIRS.findIndex(([dc, dr]) => dc === move.toC - move.fromC && dr === move.toR - move.fromR));
