@@ -124,6 +124,8 @@ h1 span { color: var(--muted); font-weight: 400; }
   color: var(--c-font-dim);
 }
 .rules p { margin: var(--s2) 0; }
+.lobby__side .rules { line-height: 1.35; }
+.lobby__side .rules p { margin: 4px 0; }
 .rules b { color: var(--c-font); }
 
 .field-label { display: block; font-size: 13px; color: var(--muted); margin: var(--s3) 0 var(--s1); }
