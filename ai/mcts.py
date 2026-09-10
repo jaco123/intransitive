@@ -277,7 +277,9 @@ def search_batch(
     if algorithm not in ('gumbel', 'puct'):
         raise ValueError('unknown search algorithm')
     rng = rng or np.random.default_rng()
-    roots = [Node(state.copy()) for state in states]
+    # Search never consumes the public Move list. Keep exact repetition/clock
+    # state while avoiding an unbounded history copy for every root and child.
+    roots = [Node(state.copy(include_history=False)) for state in states]
     nonterminal = [root for root in roots if not root.state.is_terminal()]
     if nonterminal:
         logits, values = evaluator.predict([root.state for root in nonterminal])
