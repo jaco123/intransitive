@@ -119,15 +119,30 @@ async function main() {
     assert.strictEqual(aiMove.turn, 'blue');
     assert.strictEqual(aiMove.players.red.name, 'Intransitive AI');
 
+    const spectator = await connect();
+    spectator.send({ type: 'spectate', gameId: created.gameId });
+    const spectatorState = await spectator.waitFor((message) => message.type === 'state' && message.history.length === 2);
+    assert.strictEqual(spectatorState.spectating, true);
+    spectator.send({ type: 'retryAI' });
+    const spectatorRetry = await spectator.waitFor((message) => message.type === 'error');
+    assert.strictEqual(spectatorRetry.message, 'AI retry is not available.');
+    spectator.close();
+
     client.send({ type: 'retryAI' });
     const wrongRetry = await client.waitFor((message) => message.type === 'error');
     assert.strictEqual(wrongRetry.message, 'AI retry is not available.');
 
-    // AI games are intentionally casual and are not written to finished-game
-    // history; this endpoint should remain empty in the throwaway database.
-    const historyResponse = await fetch(`http://127.0.0.1:${PORT}/api/games`);
-    assert.strictEqual(historyResponse.status, 401);
-    console.log('AI protocol lifecycle, duplicate-move guard, retry guard, and history isolation passed');
+    client.send({ type: 'resign' });
+    const finished = await client.waitFor((message) => message.type === 'state' && message.status === 'finished');
+    assert.strictEqual(finished.rated, false);
+    const Database = require('better-sqlite3');
+    const database = new Database(dbPath, { readonly: true });
+    try {
+      assert.strictEqual(database.prepare('SELECT COUNT(*) AS count FROM games').get().count, 0);
+    } finally {
+      database.close();
+    }
+    console.log('AI protocol lifecycle, spectator/retry authorization, duplicate guard, and history isolation passed');
   } finally {
     client.close();
   }
