@@ -54,11 +54,16 @@ const CAP = { blue: 'Blue', red: 'Red' };
 const GRACE_MS = 15000;              // first-move grace period per player
 const DISCONNECT_GRACE_MS = 120000;  // opponent must be gone this long to claim
 const MAX_GAME_CHAT = 200;
+// AI games share one serialized inference child. Four admitted games bound
+// both the in-memory rooms and the child’s queued work without affecting
+// normal human-vs-human games.
+const MAX_AI_GAMES = aiInference.MAX_PENDING_REQUESTS;
 
 // ---------------------------------------------------------------------------
 // Game rooms (in-memory; finished games are persisted to SQLite)
 // ---------------------------------------------------------------------------
 const games = new Map();          // gameId -> game state
+const aiGames = new Set();        // admitted AI game states
 const slotBySocket = new WeakMap(); // ws -> { gameId, color }
 const spectateBySocket = new WeakMap(); // ws -> gameId (spectators)
 const queue = [];                 // lobby seeks: { id, ws, user, timeControl, rating, queuedAt }
@@ -156,6 +161,7 @@ function newGame(timeControl, casual, startPosition, options = {}) {
     aiGame: !!options.aiGame,
     aiColor: options.aiColor || null,
     aiPending: false,
+    aiOperation: null,
     aiRequestSerial: 0,
     aiError: null,
     persistHistory: options.persistHistory !== false,
@@ -433,6 +439,7 @@ function finishGame(g, result, reason) {
   }
   g.ratingDelta = delta;
   broadcastState(g);
+  if (g.aiGame) disposeAiGame(g, false);
 }
 
 function applyRatings(g) {
@@ -586,9 +593,32 @@ function aiHistory(g) {
 
 function failAiMove(g, message) {
   g.aiPending = false;
+  g.aiOperation = null;
   g.aiError = message;
   broadcastState(g);
   if (g.blue && g.blue.ws) send(g.blue.ws, { type: 'aiError', message });
+}
+
+function cancelAiRequest(g) {
+  const operation = g.aiOperation;
+  g.aiOperation = null;
+  g.aiRequestSerial++;
+  g.aiPending = false;
+  if (operation && typeof operation.cancel === 'function') operation.cancel();
+}
+
+function disposeAiGame(g, announce) {
+  cancelAiRequest(g);
+  stopTicker(g);
+  if (announce && (g.status === 'waiting' || g.status === 'playing')) {
+    g.status = 'aborted';
+    g.result = null;
+    g.reason = 'disconnect';
+    g.clocks.running = null;
+    broadcastState(g);
+  }
+  aiGames.delete(g);
+  if (games.get(g.id) === g) games.delete(g.id);
 }
 
 function requestAiMove(g) {
@@ -600,9 +630,12 @@ function requestAiMove(g) {
     history: aiHistory(g),
     turn: g.game.turn,
   };
-  aiInference.request(request).then((response) => {
+  const operation = aiInference.request(request);
+  g.aiOperation = operation;
+  operation.then((response) => {
     if (games.get(g.id) !== g || g.status !== 'playing' || !g.aiGame ||
         g.aiRequestSerial !== requestSerial || !g.aiPending) return;
+    g.aiOperation = null;
     if (g.game.turn !== g.aiColor || !Number.isInteger(response.action) ||
         response.action < 0 || response.action >= engine.SIZE * engine.SIZE * engine.DIRS.length) {
       failAiMove(g, 'The AI returned an invalid move. You can retry.');
@@ -639,6 +672,8 @@ function requestAiMove(g) {
     }
   }).catch((error) => {
     if (games.get(g.id) !== g || g.aiRequestSerial !== requestSerial || !g.aiPending) return;
+    g.aiOperation = null;
+    if (error && error.code === 'AI_REQUEST_CANCELLED') return;
     failAiMove(g, error && error.message === 'The promoted AI checkpoint is unavailable.'
       ? error.message : 'AI inference is temporarily unavailable. You can retry.');
   });
@@ -766,6 +801,7 @@ function abortGame(g) {
   g.clocks.running = null;
   stopTicker(g);
   broadcastState(g);
+  if (g.aiGame) disposeAiGame(g, false);
 }
 
 function handleAbort(ws) {
@@ -1010,12 +1046,25 @@ function handleCreate(ws, msg) {
 }
 
 function handleCreateAi(ws, msg) {
-  leaveLobby(ws);
   const user = resolveUser(msg.session);
+  const slot = slotBySocket.get(ws);
+  const attached = slot ? games.get(slot.gameId) : null;
+  const userAlreadyPlaying = user && Array.from(aiGames).some((g) =>
+    (g.status === 'waiting' || g.status === 'playing') && g.blue && g.blue.userId === user.id);
+  if ((attached && attached.aiGame && (attached.status === 'waiting' || attached.status === 'playing')) || userAlreadyPlaying) {
+    send(ws, { type: 'error', message: 'You are already in an AI game. Return to that game before starting another.' });
+    return;
+  }
+  if (aiGames.size >= MAX_AI_GAMES) {
+    send(ws, { type: 'error', message: 'AI games are at capacity. Please try again shortly.' });
+    return;
+  }
+  leaveLobby(ws);
   const g = newGame(msg.timeControl, true, undefined, {
     aiGame: true, aiColor: 'red', persistHistory: false,
   });
   games.set(g.id, g);
+  aiGames.add(g);
   g.blue = seatFor(user, ws, g.timeControl);
   g.red = aiSeat(g.timeControl);
   slotBySocket.set(ws, { gameId: g.id, color: 'blue' });
@@ -1028,6 +1077,11 @@ function handleClose(ws) {
   if (!slot) return;
   const g = games.get(slot.gameId);
   if (!g) return;
+
+  if (g.aiGame) {
+    disposeAiGame(g, true);
+    return;
+  }
 
   // Directly-created games are private while waiting for the invited player.
   // Removing them on disconnect prevents a stale invite URL from becoming a

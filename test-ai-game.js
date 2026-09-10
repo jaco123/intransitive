@@ -88,11 +88,15 @@ async function main() {
 
   const client = await connect();
   try {
-    client.send({ type: 'createAI', timeControl: { initial: 60, increment: 0 } });
+    const create = { type: 'createAI', timeControl: { initial: 60, increment: 0 } };
+    client.send(create);
+    client.send(create);
     console.log('  createAI sent');
     const created = await client.waitFor((message) => message.type === 'created');
     assert.strictEqual(created.color, 'blue');
     assert.ok(created.gameId && created.token);
+    const repeatedCreate = await client.waitFor((message) => message.type === 'error');
+    assert.match(repeatedCreate.message, /already in an AI game/);
 
     const started = await client.waitFor((message) => message.type === 'state' && message.status === 'playing');
     console.log('  AI game started');
@@ -143,6 +147,29 @@ async function main() {
       database.close();
     }
     console.log('AI protocol lifecycle, spectator/retry authorization, duplicate guard, and history isolation passed');
+
+    const admitted = [];
+    for (let index = 0; index < 4; index++) {
+      const peer = await connect();
+      peer.send(create);
+      const peerCreated = await peer.waitFor((message) => message.type === 'created');
+      await peer.waitFor((message) => message.type === 'state' && message.status === 'playing');
+      admitted.push({ peer, gameId: peerCreated.gameId });
+    }
+    const overCapacity = await connect();
+    overCapacity.send(create);
+    const capacityError = await overCapacity.waitFor((message) => message.type === 'error');
+    assert.strictEqual(capacityError.message, 'AI games are at capacity. Please try again shortly.');
+
+    admitted[0].peer.close();
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    overCapacity.send(create);
+    const released = await overCapacity.waitFor((message) => message.type === 'created');
+    assert.ok(released.gameId);
+    await overCapacity.waitFor((message) => message.type === 'state' && message.status === 'playing');
+    for (const entry of admitted.slice(1)) entry.peer.close();
+    overCapacity.close();
+    console.log('AI capacity admission, disconnect release, and concurrent-create coverage passed');
   } finally {
     client.close();
   }
@@ -162,6 +189,7 @@ async function stopServer() {
     server.kill('SIGTERM');
   });
   fs.rmSync(tempDir, { recursive: true, force: true });
+  console.log('server and inference child shutdown passed');
 }
 
 main()

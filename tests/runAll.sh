@@ -18,6 +18,12 @@ if ! node "$project_dir/test-ai-game.js"; then
   failed=1
 fi
 
+printf '\n===== test-ai-inference.js =====\n'
+if ! node "$project_dir/test-ai-inference.js"; then
+  printf 'FAILED: test-ai-inference.js\n'
+  failed=1
+fi
+
 if [ "${INTRANSITIVE_WEBSITE_OFFLINE:-0}" = "1" ]; then
   printf '\n===== real-site UI tests =====\n'
   printf 'SKIP: INTRANSITIVE_WEBSITE_OFFLINE=1 (website intentionally stopped)\n'
@@ -97,6 +103,12 @@ fi
 printf '\n===== promoted AI game UI test =====\n'
 if ! node "$project_dir/tests/ai-game-ui.js"; then
   printf 'FAILED: promoted AI game UI test\n'
+  failed=1
+fi
+
+printf '\n===== AI capacity UI test =====\n'
+if ! node "$project_dir/tests/ai-capacity-ui.js"; then
+  printf 'FAILED: AI capacity UI test\n'
   failed=1
 fi
 fi

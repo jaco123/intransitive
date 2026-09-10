@@ -12,6 +12,14 @@ let readyResolve = null;
 let readyReject = null;
 let sequence = 0;
 const pending = new Map();
+const MAX_PENDING_REQUESTS = 4;
+let admittedRequests = 0;
+
+function cancelledError() {
+  const error = new Error('AI inference request cancelled.');
+  error.code = 'AI_REQUEST_CANCELLED';
+  return error;
+}
 
 function rejectPending(error) {
   for (const request of pending.values()) request.reject(error);
@@ -75,13 +83,32 @@ function startChild() {
 
 function request(payload) {
   const id = `${Date.now().toString(36)}-${(++sequence).toString(36)}`;
-  return startChild().then((ready) => {
+  if (admittedRequests >= MAX_PENDING_REQUESTS) {
+    return Promise.reject(new Error('AI inference is at capacity. Please try again shortly.'));
+  }
+  admittedRequests++;
+  let cancelled = false;
+  let wireReject = null;
+  let released = false;
+  const release = () => {
+    if (!released) {
+      released = true;
+      admittedRequests--;
+    }
+  };
+  const operation = startChild().then((ready) => {
+    if (cancelled) throw cancelledError();
     if (!ready || !ready.ok) {
       const error = new Error((ready && ready.error) || 'AI checkpoint unavailable');
       resetChild(error);
       throw error;
     }
     return new Promise((resolve, reject) => {
+      wireReject = reject;
+      if (cancelled) {
+        reject(cancelledError());
+        return;
+      }
       if (!child || !child.stdin.writable) {
         reject(new Error('AI inference is unavailable.'));
         return;
@@ -95,20 +122,23 @@ function request(payload) {
       }
     });
   });
+  operation.cancel = () => {
+    if (cancelled || released) return;
+    cancelled = true;
+    if (pending.has(id)) {
+      pending.delete(id);
+      if (wireReject) wireReject(cancelledError());
+    }
+  };
+  operation.then(release, release);
+  return operation;
 }
 
 function close() {
-  if (child) {
-    const current = child;
-    child = null;
-    rejectPending(new Error('AI inference stopped.'));
-    current.kill();
-  }
-  readyPromise = null;
-  readyResolve = null;
-  readyReject = null;
+  if (child || readyPromise) resetChild(new Error('AI inference stopped.'));
+  else rejectPending(new Error('AI inference stopped.'));
 }
 
 process.once('exit', close);
 
-module.exports = { request, close };
+module.exports = { request, close, MAX_PENDING_REQUESTS };
