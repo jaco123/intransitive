@@ -90,6 +90,19 @@ class ReplayBuffer:
             return np.empty((0, CHANNELS, 9, 9), np.float32), np.empty((0, 648), np.float32), np.empty((0,), np.float32)
         return np.concatenate(states), np.concatenate(policies), np.concatenate(values)
 
+    def statistics(self) -> tuple[dict[str, int], list[int]]:
+        """Infer retained default self-play outcomes from immutable targets."""
+        outcomes = {'blue': 0, 'red': 0, 'draw': 0}
+        lengths: list[int] = []
+        for path in self.paths():
+            loaded = self._read(path)
+            if loaded is None or not loaded[2].size:
+                continue
+            first_value = float(loaded[2][0])
+            outcomes['blue' if first_value > 0.5 else 'red' if first_value < -0.5 else 'draw'] += 1
+            lengths.append(int(loaded[2].shape[0]))
+        return outcomes, lengths
+
     def prune(self) -> int:
         paths = self.paths()
         removed = 0

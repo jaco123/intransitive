@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 from ai.checkpoint import CheckpointManager
 from ai.encoding import ACTION_COUNT, CHANNELS, REPETITION_PLANES, decode_action, encode_action, encode_state
-from ai.mcts import Edge, NetworkEvaluator, Node, _backup, _completed_qvalues, _initialize_gumbel_root, search_batch, sequential_halving_schedule
+from ai.mcts import Edge, NetworkEvaluator, Node, _backup, _completed_qvalues, _gumbel_policy_target, _initialize_gumbel_root, search_batch, sequential_halving_schedule
 from ai.model import PolicyValueNet
 from ai.replay import ReplayBuffer
 from ai.rules import BLUE, RED, GameState, initial_board, piece_value, state_from_positions
@@ -134,6 +134,9 @@ def test_gumbel_policy_improvement_and_backup():
     _initialize_gumbel_root(root, np.zeros(ACTION_COUNT, dtype=np.float32), 0.0, 8, 4, 1.0, np.random.default_rng(12))
     check(len(root.legal_actions) == 36 and len(root.root_actions) == 4 and len(root.children) == 36,
           'Gumbel root did not sample a small legal candidate canvas while retaining completed-Q actions')
+    sampled = root.children[root.root_actions[0]]; sampled.visits = 1; sampled.value_sum = 1.0
+    target_with_q = _gumbel_policy_target(root)
+    check(target_with_q[sampled.action] > target_with_q[root.root_actions[-1]], 'completed Q did not influence Gumbel policy target')
     model = PolicyValueNet(8, 1); model.eval(); evaluator = NetworkEvaluator(model, torch.device('cpu'), False)
     state = GameState(); legal = set(state.legal_actions())
     target = search_batch([state], evaluator, 8, rng=np.random.default_rng(11), max_num_considered_actions=4)[0]
@@ -163,6 +166,8 @@ def test_replay_checkpoint_and_tiny_training():
         states = np.zeros((3, CHANNELS, 9, 9), np.float32); policies = np.zeros((3, ACTION_COUNT), np.float32); policies[:, 0] = 1; values = np.zeros(3, np.float32)
         replay.append(states, policies, values, 1); replay.append(states, policies, values, 2); replay.append(states, policies, values, 3)
         check(len(replay.paths()) == 2 and replay.load()[0].shape[0] == 6, 'replay retention/load mismatch')
+        replay_outcomes, replay_lengths = replay.statistics()
+        check(replay_outcomes['draw'] == 2 and replay_lengths == [3, 3], 'replay outcome statistics mismatch')
         manager = CheckpointManager(root / 'checkpoints', keep=2)
         manager.save({'model': {'x': torch.tensor([1.0])}, 'optimizer': {}}, 1)
         check(manager.load_latest()['model']['x'].item() == 1, 'checkpoint reload mismatch')

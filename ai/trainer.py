@@ -193,10 +193,21 @@ class Trainer:
         self.recovery_info: dict | None = None
         self.outcomes = Counter({'blue': 0, 'red': 0, 'draw': 0})
         self.game_length_total = 0
+        self.statistics_games = 0
+        self.statistics_scope = 'cumulative'
         self.game_length_min: int | None = None
         self.game_length_max: int | None = None
         self.last_arena: dict = {}
         self._restore()
+        if not self.statistics_games:
+            retained_outcomes, retained_lengths = self.replay.statistics()
+            self.outcomes.update(retained_outcomes)
+            self.statistics_games = sum(retained_outcomes.values())
+            if retained_lengths:
+                self.game_length_total = sum(retained_lengths)
+                self.game_length_min = min(retained_lengths)
+                self.game_length_max = max(retained_lengths)
+            self.statistics_scope = 'retained_replay'
         if self.recovery_info:
             self._log('checkpoint_recovery', **self.recovery_info)
         self._write_status('running', 'trainer initialized')
@@ -253,6 +264,8 @@ class Trainer:
         self.last_losses = payload.get('last_losses', {})
         self.outcomes.update(payload.get('outcomes', {}))
         self.game_length_total = int(payload.get('game_length_total', 0))
+        self.statistics_games = int(payload.get('statistics_games', sum(self.outcomes.values())))
+        self.statistics_scope = payload.get('statistics_scope', 'cumulative')
         self.game_length_min = payload.get('game_length_min')
         self.game_length_max = payload.get('game_length_max')
         self.last_arena = payload.get('last_arena', {})
@@ -286,7 +299,7 @@ class Trainer:
         now = time.time()
         checkpoint_age = now - self.checkpoints.latest.stat().st_mtime if self.checkpoints.latest.exists() else None
         promoted_age = now - self.checkpoints.promoted.stat().st_mtime if self.checkpoints.promoted.exists() else None
-        average_length = self.game_length_total / self.total_games if self.total_games else None
+        average_length = self.game_length_total / self.statistics_games if self.statistics_games else None
         payload = {
             'status': state, 'message': message, 'pid': os.getpid(), 'started_at': self.started_at,
             'updated_at': utc_now(), 'iteration': self.iteration, 'optimizer_step': self.optimizer_step,
@@ -299,6 +312,8 @@ class Trainer:
             'disk_free_bytes': usage.free, 'disk_total_bytes': usage.total, 'last_losses': self.last_losses,
             'outcomes': dict(self.outcomes),
             'game_length': {'average': average_length, 'min': self.game_length_min, 'max': self.game_length_max},
+            'statistics_games': self.statistics_games,
+            'statistics_scope': self.statistics_scope,
             'last_arena': self.last_arena, 'checkpoint_age_seconds': checkpoint_age,
             'promoted_age_seconds': promoted_age, 'stale_seconds': max(0.0, now - self.last_progress_at),
             'last_error': self.last_error, 'checkpoint_recovery': self.recovery_info,
@@ -317,6 +332,8 @@ class Trainer:
             'iteration': self.iteration, 'optimizer_step': self.optimizer_step, 'total_games': self.total_games,
             'total_positions': self.total_positions, 'promoted_step': self.promoted_step, 'last_losses': self.last_losses,
             'outcomes': dict(self.outcomes), 'game_length_total': self.game_length_total,
+            'statistics_games': self.statistics_games,
+            'statistics_scope': self.statistics_scope,
             'game_length_min': self.game_length_min, 'game_length_max': self.game_length_max,
             'last_arena': self.last_arena,
             'config': self.config, 'rng': rng_state(), 'generator_state': self.rng.bit_generator.state,
@@ -414,6 +431,7 @@ class Trainer:
             batch_outcomes[episode.result] += 1
             batch_lengths.append(episode.plies)
             self.outcomes[episode.result] += 1
+            self.statistics_games += 1
             self.game_length_total += episode.plies
             self.game_length_min = episode.plies if self.game_length_min is None else min(self.game_length_min, episode.plies)
             self.game_length_max = episode.plies if self.game_length_max is None else max(self.game_length_max, episode.plies)

@@ -50,10 +50,12 @@ def live_restart(timeout: int) -> None:
         time.sleep(2)
     if restarted is None:
         raise AssertionError('service did not publish a running post-restart status')
+    new_pid = restarted['pid']
+    post_start_step = restarted.get('optimizer_step', 0)
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         current = status()
-        if current.get('optimizer_step', 0) > before.get('optimizer_step', 0):
+        if current.get('pid') == new_pid and current.get('optimizer_step', 0) > post_start_step:
             print(json.dumps({'mode': 'live-restart', 'before': before, 'after': current}, sort_keys=True))
             return
         time.sleep(5)
