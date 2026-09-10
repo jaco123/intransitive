@@ -65,7 +65,8 @@ def _validate_config(config: dict) -> dict:
         'seed', 'network_width', 'network_blocks', 'mcts_simulations', 'self_play_games',
         'self_play_batch_games', 'temperature_plies', 'temperature', 'max_game_plies',
         'c_puct', 'dirichlet_alpha', 'root_noise_epsilon', 'search_algorithm',
-        'gumbel_max_num_considered_actions', 'gumbel_scale', 'train_min_samples',
+        'gumbel_max_num_considered_actions', 'gumbel_scale', 'gumbel_value_scale',
+        'gumbel_maxvisit_init', 'train_min_samples',
         'train_batch_size', 'train_epochs', 'learning_rate', 'weight_decay',
         'value_loss_weight', 'gradient_clip', 'arena_games', 'arena_simulations',
         'promotion_threshold', 'replay_max_episodes', 'replay_max_samples',
@@ -101,6 +102,7 @@ def _validate_config(config: dict) -> dict:
     for name, minimum, maximum in (
         ('temperature', 0.0, None), ('c_puct', 0.0, None), ('dirichlet_alpha', 0.0, None),
         ('root_noise_epsilon', 0.0, 1.0), ('gumbel_scale', 0.0, None),
+        ('gumbel_value_scale', 0.0, None), ('gumbel_maxvisit_init', 0.0, None),
         ('learning_rate', 0.0, None), ('weight_decay', 0.0, None),
         ('value_loss_weight', 0.0, None), ('gradient_clip', 0.0, None),
         ('promotion_threshold', 0.5, 1.0), ('status_interval_seconds', 0.1, None),
@@ -387,7 +389,8 @@ class Trainer:
         old_model.eval()
         result = arena(candidate, NetworkEvaluator(old_model, self.device, self.amp), int(self.config.get('arena_games', 4)),
                        int(self.config.get('arena_simulations', 24)), self.rng, int(self.config.get('max_game_plies', 2000)),
-                       self.config['search_algorithm'], self.config['gumbel_max_num_considered_actions'], lambda: self.stop_requested)
+                       self.config['search_algorithm'], self.config['gumbel_max_num_considered_actions'], lambda: self.stop_requested,
+                       self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'])
         promoted = not result.get('interrupted') and result['games'] == int(self.config['arena_games']) and result['score'] >= float(self.config.get('promotion_threshold', 0.55))
         if promoted:
             self.promoted_step = self.optimizer_step
@@ -418,6 +421,7 @@ class Trainer:
             float(self.config.get('temperature', 1.0)), self.rng, True, int(self.config.get('max_game_plies', 2000)),
             lambda: self.stop_requested, report_self_play, self.config['search_algorithm'],
             self.config['gumbel_max_num_considered_actions'], self.config['gumbel_scale'],
+            self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
         )
         next_episode = max([int(path.stem.split('-')[1]) for path in self.replay.paths()] or [0]) + 1
         for episode in episodes:

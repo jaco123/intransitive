@@ -109,7 +109,8 @@ def _select(node: Node, c_puct: float) -> Edge:
     )
 
 
-def _completed_qvalues(node: Node, edges: Sequence[Edge] | None = None) -> np.ndarray:
+def _completed_qvalues(node: Node, edges: Sequence[Edge] | None = None,
+                       value_scale: float = 0.1, maxvisit_init: float = 50.0) -> np.ndarray:
     """Return mixed-value completed Q values in the current node perspective."""
     edges = list(node.children.values()) if edges is None else list(edges)
     if not edges:
@@ -122,12 +123,13 @@ def _completed_qvalues(node: Node, edges: Sequence[Edge] | None = None) -> np.nd
     mixed_value = (float(node.raw_value) + float(np.sum(visits)) * weighted_q) / (float(np.sum(visits)) + 1.0)
     completed = np.where(visits > 0, qvalues, mixed_value)
     low, high = float(np.min(completed)), float(np.max(completed))
-    return (completed - low) / max(high - low, 1e-8)
+    normalized = (completed - low) / max(high - low, 1e-8)
+    return normalized * (maxvisit_init + float(np.max(visits))) * value_scale
 
 
-def _select_gumbel_interior(node: Node) -> Edge:
+def _select_gumbel_interior(node: Node, value_scale: float = 0.1, maxvisit_init: float = 50.0) -> Edge:
     edges = list(node.children.values())
-    completed = _completed_qvalues(node, edges)
+    completed = _completed_qvalues(node, edges, value_scale, maxvisit_init)
     logits = np.asarray([edge.prior_logit for edge in edges], dtype=np.float64)
     improved = _softmax(logits + completed)
     visits = np.asarray([edge.visits for edge in edges], dtype=np.float64)
@@ -182,11 +184,11 @@ def _initialize_gumbel_root(node: Node, logits: np.ndarray, value: float, simula
         node.children[action] = Edge(action, node.state.turn, None, float(prior), float(logit))
 
 
-def _select_gumbel_root(node: Node) -> Edge:
+def _select_gumbel_root(node: Node, value_scale: float = 0.1, maxvisit_init: float = 50.0) -> Edge:
     simulation_index = node.visits
     considered_visit = node.root_schedule[min(simulation_index, len(node.root_schedule) - 1)]
     edges = list(node.children.values())
-    completed = _completed_qvalues(node, edges)
+    completed = _completed_qvalues(node, edges, value_scale, maxvisit_init)
     scores = np.asarray([node.root_gumbel[edge.action] + edge.prior_logit + qvalue
                          for edge, qvalue in zip(edges, completed)], dtype=np.float64)
     eligible = [index for index, edge in enumerate(edges) if edge.visits == considered_visit]
@@ -216,12 +218,12 @@ def _backup(path: list[Edge], leaf_value: float) -> None:
         edge.value_sum += value
 
 
-def _gumbel_policy_target(root: Node) -> np.ndarray:
+def _gumbel_policy_target(root: Node, value_scale: float = 0.1, maxvisit_init: float = 50.0) -> np.ndarray:
     policy = np.zeros(648, dtype=np.float32)
     if not root.legal_actions:
         return policy
     edges = list(root.children.values())
-    completed = _completed_qvalues(root, edges)
+    completed = _completed_qvalues(root, edges, value_scale, maxvisit_init)
     # The candidate edges retain exact network logits; unvisited actions still
     # participate in the improved policy with their exact original logits.
     logits = np.asarray([root.root_prior_logits[action] for action in root.legal_actions], dtype=np.float64)
@@ -238,7 +240,8 @@ def search_batch(
     c_puct: float = 1.5, add_noise: bool = False, rng: np.random.Generator | None = None,
     dirichlet_alpha: float = 0.3, noise_epsilon: float = 0.25,
     algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
-    gumbel_scale: float = 1.0,
+    gumbel_scale: float = 1.0, gumbel_value_scale: float = 0.1,
+    gumbel_maxvisit_init: float = 50.0,
 ) -> list[np.ndarray]:
     """Run batched searches and return legal, normalized policy targets."""
     if simulations < 1:
@@ -267,9 +270,9 @@ def search_batch(
             path: list[Edge] = []
             while node.expanded and node.children:
                 if node is root and algorithm == 'gumbel':
-                    edge = _select_gumbel_root(node)
+                    edge = _select_gumbel_root(node, gumbel_value_scale, gumbel_maxvisit_init)
                 elif algorithm == 'gumbel':
-                    edge = _select_gumbel_interior(node)
+                    edge = _select_gumbel_interior(node, gumbel_value_scale, gumbel_maxvisit_init)
                 else:
                     edge = _select(node, c_puct)
                 path.append(edge)
@@ -292,7 +295,7 @@ def search_batch(
     policies: list[np.ndarray] = []
     for root in roots:
         if algorithm == 'gumbel':
-            policies.append(_gumbel_policy_target(root))
+            policies.append(_gumbel_policy_target(root, gumbel_value_scale, gumbel_maxvisit_init))
             continue
         policy = np.zeros(648, dtype=np.float32)
         if root.children:

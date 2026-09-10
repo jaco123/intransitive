@@ -24,10 +24,11 @@ network. Its 648 policy outputs encode source square plus one of the eight
 canonical directions. Search masks to legal actions. The default low-budget
 search is Full Gumbel: Gumbel-Top-k samples root actions without replacement,
 the official sequential-halving visit schedule allocates the small budget,
-unvisited actions receive mixed-value completed Q values, and the completed
-`softmax(logit + Q)` policy is the training target. Interior selection uses the
-deterministic completed-policy rule. Classic PUCT remains available as an
-explicit benchmark option; it is not used for self-play. Values are backed up
+unvisited actions receive mixed-value completed Q values, rescaled using the
+mctx reference transform (`0.1 * (50 + max visits) * normalized Q`), and the
+completed `softmax(logit + Q)` policy is the training target. Interior selection
+uses the deterministic completed-policy rule. Classic PUCT remains available
+as an explicit benchmark option; it is not used for self-play. Values are backed up
 with the player-to-move perspective, including goal states where the engine
 retains the turn. Self-play samples the improved policy with a configurable
 temperature; later plies are greedy. Samples store encoded history planes,
