@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
+from threading import Lock
 import numpy as np
 
 from .encoding import encode_state
@@ -25,7 +27,7 @@ def _value_for_player(state: GameState, player: int) -> float:
     return 1.0 if state.winner == player else -1.0
 
 
-def generate_self_play(
+def _generate_self_play_single(
     evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
     temperature_plies: int, temperature: float, rng: np.random.Generator,
     root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
@@ -78,6 +80,55 @@ def generate_self_play(
                 raise RuntimeError('self-play exceeded configured safety horizon without an engine terminal result')
         remaining -= count
     return episodes
+
+
+def generate_self_play(
+    evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
+    temperature_plies: int, temperature: float, rng: np.random.Generator,
+    root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
+    search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4, gumbel_scale: float = 1.0,
+    gumbel_value_scale: float = 0.1, gumbel_maxvisit_init: float = 50.0,
+    workers: int = 1,
+) -> list[Episode]:
+    """Generate ordered, independently seeded batches on bounded workers.
+
+    The evaluator/model is read-only during self-play. Each worker owns its
+    RNG and game states; results are collected in worker order so a checkpoint
+    can reproduce the stream allocation. Exceptions propagate through the
+    executor instead of being converted into partial training data.
+    """
+    games = int(games)
+    workers = int(workers)
+    if games < 1 or workers < 1:
+        raise ValueError('self-play games and workers must be positive')
+    if workers == 1:
+        return _generate_self_play_single(
+            evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
+            root_noise, max_game_plies, should_stop, progress, search_algorithm,
+            max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init,
+        )
+
+    worker_count = min(workers, games)
+    counts = [games // worker_count + (index < games % worker_count) for index in range(worker_count)]
+    seeds = [int(value) for value in rng.integers(0, np.iinfo(np.int64).max, size=worker_count, dtype=np.int64)]
+    progress_lock = Lock()
+
+    def run_worker(index: int) -> list[Episode]:
+        def worker_progress(info):
+            if progress is not None:
+                with progress_lock:
+                    progress({**info, 'worker': index})
+        return _generate_self_play_single(
+            evaluator, counts[index], simulations, min(int(batch_games), counts[index]),
+            temperature_plies, temperature, np.random.default_rng(seeds[index]), root_noise,
+            max_game_plies, should_stop, worker_progress if progress is not None else None,
+            search_algorithm, max_num_considered_actions, gumbel_scale, gumbel_value_scale,
+            gumbel_maxvisit_init,
+        )
+
+    with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix='selfplay') as executor:
+        groups = list(executor.map(run_worker, range(worker_count)))
+    return [episode for group in groups for episode in group]
 
 
 def play_arena_game(

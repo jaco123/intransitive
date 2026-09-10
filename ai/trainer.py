@@ -72,7 +72,7 @@ def _reject_duplicate_json_keys(pairs):
 def _validate_config(config: dict) -> dict:
     required = {
         'seed', 'network_width', 'network_blocks', 'mcts_simulations', 'self_play_games',
-        'self_play_batch_games', 'temperature_plies', 'temperature', 'max_game_plies',
+        'self_play_batch_games', 'self_play_workers', 'temperature_plies', 'temperature', 'max_game_plies',
         'c_puct', 'dirichlet_alpha', 'root_noise_epsilon', 'search_algorithm',
         'gumbel_max_num_considered_actions', 'gumbel_scale', 'gumbel_value_scale',
         'gumbel_maxvisit_init', 'train_min_samples',
@@ -101,7 +101,7 @@ def _validate_config(config: dict) -> dict:
 
     for name, minimum in {
         'seed': 0, 'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1,
-        'self_play_games': 1, 'self_play_batch_games': 1, 'temperature_plies': 0,
+        'self_play_games': 1, 'self_play_batch_games': 1, 'self_play_workers': 1, 'temperature_plies': 0,
         'max_game_plies': 1, 'gumbel_max_num_considered_actions': 1,
         'train_min_samples': 1, 'train_batch_size': 1, 'train_epochs': 1,
         'arena_games': 2, 'arena_simulations': 1, 'replay_max_episodes': 1,
@@ -124,6 +124,8 @@ def _validate_config(config: dict) -> dict:
         raise ValueError('search_algorithm must be gumbel for self-play training')
     if config['self_play_batch_games'] > config['self_play_games']:
         raise ValueError('self_play_batch_games cannot exceed self_play_games')
+    if config['self_play_workers'] > config['self_play_games']:
+        raise ValueError('self_play_workers cannot exceed self_play_games')
     if config['arena_games'] % 2:
         raise ValueError('arena_games must be even for color-balanced paired evaluation')
     if config['gumbel_max_num_considered_actions'] > 648:
@@ -459,6 +461,7 @@ class Trainer:
             lambda: self.stop_requested, report_self_play, self.config['search_algorithm'],
             self.config['gumbel_max_num_considered_actions'], self.config['gumbel_scale'],
             self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
+            self.config['self_play_workers'],
         )
         next_episode = max([int(path.stem.split('-')[1]) for path in self.replay.paths()] or [0]) + 1
         for episode in episodes:

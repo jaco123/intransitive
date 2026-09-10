@@ -121,6 +121,9 @@ def test_encoding_mcts_selfplay():
     episodes = generate_self_play(evaluator, 2, 2, 2, 4, 1.0, np.random.default_rng(7))
     check(len(episodes) == 2 and all(np.isfinite(ep.states).all() and np.isfinite(ep.policies).all() and np.isfinite(ep.values).all() for ep in episodes), 'self-play sample is non-finite')
     check(all(np.allclose(ep.policies.sum(axis=1), 1, atol=1e-5) for ep in episodes), 'self-play policy target not normalized')
+    parallel_seed = np.random.default_rng(19)
+    parallel = generate_self_play(evaluator, 2, 1, 1, 0, 0.0, parallel_seed, workers=2)
+    check(len(parallel) == 2 and all(ep.plies > 0 for ep in parallel), 'parallel self-play workers did not return complete episodes')
 
     state = GameState()
     action = state.legal_actions()[0]
@@ -238,7 +241,7 @@ def test_replay_checkpoint_and_tiny_training():
 
         config = json.loads((ROOT / 'ai' / 'config.json').read_text())
         config.update({'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1, 'self_play_games': 1,
-                       'self_play_batch_games': 1, 'train_min_samples': 1, 'train_batch_size': 8,
+                       'self_play_batch_games': 1, 'self_play_workers': 1, 'train_min_samples': 1, 'train_batch_size': 8,
                        'train_epochs': 1, 'arena_games': 2, 'arena_simulations': 1, 'max_game_plies': 2000,
                        'replay_max_episodes': 4, 'replay_max_samples': 1000})
         config_path = root / 'config.json'; config_path.write_text(json.dumps(config))
