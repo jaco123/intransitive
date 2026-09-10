@@ -67,8 +67,11 @@ for systemd recovery, while only the configured low-disk condition is paused.
 
 Measured host facts are four CPUs, 26 GiB RAM, and a Quadro RTX 5000 with
 15,360 MiB visible VRAM, driver CUDA 13.2. The default network (48 filters, 2
-residual blocks), sixteen Gumbel considered actions, and 8 simulations are
-intentionally modest for the 36-action root. Four self-play roots advance in
+residual blocks), sixteen Gumbel considered actions, 8 simulations, and a
+16.0 self-play Gumbel scale are intentionally modest for the 36-action root.
+The larger scale is a measured, rule-neutral exploration setting: on the
+collapsed latest model, a read-only four-game comparison produced 1 decisive
+game at scale 16 versus 0 at scales 1 and 4. Four self-play roots advance in
 lockstep and each search step batches
 its leaves for GPU inference; optimizer batches are also GPU-resident. Torch
 threads are capped at 2 and the service is CPU-limited to leave capacity for
