@@ -28,7 +28,7 @@ def _value_for_player(state: GameState, player: int) -> float:
 def generate_self_play(
     evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
     temperature_plies: int, temperature: float, rng: np.random.Generator,
-    root_noise: bool = True, max_game_plies: int = 2000,
+    root_noise: bool = True, max_game_plies: int = 2000, should_stop=None,
 ) -> list[Episode]:
     """Advance several games in lockstep so leaf evaluations are GPU-batched."""
     episodes: list[Episode] = []
@@ -39,6 +39,8 @@ def generate_self_play(
         records: list[list[tuple[np.ndarray, np.ndarray, int]]] = [[] for _ in active]
         ply = 0
         while active:
+            if should_stop is not None and should_stop():
+                return episodes
             policies = search_batch(active, evaluator, simulations, add_noise=root_noise, rng=rng)
             next_active: list[GameState] = []
             next_records: list[list[tuple[np.ndarray, np.ndarray, int]]] = []
