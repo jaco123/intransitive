@@ -138,7 +138,10 @@ def _generate_self_play_processes(
     result_queue = context.Queue(maxsize=max(8, worker_count * 8))
     stop_event = context.Event()
     processes = []
-    worker_progress: dict[int, dict] = {}
+    worker_progress: dict[int, dict] = {
+        index: {'active_games': count, 'completed_games': 0, 'ply': 0}
+        for index, count in enumerate(counts)
+    }
     completed: dict[int, list[Episode]] = {}
     failed = False
 
