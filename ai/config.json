@@ -34,6 +34,7 @@
   "checkpoint_keep": 8,
   "min_free_bytes": 5000000000,
   "amp": true,
+  "symmetry_augmentation": true,
   "status_interval_seconds": 10,
   "log_max_bytes": 20000000
 }

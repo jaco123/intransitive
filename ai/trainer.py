@@ -29,7 +29,8 @@ from .encoding import CHANNELS, LEGACY_CHANNELS
 from .mcts import NetworkEvaluator
 from .model import PolicyValueNet
 from .replay import ReplayBuffer
-from .selfplay import arena, generate_self_play
+from .selfplay import SelfPlayPool, arena, generate_self_play
+from .symmetry import augment_batch
 
 
 def utc_now() -> str:
@@ -80,7 +81,7 @@ def _validate_config(config: dict) -> dict:
         'value_loss_weight', 'gradient_clip', 'arena_games', 'arena_simulations',
         'arena_gumbel_scale',
         'promotion_threshold', 'replay_max_episodes', 'replay_max_samples',
-        'replay_max_bytes', 'checkpoint_keep', 'min_free_bytes', 'amp',
+        'replay_max_bytes', 'checkpoint_keep', 'min_free_bytes', 'amp', 'symmetry_augmentation',
         'status_interval_seconds', 'log_max_bytes',
     }
     missing = sorted(required - config.keys())
@@ -132,6 +133,8 @@ def _validate_config(config: dict) -> dict:
         raise ValueError('gumbel_max_num_considered_actions exceeds action space')
     if not isinstance(config['amp'], bool):
         raise ValueError('amp must be boolean')
+    if not isinstance(config['symmetry_augmentation'], bool):
+        raise ValueError('symmetry_augmentation must be boolean')
     return config
 
 
@@ -232,6 +235,7 @@ class Trainer:
         self.post_fix_game_length_min: int | None = None
         self.post_fix_game_length_max: int | None = None
         self.last_arena: dict = {}
+        self.self_play_pool: SelfPlayPool | None = None
         self._restore()
         if not self.statistics_games:
             retained_outcomes, retained_lengths = self.replay.statistics()
@@ -310,6 +314,12 @@ class Trainer:
 
     def request_stop(self, *_args) -> None:
         self.stop_requested = True
+
+    def close(self) -> None:
+        """Stop actor processes and release their queues and device contexts."""
+        if self.self_play_pool is not None:
+            self.self_play_pool.close()
+            self.self_play_pool = None
 
     def _log(self, event: str, **fields) -> None:
         record = {'time': utc_now(), 'event': event, 'iteration': self.iteration, 'optimizer_step': self.optimizer_step, **fields}
@@ -393,8 +403,12 @@ class Trainer:
             order = self.rng.permutation(size)
             for start in range(0, size, batch_size):
                 indexes = order[start:start + batch_size]
-                x = torch.from_numpy(states[indexes]).to(self.device, non_blocking=True)
-                target_policy = torch.from_numpy(policies[indexes]).to(self.device, non_blocking=True)
+                batch_states = states[indexes]
+                batch_policies = policies[indexes]
+                if self.config['symmetry_augmentation']:
+                    batch_states, batch_policies = augment_batch(batch_states, batch_policies, self.rng)
+                x = torch.from_numpy(batch_states).to(self.device, non_blocking=True)
+                target_policy = torch.from_numpy(batch_policies).to(self.device, non_blocking=True)
                 target_value = torch.from_numpy(values[indexes]).to(self.device, non_blocking=True)
                 self.optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.amp):
@@ -446,6 +460,9 @@ class Trainer:
         self._guard_disk()
         self.model.eval()
         evaluator = NetworkEvaluator(self.model, self.device, self.amp)
+        workers = int(self.config['self_play_workers'])
+        if workers > 1 and self.self_play_pool is None:
+            self.self_play_pool = SelfPlayPool(workers, str(self.device))
         started = time.monotonic()
         last_progress_status = [0.0]
 
@@ -464,7 +481,7 @@ class Trainer:
             lambda: self.stop_requested, report_self_play, self.config['search_algorithm'],
             self.config['gumbel_max_num_considered_actions'], self.config['gumbel_scale'],
             self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
-            self.config['self_play_workers'],
+            workers, self.self_play_pool,
         )
         next_episode = max([int(path.stem.split('-')[1]) for path in self.replay.paths()] or [0]) + 1
         for episode in episodes:
@@ -510,24 +527,27 @@ class Trainer:
         self._write_status('stopped' if stopped else 'running', 'checkpoint saved after stop request' if stopped else 'iteration complete', throughput=metrics)
 
     def run(self, once: bool = False, max_iterations: int | None = None) -> None:
-        if once:
-            self.run_iteration()
-            return
-        while not self.stop_requested and (max_iterations is None or self.iteration < max_iterations):
-            try:
+        try:
+            if once:
                 self.run_iteration()
-            except LowDiskPause as error:
-                self.last_error = str(error)
-                self.last_progress_at = time.time()
-                self._log('low_disk_pause', error=str(error))
-                self._write_status('paused_low_disk', str(error))
-                time.sleep(60)
-            except Exception as error:
-                self.last_error = repr(error)
-                self._log('fatal_error', error=repr(error))
-                self._write_status('fatal_error', str(error))
-                raise
-        self._write_status('stopped', 'stop requested')
+                return
+            while not self.stop_requested and (max_iterations is None or self.iteration < max_iterations):
+                try:
+                    self.run_iteration()
+                except LowDiskPause as error:
+                    self.last_error = str(error)
+                    self.last_progress_at = time.time()
+                    self._log('low_disk_pause', error=str(error))
+                    self._write_status('paused_low_disk', str(error))
+                    time.sleep(60)
+                except Exception as error:
+                    self.last_error = repr(error)
+                    self._log('fatal_error', error=repr(error))
+                    self._write_status('fatal_error', str(error))
+                    raise
+            self._write_status('stopped', 'stop requested')
+        finally:
+            self.close()
 
 
 def main() -> None:

@@ -25,7 +25,9 @@ from ai.mcts import (Edge, NetworkEvaluator, Node, _backup, _completed_qvalues,
 from ai.model import PolicyValueNet
 from ai.replay import ReplayBuffer
 from ai.rules import BLUE, RED, GameState, initial_board, piece_value, state_from_positions
-from ai.selfplay import _generate_self_play_single, generate_self_play
+from ai.selfplay import SelfPlayPool, _generate_self_play_single, generate_self_play
+from ai.symmetry import (ACTION_MAP, SYMMETRY_COUNT, SYMMETRY_NAMES, augment_batch, transform_action,
+                         transform_board, transform_encoded_state, transform_policy, transform_turn)
 from ai.trainer import Trainer, load_config
 
 
@@ -168,6 +170,45 @@ def test_encoding_mcts_selfplay():
     check(not any(child.name.startswith('intransitive-selfplay-') for child in multiprocessing.active_children()),
           'process actor cleanup left a live child')
 
+    # A retained pool must refresh the model snapshot and preserve independent
+    # parent-derived RNG streams across multiple iterations, without leaving
+    # children behind when the caller closes it.
+    persistent_progress = []
+    pool = SelfPlayPool(2, 'cpu')
+    try:
+        first_iteration = generate_self_play(
+            evaluator, 2, 1, 1, 0, 0.0, np.random.default_rng(74),
+            progress=persistent_progress.append, workers=2, actor_pool=pool,
+        )
+        with torch.no_grad():
+            next(iter(model.parameters())).add_(0.5)
+        refresh_rng = np.random.default_rng(75)
+        refresh_seeds = refresh_rng.integers(0, np.iinfo(np.int64).max, size=2, dtype=np.int64)
+        expected_refresh = []
+        for seed in refresh_seeds:
+            expected_refresh.extend(_generate_self_play_single(
+                evaluator, 1, 1, 1, 0, 0.0, np.random.default_rng(int(seed)),
+                True, 2000, None, None, 'gumbel', 4, 1.0, 0.1, 50.0,
+            ))
+        second_iteration = generate_self_play(
+            evaluator, 2, 1, 1, 0, 0.0, np.random.default_rng(75),
+            progress=persistent_progress.append, workers=2, actor_pool=pool,
+        )
+        check(len(first_iteration) == 2 and len(second_iteration) == 2,
+              'persistent actor pool did not complete repeated iterations')
+        check(all(left.result == right.result and left.plies == right.plies and
+                  np.array_equal(left.states, right.states) and np.array_equal(left.policies, right.policies)
+                  for left, right in zip(expected_refresh, second_iteration)),
+              'persistent actor pool did not refresh its model snapshot')
+        check(persistent_progress[-1]['active_games'] == 0 and
+              persistent_progress[-1]['completed_games'] == 2 and
+              persistent_progress[-1]['worker_count'] == 2,
+              'persistent actor pool progress was not aggregate after reuse')
+    finally:
+        pool.close()
+    check(not any(child.name.startswith('intransitive-selfplay-') for child in multiprocessing.active_children()),
+          'persistent actor pool cleanup left a live child')
+
     state = GameState()
     action = state.legal_actions()[0]
     first = state.copy(); second = state.copy()
@@ -176,6 +217,90 @@ def test_encoding_mcts_selfplay():
     second.position_counts[next_key] = 2
     difference = encode_state(first)[-REPETITION_PLANES:] != encode_state(second)[-REPETITION_PLANES:]
     check(difference.any(), 'encoding omitted rule-derived imminent repetition differences')
+
+
+def test_symmetry_augmentation():
+    check(SYMMETRY_NAMES == ('identity', 'main_diagonal', 'rotate_180_swap_colors', 'anti_diagonal_swap_colors'),
+          'unexpected symmetry group')
+    for symmetry in range(SYMMETRY_COUNT):
+        mapped = np.asarray([transform_action(action, symmetry) for action in range(ACTION_COUNT)])
+        check(np.array_equal(mapped, ACTION_MAP[symmetry]), 'action map disagrees with public transform')
+        check(np.array_equal([transform_action(int(mapped[action]), symmetry) for action in range(ACTION_COUNT)],
+                             np.arange(ACTION_COUNT)), 'symmetry action map was not an involution')
+    rng = random.Random(991)
+    for symmetry in range(SYMMETRY_COUNT):
+        original = GameState()
+        transformed = GameState(transform_board(original.board, symmetry), transform_turn(original.turn, symmetry))
+        for _ in range(40):
+            check(np.array_equal(transform_encoded_state(encode_state(original), symmetry), encode_state(transformed)),
+                  'encoded state symmetry did not preserve history/repetition semantics')
+            legal = original.legal_actions()
+            if not legal or original.is_terminal():
+                break
+            action = rng.choice(legal)
+            original.play(action)
+            transformed.play(transform_action(action, symmetry))
+    legal = set(original.legal_actions())
+    policy = np.zeros(ACTION_COUNT, dtype=np.float32)
+    if legal:
+        policy[list(legal)] = 1.0 / len(legal)
+    for symmetry in range(SYMMETRY_COUNT):
+        transformed_policy = transform_policy(policy, symmetry)
+        expected_support = {transform_action(action, symmetry) for action in legal}
+        check(abs(float(transformed_policy.sum()) - 1.0) < 1e-6 and
+              set(np.flatnonzero(transformed_policy)) == expected_support,
+              'symmetry policy lost legal support or normalization')
+    states = np.stack([encode_state(GameState()), encode_state(GameState())])
+    policies = np.zeros((2, ACTION_COUNT), dtype=np.float32)
+    policies[:, 0] = 1.0
+    augmented_states, augmented_policies = augment_batch(states, policies, np.random.default_rng(4))
+    check(augmented_states.shape == states.shape and augmented_policies.shape == policies.shape and
+          np.allclose(augmented_policies.sum(axis=1), 1.0), 'batch symmetry augmentation was malformed')
+    cases = []
+    actions = []
+    state = GameState()
+    for _ in range(30):
+        legal = state.legal_actions()
+        if not legal:
+            break
+        action = legal[rng.randrange(len(legal))]
+        actions.append(action)
+        state.play(action)
+        if state.is_terminal():
+            break
+    for symmetry in range(SYMMETRY_COUNT):
+        cases.append({'board': transform_board(initial_board(), symmetry).tolist(),
+                      'turn': 'blue' if transform_turn(BLUE, symmetry) == BLUE else 'red',
+                      'actions': [transform_action(action, symmetry) for action in actions]})
+    # Edited positions exercise captures, each fixed goal, repetition, and
+    # the 100 non-capture-ply draw under every valid transform.
+    capture = np.zeros((9, 9), dtype=np.int8)
+    capture[4, 4] = piece_value(BLUE, 1)
+    capture[4, 5] = piece_value(RED, 3)
+    goal_blue = np.zeros((9, 9), dtype=np.int8)
+    goal_blue[7, 7] = piece_value(BLUE, 2)
+    goal_red = np.zeros((9, 9), dtype=np.int8)
+    goal_red[1, 1] = piece_value(RED, 1)
+    quiet = np.zeros((9, 9), dtype=np.int8)
+    quiet[4, 4] = piece_value(BLUE, 1)
+    cycle = np.zeros((9, 9), dtype=np.int8)
+    cycle[1, 1] = piece_value(BLUE, 1); cycle[7, 7] = piece_value(RED, 1)
+    cycle_actions = [encode_action(1, 1, 2, 1), encode_action(7, 7, 6, 7),
+                     encode_action(2, 1, 1, 1), encode_action(6, 7, 7, 7)] * 2
+    edited_cases = (
+        (capture, BLUE, [encode_action(4, 4, 5, 4)], 0),
+        (goal_blue, BLUE, [encode_action(7, 7, 8, 8)], 0),
+        (goal_red, RED, [encode_action(1, 1, 0, 0)], 0),
+        (cycle, BLUE, cycle_actions, 0),
+        (quiet, BLUE, [encode_action(4, 4, 5, 4)], 99),
+    )
+    for board, turn, case_actions, halfmove in edited_cases:
+        for symmetry in range(SYMMETRY_COUNT):
+            cases.append({'board': transform_board(board, symmetry).tolist(),
+                          'turn': 'blue' if transform_turn(turn, symmetry) == BLUE else 'red',
+                          'halfmove': halfmove,
+                          'actions': [transform_action(action, symmetry) for action in case_actions]})
+    js_differential(cases)
 
 
 def test_gumbel_policy_improvement_and_backup():
@@ -341,6 +466,7 @@ def main():
     test_rules_and_differential(); print('PASS AI rules and JS differential conformance')
     test_encoding_mcts_selfplay(); print('PASS AI encoding, MCTS, and self-play')
     test_gumbel_policy_improvement_and_backup(); print('PASS Gumbel policy improvement and MCTS backup semantics')
+    test_symmetry_augmentation(); print('PASS exact symmetry augmentation and JS conformance')
     test_config_duplicates_and_fresh_seed(); print('PASS config duplicate rejection and deterministic fresh initialization')
     test_replay_checkpoint_and_tiny_training(); print('PASS AI replay, atomic checkpoint, tiny training, and resume')
     print('ALL AI TESTS PASSED')

@@ -72,13 +72,15 @@ residual blocks), sixteen Gumbel considered actions, 8 simulations, and a
 The larger scale is a measured, rule-neutral exploration setting: on the
 collapsed latest model, a read-only four-game comparison produced 1 decisive
 game at scale 16 versus 0 at scales 1 and 4. Eight self-play games are split
-over three bounded `spawn` actors. Each actor owns its rule/search state and a
-read-only snapshot of the current network, initializes CUDA in the child, and
-uses one Torch thread; this removes the Python GIL from MCTS selection while
-keeping the parent free for persistence. Actor results are finite and
-collected in worker order, parent-derived RNG seeds are persisted through the
-normal checkpoint stream, the queue is bounded, and cancellation or a worker
-exception terminates and joins every child. Parent training uses four Torch
+over three persistent bounded `spawn` actors. Each actor owns its rule/search
+state and a read-only snapshot of the current network, initializes CUDA in the
+child, and uses one Torch thread; this removes the Python GIL from MCTS
+selection while keeping the parent free for persistence. The parent sends an
+atomic CPU model snapshot and a fresh parent-derived seed at each iteration;
+the actor's model/CUDA context is retained between iterations. Actor results
+are finite and collected in worker order, parent-derived RNG seeds are
+persisted through the normal checkpoint stream, the queues are bounded, and
+cancellation or a worker exception terminates and joins every child. Parent training uses four Torch
 intra-op threads and one inter-op thread; the actor budget is three CPU threads
 plus the parent, never four Torch threads per actor. The service CPU quota is
 400% while the website is intentionally stopped. Fixed board shapes enable
@@ -99,6 +101,11 @@ positions/sec over repeated 8-game runs. The production default is therefore
 three actors; games/sec is not used as the selection criterion. The random
 episode lengths differ, so positions/sec and repeated fixed-workload
 measurements are the meaningful ongoing measures.
+
+The persistent pool removes repeated process/model startup from later
+iterations. Its first iteration still includes startup, and the controlled
+fixed-checkpoint startup-versus-reuse measurement is retained in the benchmark
+evidence; it does not change the eight simulations or Gumbel search targets.
 
 Torch 2.7.1+cu128 was tested with warmed eager inference and both
 `torch.compile` `reduce-overhead` and `max-autotune` modes. The compiler could
@@ -126,6 +133,39 @@ threefold consequence while exact unbounded counts remain in the rules and
 MCTS. Replay shards written with the earlier 27-channel representation are
 zero-padded on load, and old model stems/optimizer moments are migrated once
 to the 43-channel representation.
+
+## Symmetry augmentation
+
+The complete rule-preserving spatial group is the four-element subgroup
+`{identity, main-diagonal transpose, 180-degree rotation, anti-diagonal
+reflection}`. The main diagonal fixes both goals and leaves colors/turn
+unchanged. The 180-degree and anti-diagonal transforms exchange A1 and I9, so
+they also exchange blue and red and flip the side to move. The other four
+elements of the square's D4 group move the fixed goals to A9 or I1 and are not
+valid symmetries of this game. The default setup is invariant under all four;
+edited positions remain valid because each transform is a bijection of squares
+and the color swap is applied with the goal swap.
+
+Augmentation is performed on encoded replay batches, not by manufacturing a
+second `GameState` history. The four board-history blocks, side-to-move plane,
+and all 16 repetition/action planes are transformed; color channels and the
+turn plane are swapped for the two color-swapping transforms. Halfmove and
+current-position-count scalar planes are unchanged. Exact repetition counts
+for every older position remain in the canonical state/MCTS path, so no
+history is merged or discarded by augmentation. Every source/action direction
+pair maps bijectively, including encoded actions that are illegal at a given
+edge; legal policy support and normalization are preserved. The value target
+is unchanged: it is always from the current side's perspective, and the paired
+color/turn transform preserves that perspective. Differential tests compare
+all four transformed trajectories against `engine.js`, including goals,
+captures, and repetition/clock snapshots.
+
+The transformation is sampled per training batch, on the fly, so replay disk
+use is unchanged. On the small CPU training benchmark (8-filter/1-block model,
+128 samples, four training calls) it added 12.2% wall time (3468.8 to 3093.4
+samples/sec); the larger data-path benchmark measured about 27.8k transformed
+samples/sec. The short deterministic tests establish exactness, not a strength
+or sample-efficiency claim; that requires a longer controlled training run.
 
 The design follows the AlphaZero paper's tabula-rasa policy/value plus MCTS
 loop, the OpenSpiel decomposition into actors, evaluator, learner, replay,

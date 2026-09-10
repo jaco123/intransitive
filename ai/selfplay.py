@@ -85,38 +85,177 @@ def _generate_self_play_single(
     return episodes
 
 
-def _process_worker_entry(
-    index: int, games: int, seed: int, model_config: dict, model_state: dict,
-    device_name: str, simulations: int, batch_games: int, temperature_plies: int,
-    temperature: float, root_noise: bool, max_game_plies: int, search_algorithm: str,
-    max_num_considered_actions: int, gumbel_scale: float, gumbel_value_scale: float,
-    gumbel_maxvisit_init: float, stop_event, result_queue,
-) -> None:
-    """Run one isolated actor; CUDA is initialized only inside the child."""
+def _persistent_worker_entry(index, command_queue, result_queue, stop_event) -> None:
+    """Keep one actor and CUDA context alive while the trainer is running."""
     try:
         torch.set_num_threads(1)
         try:
             torch.set_num_interop_threads(1)
         except RuntimeError:
             pass
-        device = torch.device(device_name)
-        model = PolicyValueNet(**{key: model_config[key] for key in ('width', 'blocks')})
-        model.load_state_dict(model_state)
-        model.to(device).eval()
-        evaluator = NetworkEvaluator(model, device, amp=device.type == 'cuda')
+        model = None
+        model_config = None
+        device = None
+        while True:
+            command = command_queue.get()
+            if command is None:
+                return
+            try:
+                (games, seed, next_model_config, model_state, device_name, simulations, batch_games,
+                 temperature_plies, temperature, root_noise, max_game_plies, search_algorithm,
+                 max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init) = command
+                if model is None or model_config != next_model_config:
+                    model = PolicyValueNet(**{key: next_model_config[key] for key in ('width', 'blocks')})
+                    model_config = dict(next_model_config)
+                    device = torch.device(device_name)
+                    model.to(device)
+                model.load_state_dict(model_state)
+                model.eval()
+                evaluator = NetworkEvaluator(model, device, amp=device.type == 'cuda')
 
-        def report(progress):
-            result_queue.put(('progress', index, progress))
+                def report(progress):
+                    result_queue.put(('progress', index, progress))
 
-        episodes = _generate_self_play_single(
-            evaluator, games, simulations, batch_games, temperature_plies, temperature,
-            np.random.default_rng(seed), root_noise, max_game_plies, stop_event.is_set,
-            report, search_algorithm, max_num_considered_actions, gumbel_scale,
-            gumbel_value_scale, gumbel_maxvisit_init,
-        )
-        result_queue.put(('done', index, episodes))
+                episodes = _generate_self_play_single(
+                    evaluator, games, simulations, batch_games, temperature_plies, temperature,
+                    np.random.default_rng(seed), root_noise, max_game_plies, stop_event.is_set,
+                    report, search_algorithm, max_num_considered_actions, gumbel_scale,
+                    gumbel_value_scale, gumbel_maxvisit_init,
+                )
+                result_queue.put(('done', index, episodes))
+            except BaseException as error:
+                result_queue.put(('error', index, repr(error), traceback.format_exc()))
     except BaseException as error:
-        result_queue.put(('error', index, repr(error), traceback.format_exc()))
+        result_queue.put(('fatal', index, repr(error), traceback.format_exc()))
+
+
+class SelfPlayPool:
+    """Bounded persistent actor pool with exact per-iteration model refresh."""
+
+    def __init__(self, workers: int, device_name: str):
+        workers = int(workers)
+        if workers < 1:
+            raise ValueError('self-play workers must be positive')
+        self.workers = workers
+        self._context = get_context('spawn')
+        # A queue per actor keeps the parent-derived seed stream attached to
+        # the actor slot while retaining bounded backpressure. A shared queue
+        # would let a faster child consume another actor's seeded job.
+        self._commands = [self._context.Queue(maxsize=1) for _ in range(workers)]
+        self._results = self._context.Queue(maxsize=max(8, workers * 8))
+        self._stop_event = self._context.Event()
+        self._processes = []
+        self._closed = False
+        for index in range(workers):
+            process = self._context.Process(
+                target=_persistent_worker_entry,
+                args=(index, self._commands[index], self._results, self._stop_event),
+                name=f'intransitive-selfplay-{index}',
+            )
+            process.start()
+            self._processes.append(process)
+
+    def run(
+        self, evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
+        temperature_plies: int, temperature: float, rng: np.random.Generator,
+        root_noise: bool, max_game_plies: int, should_stop, progress, search_algorithm: str,
+        max_num_considered_actions: int, gumbel_scale: float, gumbel_value_scale: float,
+        gumbel_maxvisit_init: float,
+    ) -> list[Episode]:
+        if self._closed:
+            raise RuntimeError('self-play pool is closed')
+        games = int(games)
+        if should_stop is not None and should_stop():
+            return []
+        worker_count = min(self.workers, games)
+        counts = [games // worker_count + (index < games % worker_count) for index in range(worker_count)]
+        seeds = [int(value) for value in rng.integers(0, np.iinfo(np.int64).max, size=worker_count, dtype=np.int64)]
+        model_state = {key: value.detach().cpu() if torch.is_tensor(value) else value
+                       for key, value in evaluator.model.state_dict().items()}
+        worker_progress = {
+            index: {'active_games': counts[index], 'completed_games': 0, 'ply': 0}
+            for index in range(worker_count)
+        }
+        completed: dict[int, list[Episode]] = {}
+        failed = False
+
+        def aggregate() -> dict:
+            return {
+                'active_games': sum(int(item.get('active_games', 0)) for item in worker_progress.values()),
+                'completed_games': sum(int(item.get('completed_games', 0)) for item in worker_progress.values()),
+                'ply': max((int(item.get('ply', 0)) for item in worker_progress.values()), default=0),
+                'worker_count': worker_count,
+            }
+
+        command_args = (evaluator.model.config, model_state, str(evaluator.device), simulations,
+                        batch_games, temperature_plies, temperature, root_noise, max_game_plies,
+                        search_algorithm, max_num_considered_actions, gumbel_scale,
+                        gumbel_value_scale, gumbel_maxvisit_init)
+        try:
+            self._stop_event.clear()
+            for index, count in enumerate(counts):
+                self._commands[index].put((count, seeds[index], *command_args))
+            while len(completed) < worker_count:
+                if should_stop is not None and should_stop():
+                    self._stop_event.set()
+                try:
+                    message = self._results.get(timeout=0.25)
+                except Empty:
+                    dead = [process for process in self._processes[:worker_count] if not process.is_alive()]
+                    if dead:
+                        raise RuntimeError(f'self-play worker exited without a result: {dead[0].name} ({dead[0].exitcode})')
+                    continue
+                kind, index, payload, *details = message
+                if kind == 'progress':
+                    worker_progress[index] = payload
+                    if progress is not None:
+                        progress({**aggregate(), 'workers': dict(worker_progress)})
+                elif kind == 'done':
+                    completed[index] = payload
+                    worker_progress[index] = {
+                        'active_games': 0, 'completed_games': len(payload),
+                        'ply': max((episode.plies for episode in payload), default=0),
+                    }
+                    if progress is not None:
+                        progress({**aggregate(), 'workers': dict(worker_progress)})
+                elif kind in ('error', 'fatal'):
+                    raise RuntimeError(f'self-play worker {index} failed: {payload}\n{details[0]}')
+                else:
+                    raise RuntimeError(f'unknown self-play worker message: {kind}')
+        except BaseException:
+            failed = True
+            self.close()
+            raise
+        finally:
+            if not failed:
+                self._stop_event.clear()
+        return [episode for index in range(worker_count) for episode in completed[index]]
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        self._stop_event.set()
+        for command_queue in self._commands:
+            command_queue.put(None)
+        for process in self._processes:
+            process.join(timeout=5)
+        for process in self._processes:
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=5)
+        for command_queue in self._commands:
+            command_queue.close()
+        self._results.close()
+        for command_queue in self._commands:
+            command_queue.join_thread()
+        self._results.join_thread()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, _exception_type, _exception, _traceback) -> None:
+        self.close()
 
 
 def _generate_self_play_processes(
@@ -126,92 +265,11 @@ def _generate_self_play_processes(
     max_num_considered_actions: int, gumbel_scale: float, gumbel_value_scale: float,
     gumbel_maxvisit_init: float, workers: int,
 ) -> list[Episode]:
-    """Use bounded spawn actors when GIL-free CPU parallelism is worthwhile."""
-    if should_stop is not None and should_stop():
-        return []
-    worker_count = min(int(workers), games)
-    counts = [games // worker_count + (index < games % worker_count) for index in range(worker_count)]
-    seeds = [int(value) for value in rng.integers(0, np.iinfo(np.int64).max, size=worker_count, dtype=np.int64)]
-    model_state = {key: value.detach().cpu() if torch.is_tensor(value) else value
-                   for key, value in evaluator.model.state_dict().items()}
-    context = get_context('spawn')
-    result_queue = context.Queue(maxsize=max(8, worker_count * 8))
-    stop_event = context.Event()
-    processes = []
-    worker_progress: dict[int, dict] = {
-        index: {'active_games': count, 'completed_games': 0, 'ply': 0}
-        for index, count in enumerate(counts)
-    }
-    completed: dict[int, list[Episode]] = {}
-    failed = False
-
-    def aggregate() -> dict:
-        return {
-            'active_games': sum(int(item.get('active_games', 0)) for item in worker_progress.values()),
-            'completed_games': sum(int(item.get('completed_games', 0)) for item in worker_progress.values()),
-            'ply': max((int(item.get('ply', 0)) for item in worker_progress.values()), default=0),
-            'worker_count': worker_count,
-        }
-
-    try:
-        for index, count in enumerate(counts):
-            process = context.Process(
-                target=_process_worker_entry,
-                args=(index, count, seeds[index], evaluator.model.config, model_state,
-                      str(evaluator.device), simulations, min(int(batch_games), count),
-                      temperature_plies, temperature, root_noise, max_game_plies, search_algorithm,
-                      max_num_considered_actions, gumbel_scale, gumbel_value_scale,
-                      gumbel_maxvisit_init, stop_event, result_queue),
-                name=f'intransitive-selfplay-{index}',
-            )
-            process.start()
-            processes.append(process)
-        while len(completed) < worker_count:
-            if should_stop is not None and should_stop():
-                stop_event.set()
-            try:
-                message = result_queue.get(timeout=0.25)
-            except Empty:
-                dead = [process for process in processes if not process.is_alive()]
-                if dead:
-                    raise RuntimeError(f'self-play worker exited without a result: {dead[0].name} ({dead[0].exitcode})')
-                continue
-            kind, index, payload, *details = message
-            if kind == 'progress':
-                worker_progress[index] = payload
-                if progress is not None:
-                    progress({**aggregate(), 'workers': dict(worker_progress)})
-            elif kind == 'done':
-                completed[index] = payload
-                worker_progress[index] = {
-                    'active_games': 0, 'completed_games': len(payload),
-                    'ply': max((episode.plies for episode in payload), default=0),
-                }
-                if progress is not None:
-                    progress({**aggregate(), 'workers': dict(worker_progress)})
-            elif kind == 'error':
-                raise RuntimeError(f'self-play worker {index} failed: {payload}\n{details[0]}')
-            else:
-                raise RuntimeError(f'unknown self-play worker message: {kind}')
-        for process in processes:
-            process.join()
-            if process.exitcode != 0:
-                raise RuntimeError(f'self-play worker exited unexpectedly: {process.name} ({process.exitcode})')
-    except BaseException:
-        failed = True
-        stop_event.set()
-        for process in processes:
-            if process.is_alive():
-                process.terminate()
-        for process in processes:
-            process.join(timeout=5)
-        raise
-    finally:
-        if not failed:
-            stop_event.set()
-        result_queue.close()
-        result_queue.join_thread()
-    return [episode for index in range(worker_count) for episode in completed[index]]
+    """Run a bounded pool for callers that do not retain one between iterations."""
+    with SelfPlayPool(workers, str(evaluator.device)) as pool:
+        return pool.run(evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
+                        root_noise, max_game_plies, should_stop, progress, search_algorithm,
+                        max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init)
 
 
 def generate_self_play(
@@ -220,7 +278,7 @@ def generate_self_play(
     root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
     search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4, gumbel_scale: float = 1.0,
     gumbel_value_scale: float = 0.1, gumbel_maxvisit_init: float = 50.0,
-    workers: int = 1,
+    workers: int = 1, actor_pool: SelfPlayPool | None = None,
 ) -> list[Episode]:
     """Generate lockstep GPU batches, optionally using isolated CPU actors."""
     games = int(games)
@@ -235,6 +293,14 @@ def generate_self_play(
         )
     if workers > games:
         raise ValueError('self-play workers cannot exceed games')
+    if actor_pool is not None:
+        if actor_pool.workers != workers:
+            raise ValueError('persistent self-play pool worker count does not match configuration')
+        return actor_pool.run(
+            evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
+            root_noise, max_game_plies, should_stop, progress, search_algorithm,
+            max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init,
+        )
     return _generate_self_play_processes(
         evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
         root_noise, max_game_plies, should_stop, progress, search_algorithm,
