@@ -63,6 +63,7 @@
   const opponentNameEl = $('opponentName');
   const gameLinkEl = $('gameLink');
   const createBtn = $('createBtn');
+  const aiBtn = $('aiBtn');
   const joinBtn = $('joinBtn');
   const joinInput = $('joinInput');
   const tcMinutesEl = $('tcMinutes');
@@ -100,6 +101,7 @@
   const gameActionsEl = $('gameActions');
   const waitingActionsEl = $('waitingActions');
   const cancelPrivateGameBtn = $('cancelPrivateGame');
+  const retryAiBtn = $('retryAi');
   const actionConfirmEl = $('actionConfirm');
   const actionConfirmTextEl = $('actionConfirmText');
   const actionConfirmYesEl = $('actionConfirmYes');
@@ -672,6 +674,11 @@
       }
       return;
     }
+    if (state.aiError) {
+      gameStatusEl.textContent = state.aiError;
+      gameStatusEl.className = 'gamestatus waiting';
+      return;
+    }
     if (state.status === 'waiting') {
       gameStatusEl.textContent = 'Waiting for opponent…';
       gameStatusEl.className = 'gamestatus waiting';
@@ -681,7 +688,7 @@
         gameStatusEl.className = 'gamestatus waiting';
       } else {
         const your = state.turn === myColor;
-        gameStatusEl.textContent = your ? 'Your move' : CAP[state.turn] + ' to move';
+        gameStatusEl.textContent = your ? 'Your move' : (state.computer && state.aiThinking ? 'Intransitive AI is thinking…' : CAP[state.turn] + ' to move');
         gameStatusEl.className = 'gamestatus ' + (your ? 'yourturn' : '');
       }
     } else {
@@ -811,8 +818,8 @@
     }
     playerNameEl.className = 'pname ' + myColor;
     opponentNameEl.className = 'pname profile-link ' + opp;
-    opponentNameEl.disabled = !opponent || !!opponent.guest;
-    opponentNameEl.title = opponent && !opponent.guest ? 'View ' + opponent.name + "'s profile" : 'Guest player';
+    opponentNameEl.disabled = !opponent || !!opponent.guest || !!opponent.ai;
+    opponentNameEl.title = opponent && opponent.ai ? 'Intransitive AI' : opponent && !opponent.guest ? 'View ' + opponent.name + "'s profile" : 'Guest player';
   }
 
   function renderMode() {
@@ -823,6 +830,11 @@
     gameModeEl.classList.remove('hidden');
     if (state.spectating) {
       gameModeEl.textContent = 'Spectating';
+      gameModeEl.classList.add('casual');
+      return;
+    }
+    if (state.computer) {
+      gameModeEl.textContent = 'Computer';
       gameModeEl.classList.add('casual');
       return;
     }
@@ -852,6 +864,7 @@
     rematchBtn.classList.toggle('hidden', !finished);
     newGameBtn.classList.toggle('hidden', !finished);
     finishedAnalysisBtn.classList.toggle('hidden', !finished);
+    retryAiBtn.classList.toggle('hidden', !(state && state.computer && state.aiError && state.status === 'playing' && state.turn !== myColor));
 
     actionConfirmEl.classList.toggle('hidden', !confirmAction);
     if (confirmAction) {
@@ -1411,6 +1424,12 @@
 
       case 'error':
         showToast(msg.message);
+        break;
+      case 'aiError':
+        if (state) {
+          state.aiError = msg.message || 'AI inference is temporarily unavailable. You can retry.';
+          render();
+        }
         break;
     }
   }
@@ -2614,6 +2633,14 @@
     connect();
   });
 
+  aiBtn.addEventListener('click', () => {
+    homeErrorEl.classList.add('hidden');
+    pending = { type: 'createAI', timeControl: parseTimeControl() };
+    const t = sessionToken();
+    if (t) pending.session = t;
+    connect();
+  });
+
   joinBtn.addEventListener('click', () => {
     homeErrorEl.classList.add('hidden');
     const id = extractGameId(joinInput.value);
@@ -2722,6 +2749,10 @@
     if (ws && ws.readyState === WebSocket.OPEN && gameId) {
       ws.send(JSON.stringify({ type: 'cancelPrivate', gameId }));
     }
+  });
+
+  retryAiBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'retryAI' }));
   });
 
   rematchBtn.addEventListener('click', () => {

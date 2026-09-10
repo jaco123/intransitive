@@ -12,6 +12,7 @@ const { WebSocketServer } = require('ws');
 const engine = require('./engine.js');
 const db = require('./db.js');
 const rating = require('./rating.js');
+const aiInference = require('./ai-inference.js');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 8090;
@@ -112,7 +113,7 @@ function timeControlCategory(tc) {
   return 'classical';
 }
 
-function newGame(timeControl, casual, startPosition) {
+function newGame(timeControl, casual, startPosition, options = {}) {
   const tc = normalizeTimeControl(timeControl);
   const position = startPosition || { board: engine.initialBoard(), turn: 'blue' };
   const game = new engine.Game();
@@ -152,17 +153,24 @@ function newGame(timeControl, casual, startPosition) {
     drawOffer: null,        // color that offered a draw
     rematchOffer: null,     // color that offered a rematch
     spectators: new Set(),  // spectator WebSockets
+    aiGame: !!options.aiGame,
+    aiColor: options.aiColor || null,
+    aiPending: false,
+    aiRequestSerial: 0,
+    aiError: null,
+    persistHistory: options.persistHistory !== false,
   };
 }
 
-function makeSeat(user, ws, category) {
+function makeSeat(user, ws, category, options = {}) {
   const r = user ? db.ratingFor(user, category) : null;
   return {
     token: randomToken(),
     ws,
-    connected: !!ws,
+    connected: options.ai ? true : !!ws,
     userId: user ? user.id : null,
-    username: user ? user.username : null,
+    username: user ? user.username : (options.username || null),
+    ai: !!options.ai,
     rating: r ? r.rating : null,     // rating at game start (before)
     rd: r ? r.rd : null,
     vol: r ? r.vol : null,
@@ -173,6 +181,10 @@ function makeSeat(user, ws, category) {
 
 function seatFor(user, ws, tc) {
   return makeSeat(user, ws, timeControlCategory(tc));
+}
+
+function aiSeat(tc) {
+  return makeSeat(null, null, timeControlCategory(tc), { ai: true, username: 'Intransitive AI' });
 }
 
 function resolveUser(sessionToken) {
@@ -221,6 +233,7 @@ function notifyUser(userId, message) {
 function playerInfo(g, color) {
   const p = g[color];
   if (!p) return null;
+  if (p.ai) return { name: p.username, guest: false, ai: true, rating: null, userId: null };
   if (!p.userId) return { name: CAP[color], guest: true, rating: null, userId: null };
   let r = p.rating;
   if (g.status === 'finished' && p.ratingAfter != null) r = p.ratingAfter;
@@ -264,6 +277,9 @@ function snapshot(g, color, spectating) {
     spectating: isSpec,
     drawOffer: g.drawOffer || null,
     rematchOffer: g.rematchOffer || null,
+    computer: !!g.aiGame,
+    aiThinking: !!g.aiPending,
+    aiError: g.aiError || null,
   };
 }
 
@@ -411,8 +427,10 @@ function finishGame(g, result, reason) {
   stopTicker(g);
 
   const delta = applyRatings(g);
-  persistGame(g);
-  recordOpenings(g);
+  if (g.persistHistory) {
+    persistGame(g);
+    recordOpenings(g);
+  }
   g.ratingDelta = delta;
   broadcastState(g);
 }
@@ -555,8 +573,86 @@ function handleMove(ws, msg) {
   } else {
     g.clocks.running = g.game.turn;
     g.clocks.lastTick = Date.now();
+    if (g.aiGame && g.game.turn === g.aiColor) requestAiMove(g);
     broadcastState(g);
   }
+}
+
+function aiHistory(g) {
+  return g.game.history.map((move) => ({
+    fromC: move.fromC, fromR: move.fromR, toC: move.toC, toR: move.toR,
+  }));
+}
+
+function failAiMove(g, message) {
+  g.aiPending = false;
+  g.aiError = message;
+  broadcastState(g);
+  if (g.blue && g.blue.ws) send(g.blue.ws, { type: 'aiError', message });
+}
+
+function requestAiMove(g) {
+  if (!g.aiGame || g.status !== 'playing' || g.aiPending || g.game.turn !== g.aiColor) return;
+  g.aiPending = true;
+  g.aiError = null;
+  const requestSerial = ++g.aiRequestSerial;
+  const request = {
+    history: aiHistory(g),
+    turn: g.game.turn,
+  };
+  aiInference.request(request).then((response) => {
+    if (games.get(g.id) !== g || g.status !== 'playing' || !g.aiGame ||
+        g.aiRequestSerial !== requestSerial || !g.aiPending) return;
+    if (g.game.turn !== g.aiColor || !Number.isInteger(response.action) ||
+        response.action < 0 || response.action >= engine.SIZE * engine.SIZE * engine.DIRS.length) {
+      failAiMove(g, 'The AI returned an invalid move. You can retry.');
+      return;
+    }
+    const source = Math.floor(response.action / engine.DIRS.length);
+    const direction = response.action % engine.DIRS.length;
+    const fromR = Math.floor(source / engine.SIZE);
+    const fromC = source % engine.SIZE;
+    const [dc, dr] = engine.DIRS[direction];
+    const toC = fromC + dc;
+    const toR = fromR + dr;
+    const legal = engine.legalMovesFrom(g.game.board, g.game.turn, fromC, fromR)
+      .find((move) => move.toC === toC && move.toR === toR);
+    if (!legal) {
+      failAiMove(g, 'The AI returned an illegal move. You can retry.');
+      return;
+    }
+    const result = g.game.move(fromC, fromR, toC, toR);
+    if (!result.ok) {
+      failAiMove(g, 'The AI move could not be applied. You can retry.');
+      return;
+    }
+    g.aiPending = false;
+    g.aiError = null;
+    g.clocks.redMs += g.timeControl.increment * 1000;
+    if (g.game.status !== 'playing') {
+      if (g.game.status === 'draw') finishGame(g, 'draw', g.game.drawReason);
+      else finishGame(g, g.game.winner, engine.getWinner(g.game.board) ? 'goal' : 'noMoves');
+    } else {
+      g.clocks.running = g.game.turn;
+      g.clocks.lastTick = Date.now();
+      broadcastState(g);
+    }
+  }).catch((error) => {
+    if (games.get(g.id) !== g || g.aiRequestSerial !== requestSerial || !g.aiPending) return;
+    failAiMove(g, error && error.message === 'The promoted AI checkpoint is unavailable.'
+      ? error.message : 'AI inference is temporarily unavailable. You can retry.');
+  });
+}
+
+function handleAiRetry(ws) {
+  const slot = slotBySocket.get(ws);
+  const g = slot ? games.get(slot.gameId) : null;
+  if (!g || !g.aiGame || slot.color !== 'blue' || g.status !== 'playing' || g.game.turn !== g.aiColor) {
+    send(ws, { type: 'error', message: 'AI retry is not available.' });
+    return;
+  }
+  if (g.aiPending) return;
+  requestAiMove(g);
 }
 
 function handleResign(ws) {
@@ -911,6 +1007,20 @@ function handleCreate(ws, msg) {
 
   send(ws, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
   send(ws, snapshot(g, 'blue'));
+}
+
+function handleCreateAi(ws, msg) {
+  leaveLobby(ws);
+  const user = resolveUser(msg.session);
+  const g = newGame(msg.timeControl, true, undefined, {
+    aiGame: true, aiColor: 'red', persistHistory: false,
+  });
+  games.set(g.id, g);
+  g.blue = seatFor(user, ws, g.timeControl);
+  g.red = aiSeat(g.timeControl);
+  slotBySocket.set(ws, { gameId: g.id, color: 'blue' });
+  send(ws, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
+  startGame(g);
 }
 
 function handleClose(ws) {
@@ -1421,9 +1531,11 @@ wss.on('connection', (ws) => {
     switch (msg.type) {
       case 'identify': sendPendingChallenges(ws, authenticatedUser(ws, msg)?.id); break;
       case 'create': handleCreate(ws, msg); break;
+      case 'createAI': handleCreateAi(ws, msg); break;
       case 'join': handleJoin(ws, msg); break;
       case 'spectate': handleSpectate(ws, msg); break;
       case 'move': handleMove(ws, msg); break;
+      case 'retryAI': handleAiRetry(ws); break;
       case 'resign': handleResign(ws); break;
       case 'queue': handleQueue(ws, msg); break;
       case 'queueCancel': handleQueueCancel(ws); break;
@@ -1462,6 +1574,18 @@ wss.on('connection', (ws) => {
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('Intransitive server on http://0.0.0.0:' + PORT);
 });
+
+function shutdown() {
+  aiInference.close();
+  for (const g of games.values()) stopTicker(g);
+  for (const ws of clients) ws.close(1001, 'Server shutting down');
+  wss.close();
+  httpServer.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000).unref();
+}
+
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);
 
 // Opportunistic cleanup of long-finished games (keeps memory bounded).
 setInterval(() => {

@@ -152,6 +152,10 @@
                 <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="12" cy="7.5" r="4"/><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5v.5H4v-.5z"/></g></svg>
                 <span>Create private game</span>
               </button>
+              <button class="button button-metal lobby__start__button" id="aiBtn">
+                <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10a2 2 0 0 1 2 2v2h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v2a2 2 0 0 1-2 2h-2v2a1 1 0 1 1-2 0v-2H9v2a1 1 0 1 1-2 0v-2H5a2 2 0 0 1-2-2V9H2a1 1 0 1 1 0-2h1V5a2 2 0 0 1 2-2h2zm0 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm10 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM8 13h8v2H8v-2z"/></svg>
+                <span>Play against AI</span>
+              </button>
             </div>
             <div id="queueStatus" class="queue-status hidden"></div>
 
@@ -302,6 +306,9 @@
 
         <div id="waitingActions" class="waiting-actions hidden">
           <button id="cancelPrivateGame" class="btn danger" type="button">Cancel game</button>
+        </div>
+        <div id="aiErrorActions" class="ai-error-actions">
+          <button id="retryAi" class="btn primary hidden" type="button">Retry AI move</button>
         </div>
 
         <div id="actionConfirm" class="action-confirm hidden">

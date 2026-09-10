@@ -12,6 +12,12 @@ for test_file in test-engine.js test-ws.js test-phase2.js test-phase3.js test-ph
   fi
 done
 
+printf '\n===== test-ai-game.js =====\n'
+if ! node "$project_dir/test-ai-game.js"; then
+  printf 'FAILED: test-ai-game.js\n'
+  failed=1
+fi
+
 if [ "${INTRANSITIVE_WEBSITE_OFFLINE:-0}" = "1" ]; then
   printf '\n===== real-site UI tests =====\n'
   printf 'SKIP: INTRANSITIVE_WEBSITE_OFFLINE=1 (website intentionally stopped)\n'
