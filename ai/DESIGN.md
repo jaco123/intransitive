@@ -67,8 +67,9 @@ for systemd recovery, while only the configured low-disk condition is paused.
 
 Measured host facts are four CPUs, 26 GiB RAM, and a Quadro RTX 5000 with
 15,360 MiB visible VRAM, driver CUDA 13.2. The default network (48 filters, 2
-residual blocks), four Gumbel candidates, and 8 simulations are intentionally
-modest. Four self-play roots advance in lockstep and each search step batches
+residual blocks), sixteen Gumbel considered actions, and 8 simulations are
+intentionally modest for the 36-action root. Four self-play roots advance in
+lockstep and each search step batches
 its leaves for GPU inference; optimizer batches are also GPU-resident. Torch
 threads are capped at 2 and the service is CPU-limited to leave capacity for
 the website. Fixed board shapes enable cuDNN benchmarking. Lazy edges avoid

@@ -12,7 +12,7 @@
   "dirichlet_alpha": 0.3,
   "root_noise_epsilon": 0.25,
   "search_algorithm": "gumbel",
-  "gumbel_max_num_considered_actions": 4,
+  "gumbel_max_num_considered_actions": 16,
   "gumbel_scale": 1.0,
   "gumbel_value_scale": 0.1,
   "gumbel_maxvisit_init": 50.0,
