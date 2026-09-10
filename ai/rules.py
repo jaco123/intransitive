@@ -152,7 +152,10 @@ class GameState:
         self.history: list[Move] = []
         self.ply_count = 0
         self.last_move: Move | None = None
-        self.position_counts: dict[str, int] = {}
+        # Position keys are an internal exact-state map.  Bytes avoid building
+        # and hashing an 81-character board string for every MCTS child while
+        # retaining all board cells and the side to move.
+        self.position_counts: dict[bytes, int] = {}
         self.board_history: list[np.ndarray] = []
         self._record_position()
 
@@ -176,33 +179,40 @@ class GameState:
         other.board_history = list(self.board_history)
         return other
 
-    def position_key(self) -> str:
-        return board_string(self.board) + (':b' if self.turn == BLUE else ':r')
+    def position_key(self) -> bytes:
+        return self.board.tobytes(order='C') + (b'\x01' if self.turn == BLUE else b'\xff')
 
-    def next_position_key_trusted(self, action: int, current_board_string: str | None = None) -> str:
+    def next_position_key_trusted(self, action: int, current_board_bytes: bytes | bytearray | None = None) -> bytes:
         """Return the next repetition key for a known legal action.
 
         This is used only by the rule-derived observation encoder after it has
         obtained the public legal-action list. It does not mutate the state.
         """
-        from_c, from_r, to_c, to_r = decode_action(action)
-        board_string_value = board_string(self.board) if current_board_string is None else current_board_string
-        characters = list(board_string_value)
-        source_index = (SIZE - 1 - from_r) * SIZE + from_c
-        target_index = (SIZE - 1 - to_r) * SIZE + to_c
+        if not isinstance(action, (int, np.integer)) or not 0 <= int(action) < len(_ACTION_SOURCES):
+            raise ValueError('invalid action')
+        action = int(action)
+        source_index = int(_ACTION_SOURCES[action])
+        target_index = int(_ACTION_TARGETS[action])
+        from_r, from_c = divmod(source_index, SIZE)
         piece = int(self.board[from_r, from_c])
-        characters[source_index] = '.'
-        characters[target_index] = {1: 'R', 2: 'P', 3: 'S', -1: 'r', -2: 'p', -3: 's'}[piece]
-        goal = piece > 0 and to_c == SIZE - 1 and to_r == SIZE - 1 or piece < 0 and to_c == 0 and to_r == 0
+        board_bytes = self.board.tobytes(order='C') if current_board_bytes is None else bytes(current_board_bytes)
+        if len(board_bytes) != SIZE * SIZE:
+            board_bytes = self.board.tobytes(order='C')
+        updated = bytearray(board_bytes)
+        updated[source_index] = 0
+        updated[target_index] = piece & 0xff
+        goal = piece > 0 and target_index == SIZE * SIZE - 1 or piece < 0 and target_index == 0
         next_turn = self.turn if goal else OTHER[self.turn]
-        return ''.join(characters) + (':b' if next_turn == BLUE else ':r')
+        updated.append(1 if next_turn == BLUE else 255)
+        return bytes(updated)
 
-    def _record_position(self) -> None:
+    def _record_position(self) -> bytes:
         key = self.position_key()
         self.position_counts[key] = self.position_counts.get(key, 0) + 1
         self.board_history.append(self.board.copy())
         if len(self.board_history) > BOARD_HISTORY_LIMIT:
             self.board_history.pop(0)
+        return key
 
     def legal_actions(self) -> list[int]:
         return legal_actions(self.board, self.turn)
@@ -244,7 +254,13 @@ class GameState:
         return self._play_unchecked(action)
 
     def _play_unchecked(self, action: int) -> Move:
-        from_c, from_r, to_c, to_r = decode_action(action)
+        if not isinstance(action, (int, np.integer)) or not 0 <= int(action) < len(_ACTION_SOURCES):
+            raise ValueError('invalid action')
+        action = int(action)
+        source_index = int(_ACTION_SOURCES[action])
+        target_index = int(_ACTION_TARGETS[action])
+        from_r, from_c = divmod(source_index, SIZE)
+        to_r, to_c = divmod(target_index, SIZE)
         piece = int(self.board[from_r, from_c])
         target = int(self.board[to_r, to_c])
         self.board[from_r, from_c] = 0
@@ -264,8 +280,8 @@ class GameState:
         self.turn = OTHER[self.turn]
         if self.turn == BLUE:
             self.fullmove_number += 1
-        self._record_position()
-        if self.position_counts[self.position_key()] >= 3:
+        position_key = self._record_position()
+        if self.position_counts[position_key] >= 3:
             self.status = 'draw'
             self.draw_reason = 'threefold'
             return move

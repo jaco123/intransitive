@@ -194,7 +194,10 @@ class Trainer:
         self.log_path = self.data_dir / 'trainer.jsonl'
         self.stop_requested = False
         self.device = self._select_device(device_name)
-        torch.set_num_threads(2)
+        # The service reserves all four host CPUs for this process.  Keep
+        # Torch intra-op at four and inter-op at one so BLAS kernels cannot
+        # oversubscribe the bounded service budget.
+        torch.set_num_threads(4)
         try:
             torch.set_num_interop_threads(1)
         except RuntimeError:

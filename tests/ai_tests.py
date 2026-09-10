@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import random
 import subprocess
 import sys
@@ -24,7 +25,7 @@ from ai.mcts import (Edge, NetworkEvaluator, Node, _backup, _completed_qvalues,
 from ai.model import PolicyValueNet
 from ai.replay import ReplayBuffer
 from ai.rules import BLUE, RED, GameState, initial_board, piece_value, state_from_positions
-from ai.selfplay import generate_self_play
+from ai.selfplay import _generate_self_play_single, generate_self_play
 from ai.trainer import Trainer, load_config
 
 
@@ -121,9 +122,51 @@ def test_encoding_mcts_selfplay():
     episodes = generate_self_play(evaluator, 2, 2, 2, 4, 1.0, np.random.default_rng(7))
     check(len(episodes) == 2 and all(np.isfinite(ep.states).all() and np.isfinite(ep.policies).all() and np.isfinite(ep.values).all() for ep in episodes), 'self-play sample is non-finite')
     check(all(np.allclose(ep.policies.sum(axis=1), 1, atol=1e-5) for ep in episodes), 'self-play policy target not normalized')
-    parallel_seed = np.random.default_rng(19)
-    parallel = generate_self_play(evaluator, 2, 1, 1, 0, 0.0, parallel_seed, workers=2)
-    check(len(parallel) == 2 and all(ep.plies > 0 for ep in parallel), 'parallel self-play workers did not return complete episodes')
+    progress = []
+    episodes = generate_self_play(evaluator, 2, 1, 2, 0, 0.0, np.random.default_rng(19), progress=progress.append)
+    check(len(episodes) == 2 and all(ep.plies > 0 for ep in episodes), 'batched self-play did not return complete episodes')
+    check(progress and all(0 <= item['active_games'] <= 2 and 0 <= item['completed_games'] <= 2 for item in progress),
+          'self-play progress escaped aggregate bounds')
+
+    # Spawned actors use deterministic parent-derived streams, report aggregate
+    # progress, propagate failures, and clean up on cancellation.
+    actor_seed = 71
+    expected_seed_rng = np.random.default_rng(actor_seed)
+    expected_seeds = expected_seed_rng.integers(0, np.iinfo(np.int64).max, size=2, dtype=np.int64)
+    expected = []
+    for seed in expected_seeds:
+        expected.extend(_generate_self_play_single(
+            evaluator, 1, 1, 1, 0, 0.0, np.random.default_rng(int(seed)),
+            True, 2000, None, None, 'gumbel', 4, 1.0, 0.1, 50.0,
+        ))
+    actor_progress = []
+    actual = generate_self_play(evaluator, 2, 1, 1, 0, 0.0, np.random.default_rng(actor_seed),
+                                 progress=actor_progress.append, workers=2)
+    check(len(actual) == len(expected) == 2 and all(
+        left.result == right.result and left.plies == right.plies and
+        np.array_equal(left.states, right.states) and np.array_equal(left.policies, right.policies)
+        for left, right in zip(actual, expected)), 'process actor seed streams were not reproducible')
+    final_progress = actor_progress[-1]
+    check(final_progress['active_games'] == 0 and final_progress['completed_games'] == 2 and
+          final_progress['worker_count'] == 2 and len(final_progress['workers']) == 2,
+          'process actor progress was not aggregate and final')
+    try:
+        generate_self_play(evaluator, 2, 1, 1, 0, 0.0, np.random.default_rng(72),
+                           max_game_plies=0, workers=2)
+    except RuntimeError as error:
+        check('self-play worker' in str(error), 'process actor exception lost worker context')
+    else:
+        raise AssertionError('process actor exception did not propagate')
+    cancelled = [False]
+    def cancel_after_progress(_info):
+        cancelled[0] = True
+    cancelled_result = generate_self_play(
+        evaluator, 2, 1, 1, 0, 0.0, np.random.default_rng(73),
+        should_stop=lambda: cancelled[0], progress=cancel_after_progress, workers=2,
+    )
+    check(cancelled[0] and len(cancelled_result) <= 2, 'process actor cancellation did not return safely')
+    check(not any(child.name.startswith('intransitive-selfplay-') for child in multiprocessing.active_children()),
+          'process actor cleanup left a live child')
 
     state = GameState()
     action = state.legal_actions()[0]

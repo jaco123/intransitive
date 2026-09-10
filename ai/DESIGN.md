@@ -71,29 +71,51 @@ residual blocks), sixteen Gumbel considered actions, 8 simulations, and a
 16.0 self-play Gumbel scale are intentionally modest for the 36-action root.
 The larger scale is a measured, rule-neutral exploration setting: on the
 collapsed latest model, a read-only four-game comparison produced 1 decisive
-game at scale 16 versus 0 at scales 1 and 4. Eight self-play roots advance in
-lockstep across two bounded workers and each search step batches its leaves for
-GPU inference; optimizer batches are also GPU-resident. Torch/BLAS threads and
-the service CPU quota
-are sized to the four available CPUs while the website is intentionally
-stopped. Fixed board shapes enable cuDNN benchmarking. The static legality
-predicate uses precomputed action geometry and NumPy's C loops; it remains
-differential-tested against engine.js. Lazy edges avoid
-materializing unvisited successors, trusted internal transitions avoid
-repeating public legal validation, and only the four-board observation tail is
-copied; complete move/repetition state remains exact. The old path spent
-41.3s in eager expansion for one 222-ply profiled game; the optimized path
-spent 8.45s for one 158-ply profiled game under the same 8-simulation CUDA
-diagnostic. The random episode lengths differ, so trainer positions/sec and
-the included benchmark are the meaningful ongoing measures.
+game at scale 16 versus 0 at scales 1 and 4. Eight self-play games are split
+over three bounded `spawn` actors. Each actor owns its rule/search state and a
+read-only snapshot of the current network, initializes CUDA in the child, and
+uses one Torch thread; this removes the Python GIL from MCTS selection while
+keeping the parent free for persistence. Actor results are finite and
+collected in worker order, parent-derived RNG seeds are persisted through the
+normal checkpoint stream, the queue is bounded, and cancellation or a worker
+exception terminates and joins every child. Parent training uses four Torch
+intra-op threads and one inter-op thread; the actor budget is three CPU threads
+plus the parent, never four Torch threads per actor. The service CPU quota is
+400% while the website is intentionally stopped. Fixed board shapes enable
+cuDNN benchmarking. The static legality predicate uses precomputed action
+geometry and NumPy's C loops; it remains differential-tested against engine.js.
+Lazy edges avoid materializing unvisited successors, trusted internal
+transitions avoid repeating public legal validation, byte position keys avoid
+rebuilding board strings, and only the four-board observation tail is copied;
+complete move/repetition state remains exact.
+
+The pre-change three-run diagnostic averaged 72.3 positions/sec with one
+in-process actor. The same model/search budget after byte-key and vectorized
+encoding changes averaged 99.0 positions/sec (three different seeds). A
+separate fixed-checkpoint process-actor probe measured one process at 89.3,
+two at 120.5, three at 138.0, and four at 133.2 positions/sec over repeated
+8-game runs. The production default is therefore three actors; games/sec is
+not used as the selection criterion. The random episode lengths differ, so
+positions/sec and repeated fixed-workload measurements are the meaningful
+ongoing measures.
+
+Torch 2.7.1+cu128 was tested with warmed eager inference and both
+`torch.compile` `reduce-overhead` and `max-autotune` modes. The compiler could
+not initialize on this host because the Python installation lacks `Python.h`,
+so no unverified compiler fallback is enabled; the exact failure is retained
+in the optimization evidence log. JAX is not installed in the pinned
+environment. A migration would also duplicate the Python path-dependent rules
+unless the actor/search representation were rewritten; no JAX prototype
+outperformed the measured PyTorch/process design, so no unpinned dependency or
+migration was added.
 
 KataGo's domain-independent efficiency ideas were considered from its paper.
-The implementation adopts batched inference, bounded replay, and explicit
-resource limits. Playout-cap randomization and large-scale actor parallelism
-are rejected initially: this four-thread host has no reliable calibration
-budget, and excessive actors would create stale data and compete with the
-website. Tree reuse is also not used across moves because repetition/clock
-history is part of the state; each tree is path-safe.
+The implementation adopts batched inference, bounded replay, explicit
+resource limits, and only the measured three-actor parallelism. Playout-cap
+randomization was rejected because this small server has no reliable
+calibration budget and it would change the existing search distribution.
+Tree reuse is also not used across moves because repetition/clock history is
+part of the state; each tree is path-safe.
 
 The neural input contains four recent board snapshots, side to move, the
 halfmove clock, current-position count, and 16 rule-derived action planes: for

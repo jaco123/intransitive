@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from .rules import BOARD_HISTORY_LIMIT, BLUE, DIRS, GameState, SIZE, board_string, decode_action as decode_rule_action
+from .rules import BOARD_HISTORY_LIMIT, BLUE, DIRS, GameState, SIZE, decode_action as decode_rule_action
 from .rules import encode_action as encode_rule_action
 
 ACTION_COUNT = SIZE * SIZE * len(DIRS)
@@ -23,10 +23,8 @@ def decode_action(action: int) -> tuple[int, int, int, int]:
 
 
 def _board_planes(board: np.ndarray) -> np.ndarray:
-    planes = np.zeros((6, SIZE, SIZE), dtype=np.float32)
-    for index, value in enumerate((1, 2, 3, -1, -2, -3)):
-        planes[index] = (board == value)
-    return planes
+    values = np.asarray((1, 2, 3, -1, -2, -3), dtype=board.dtype)
+    return np.equal(board[..., None], values).transpose(2, 0, 1).astype(np.float32, copy=False)
 
 
 def encode_state(state: GameState) -> np.ndarray:
@@ -39,20 +37,20 @@ def encode_state(state: GameState) -> np.ndarray:
     histories for deeper consequences.
     """
     planes = np.zeros((CHANNELS, SIZE, SIZE), dtype=np.float32)
-    history = state.board_history[-HISTORY_STEPS:]
+    history = list(state.board_history[-HISTORY_STEPS:])
     if not history:
         history = [state.board]
-    while len(history) < HISTORY_STEPS:
-        history.insert(0, history[0])
-    for index, board in enumerate(reversed(history)):
-        planes[index * 6:(index + 1) * 6] = _board_planes(board)
+    history = [history[0]] * (HISTORY_STEPS - len(history)) + history
+    boards = np.stack(history[::-1])
+    values = np.asarray((1, 2, 3, -1, -2, -3), dtype=boards.dtype)
+    planes[:HISTORY_STEPS * 6] = np.equal(boards[..., None], values).transpose(0, 3, 1, 2).reshape(HISTORY_STEPS * 6, SIZE, SIZE)
     planes[HISTORY_STEPS * 6, :, :] = 1.0 if state.turn == BLUE else -1.0
     planes[HISTORY_STEPS * 6 + 1, :, :] = min(state.halfmove_clock, 100) / 100.0
     planes[HISTORY_STEPS * 6 + 2, :, :] = min(state.position_counts.get(state.position_key(), 1), 3) / 3.0
     repetition_start = HISTORY_STEPS * 6 + 3
-    current_board_string = board_string(state.board)
+    current_board_bytes = state.board.tobytes(order='C')
     for action in state.legal_actions():
-        count = state.position_counts.get(state.next_position_key_trusted(action, current_board_string), 0)
+        count = state.position_counts.get(state.next_position_key_trusted(action, current_board_bytes), 0)
         if count not in (1, 2):
             continue
         source = action // len(DIRS)
