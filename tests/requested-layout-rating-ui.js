@@ -151,6 +151,8 @@ async function assertNewGameRating(page, preset, category, expected) {
           'How to play, Discord, and Chat should not be overly tall');
         assert.ok(Math.abs(featuredBox.width - chatBox.width) <= 4,
           'home game display should match Chat width');
+        assert.ok(featuredBox.height <= 260,
+          'home game display should be compact (height=' + featuredBox.height + ')');
         assert.ok(featuredBox.y >= chatBox.y + chatBox.height - 2,
           'home game display should fit below Chat');
       } finally {

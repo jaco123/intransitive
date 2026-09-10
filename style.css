@@ -125,7 +125,7 @@ h1 span { color: var(--muted); font-weight: 400; }
 }
 .rules p { margin: var(--s2) 0; }
 .lobby__side .rules { line-height: 1.35; }
-.lobby__side .rules p { margin: 4px 0; }
+.lobby__side .rules p { margin: 3px 0; }
 .rules b { color: var(--c-font); }
 
 .field-label { display: block; font-size: 13px; color: var(--muted); margin: var(--s3) 0 var(--s1); }
@@ -714,7 +714,12 @@ h1 span { color: var(--muted); font-weight: 400; }
 .directory-rating { color: var(--muted); font-family: var(--font-mono); font-size: 12px; margin-left: 4px; }
 .featured-label { display: block; color: var(--muted); font-size: 13px; margin-bottom: var(--s2); }
 .home-featured { width: 100%; max-width: none; margin: 0; }
-.home-featured .watch-game-preview { max-width: 180px; margin: 0 auto; }
+.home-featured .featured-label { margin-bottom: 4px; }
+.home-featured .watch-game { padding: 6px; gap: 3px; }
+.home-featured .watch-game-preview { max-width: 140px; margin: 0 auto; }
+.home-featured .watch-game-players,
+.home-featured .watch-game-time-control,
+.home-featured .watch-game-status { font-size: 11px; }
 .player-directory-row { display: grid; grid-template-columns: minmax(120px, 1fr) minmax(300px, 2fr) 100px; align-items: center; gap: var(--s3); width: 100%; padding: 10px 12px; border: 0; background: var(--surface-2); border-radius: var(--r-sm); color: var(--text); text-align: left; cursor: pointer; }
 .player-directory-row:hover, .player-directory-row:focus-visible { background: var(--surface-3); color: var(--text-bright); }
 .player-directory-name { color: var(--text-bright); font-weight: 600; }
