@@ -69,6 +69,7 @@ def _validate_config(config: dict) -> dict:
         'gumbel_maxvisit_init', 'train_min_samples',
         'train_batch_size', 'train_epochs', 'learning_rate', 'weight_decay',
         'value_loss_weight', 'gradient_clip', 'arena_games', 'arena_simulations',
+        'arena_gumbel_scale',
         'promotion_threshold', 'replay_max_episodes', 'replay_max_samples',
         'replay_max_bytes', 'checkpoint_keep', 'min_free_bytes', 'amp',
         'status_interval_seconds', 'log_max_bytes',
@@ -103,6 +104,7 @@ def _validate_config(config: dict) -> dict:
         ('temperature', 0.0, None), ('c_puct', 0.0, None), ('dirichlet_alpha', 0.0, None),
         ('root_noise_epsilon', 0.0, 1.0), ('gumbel_scale', 0.0, None),
         ('gumbel_value_scale', 0.0, None), ('gumbel_maxvisit_init', 0.0, None),
+        ('arena_gumbel_scale', 0.0, None),
         ('learning_rate', 0.0, None), ('weight_decay', 0.0, None),
         ('value_loss_weight', 0.0, None), ('gradient_clip', 0.0, None),
         ('promotion_threshold', 0.5, 1.0), ('status_interval_seconds', 0.1, None),
@@ -113,6 +115,8 @@ def _validate_config(config: dict) -> dict:
         raise ValueError('search_algorithm must be gumbel for self-play training')
     if config['self_play_batch_games'] > config['self_play_games']:
         raise ValueError('self_play_batch_games cannot exceed self_play_games')
+    if config['arena_games'] % 2:
+        raise ValueError('arena_games must be even for color-balanced paired evaluation')
     if config['gumbel_max_num_considered_actions'] > 648:
         raise ValueError('gumbel_max_num_considered_actions exceeds action space')
     if not isinstance(config['amp'], bool):
@@ -198,6 +202,11 @@ class Trainer:
         self.statistics_scope = 'cumulative'
         self.game_length_min: int | None = None
         self.game_length_max: int | None = None
+        self.post_fix_outcomes = Counter({'blue': 0, 'red': 0, 'draw': 0})
+        self.post_fix_game_length_total = 0
+        self.post_fix_games = 0
+        self.post_fix_game_length_min: int | None = None
+        self.post_fix_game_length_max: int | None = None
         self.last_arena: dict = {}
         self._restore()
         if not self.statistics_games:
@@ -269,6 +278,11 @@ class Trainer:
         self.statistics_scope = payload.get('statistics_scope', 'cumulative')
         self.game_length_min = payload.get('game_length_min')
         self.game_length_max = payload.get('game_length_max')
+        self.post_fix_outcomes.update(payload.get('post_fix_outcomes', {}))
+        self.post_fix_game_length_total = int(payload.get('post_fix_game_length_total', 0))
+        self.post_fix_games = int(payload.get('post_fix_games', 0))
+        self.post_fix_game_length_min = payload.get('post_fix_game_length_min')
+        self.post_fix_game_length_max = payload.get('post_fix_game_length_max')
         self.last_arena = payload.get('last_arena', {})
         if migrated_representation:
             self.recovery_info = {**(self.recovery_info or {}), 'representation_migration': f'{LEGACY_CHANNELS}->{CHANNELS} channels'}
@@ -301,6 +315,7 @@ class Trainer:
         checkpoint_age = now - self.checkpoints.latest.stat().st_mtime if self.checkpoints.latest.exists() else None
         promoted_age = now - self.checkpoints.promoted.stat().st_mtime if self.checkpoints.promoted.exists() else None
         average_length = self.game_length_total / self.statistics_games if self.statistics_games else None
+        post_fix_average_length = self.post_fix_game_length_total / self.post_fix_games if self.post_fix_games else None
         payload = {
             'status': state, 'message': message, 'pid': os.getpid(), 'started_at': self.started_at,
             'updated_at': utc_now(), 'iteration': self.iteration, 'optimizer_step': self.optimizer_step,
@@ -313,6 +328,9 @@ class Trainer:
             'disk_free_bytes': usage.free, 'disk_total_bytes': usage.total, 'last_losses': self.last_losses,
             'outcomes': dict(self.outcomes),
             'game_length': {'average': average_length, 'min': self.game_length_min, 'max': self.game_length_max},
+            'post_fix_outcomes': dict(self.post_fix_outcomes), 'post_fix_games': self.post_fix_games,
+            'post_fix_game_length': {'average': post_fix_average_length, 'min': self.post_fix_game_length_min,
+                                     'max': self.post_fix_game_length_max},
             'statistics_games': self.statistics_games,
             'statistics_scope': self.statistics_scope,
             'statistics_complete': self.statistics_scope == 'cumulative' and self.statistics_games >= self.total_games,
@@ -337,6 +355,11 @@ class Trainer:
             'statistics_games': self.statistics_games,
             'statistics_scope': self.statistics_scope,
             'game_length_min': self.game_length_min, 'game_length_max': self.game_length_max,
+            'post_fix_outcomes': dict(self.post_fix_outcomes),
+            'post_fix_game_length_total': self.post_fix_game_length_total,
+            'post_fix_games': self.post_fix_games,
+            'post_fix_game_length_min': self.post_fix_game_length_min,
+            'post_fix_game_length_max': self.post_fix_game_length_max,
             'last_arena': self.last_arena,
             'config': self.config, 'rng': rng_state(), 'generator_state': self.rng.bit_generator.state,
         }
@@ -390,7 +413,8 @@ class Trainer:
         result = arena(candidate, NetworkEvaluator(old_model, self.device, self.amp), int(self.config.get('arena_games', 4)),
                        int(self.config.get('arena_simulations', 24)), self.rng, int(self.config.get('max_game_plies', 2000)),
                        self.config['search_algorithm'], self.config['gumbel_max_num_considered_actions'], lambda: self.stop_requested,
-                       self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'])
+                       self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
+                       self.config['arena_gumbel_scale'])
         promoted = not result.get('interrupted') and result['games'] == int(self.config['arena_games']) and result['score'] >= float(self.config.get('promotion_threshold', 0.55))
         if promoted:
             self.promoted_step = self.optimizer_step
@@ -435,6 +459,11 @@ class Trainer:
             batch_outcomes[episode.result] += 1
             batch_lengths.append(episode.plies)
             self.outcomes[episode.result] += 1
+            self.post_fix_outcomes[episode.result] += 1
+            self.post_fix_games += 1
+            self.post_fix_game_length_total += episode.plies
+            self.post_fix_game_length_min = episode.plies if self.post_fix_game_length_min is None else min(self.post_fix_game_length_min, episode.plies)
+            self.post_fix_game_length_max = episode.plies if self.post_fix_game_length_max is None else max(self.post_fix_game_length_max, episode.plies)
             self.statistics_games += 1
             self.game_length_total += episode.plies
             self.game_length_min = episode.plies if self.game_length_min is None else min(self.game_length_min, episode.plies)
@@ -455,7 +484,8 @@ class Trainer:
                    'outcomes': dict(batch_outcomes), 'game_length': {
                        'average': sum(batch_lengths) / len(batch_lengths) if batch_lengths else None,
                        'min': min(batch_lengths) if batch_lengths else None, 'max': max(batch_lengths) if batch_lengths else None,
-                   }, 'cumulative_outcomes': dict(self.outcomes)}
+                   }, 'cumulative_outcomes': dict(self.outcomes), 'post_fix_outcomes': dict(self.post_fix_outcomes),
+                   'post_fix_games': self.post_fix_games}
         self.last_progress_at = time.time()
         self._log('stop_checkpoint' if stopped else 'iteration', elapsed_seconds=elapsed, **metrics)
         self._write_status('stopped' if stopped else 'running', 'checkpoint saved after stop request' if stopped else 'iteration complete', throughput=metrics)

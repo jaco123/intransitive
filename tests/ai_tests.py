@@ -18,7 +18,9 @@ sys.path.insert(0, str(ROOT))
 
 from ai.checkpoint import CheckpointManager
 from ai.encoding import ACTION_COUNT, CHANNELS, REPETITION_PLANES, decode_action, encode_action, encode_state
-from ai.mcts import Edge, NetworkEvaluator, Node, _backup, _completed_qvalues, _gumbel_policy_target, _initialize_gumbel_root, search_batch, sequential_halving_schedule
+from ai.mcts import (Edge, NetworkEvaluator, Node, _backup, _completed_qvalues,
+                     _gumbel_policy_target, _gumbel_selected_action, _initialize_gumbel_root,
+                     search_batch, sequential_halving_schedule)
 from ai.model import PolicyValueNet
 from ai.replay import ReplayBuffer
 from ai.rules import BLUE, RED, GameState, initial_board, piece_value, state_from_positions
@@ -109,10 +111,12 @@ def test_encoding_mcts_selfplay():
     state.play(state.legal_actions()[0]); after = encode_state(state)
     check(before.shape == (CHANNELS, 9, 9) and not np.array_equal(before, after), 'history encoding did not change')
     model = PolicyValueNet(8, 1); model.eval(); evaluator = NetworkEvaluator(model, torch.device('cpu'), False)
-    policies = search_batch([GameState(), GameState()], evaluator, 3, add_noise=True, rng=np.random.default_rng(5))
-    for state, policy in zip([GameState(), GameState()], policies):
+    results = search_batch([GameState(), GameState()], evaluator, 3, add_noise=True, rng=np.random.default_rng(5))
+    for state, result in zip([GameState(), GameState()], results):
+        policy = result.policy
         legal = set(state.legal_actions())
-        check(np.isfinite(policy).all() and abs(float(policy.sum()) - 1) < 1e-5, 'MCTS policy is not normalized')
+        check(result.action in legal and np.isfinite(policy).all() and abs(float(policy.sum()) - 1) < 1e-5,
+              'MCTS action/target result is invalid')
         check(set(np.flatnonzero(policy)).issubset(legal), 'MCTS selected illegal action')
     episodes = generate_self_play(evaluator, 2, 2, 2, 4, 1.0, np.random.default_rng(7))
     check(len(episodes) == 2 and all(np.isfinite(ep.states).all() and np.isfinite(ep.policies).all() and np.isfinite(ep.values).all() for ep in episodes), 'self-play sample is non-finite')
@@ -129,19 +133,71 @@ def test_encoding_mcts_selfplay():
 
 
 def test_gumbel_policy_improvement_and_backup():
-    check(sequential_halving_schedule(4, 8) == (0, 0, 0, 0, 1, 1, 1, 1), 'sequential halving schedule mismatch')
+    def official_schedule(max_actions, simulations):
+        if max_actions <= 1:
+            return tuple(range(simulations))
+        log2_max = int(np.ceil(np.log2(max_actions)))
+        sequence = []
+        visits = [0] * max_actions
+        considered = max_actions
+        while len(sequence) < simulations:
+            extra = max(1, int(simulations / (log2_max * considered)))
+            for _ in range(extra):
+                sequence.extend(visits[:considered])
+                for index in range(considered):
+                    visits[index] += 1
+            considered = max(2, considered // 2)
+        return tuple(sequence[:simulations])
+
+    for max_actions in (1, 2, 3, 4, 5, 8, 16):
+        for simulations in (1, 2, 3, 4, 8, 11, 17, 32):
+            check(sequential_halving_schedule(max_actions, simulations) == official_schedule(max_actions, simulations),
+                  f'official sequential halving schedule mismatch for {max_actions}/{simulations}')
     root = Node(GameState())
     _initialize_gumbel_root(root, np.zeros(ACTION_COUNT, dtype=np.float32), 0.0, 8, 4, 1.0, np.random.default_rng(12))
-    check(len(root.legal_actions) == 36 and len(root.root_actions) == 4 and len(root.children) == 36,
-          'Gumbel root did not sample a small legal candidate canvas while retaining completed-Q actions')
-    sampled = root.children[root.root_actions[0]]; sampled.visits = 1; sampled.value_sum = 1.0
+    check(len(root.legal_actions) == 36 and len(root.children) == 36,
+          'Gumbel root did not retain all legal actions for exact completed-Q targets')
+    sampled = root.children[root.legal_actions[0]]; sampled.visits = 1; sampled.value_sum = 1.0
     target_with_q = _gumbel_policy_target(root)
-    check(target_with_q[sampled.action] > target_with_q[root.root_actions[-1]], 'completed Q did not influence Gumbel policy target')
+    check(target_with_q[sampled.action] > target_with_q[root.legal_actions[-1]], 'completed Q did not influence Gumbel policy target')
+
+    # The executed action is not the training target argmax: it is restricted
+    # to the mctx maximum-visit set. Make an unvisited action's target logit
+    # dominant and prove it cannot be executed.
+    target_action = root.legal_actions[-1]
+    eligible_action = root.legal_actions[0]
+    root.root_prior_logits[target_action] = 20.0
+    root.children[target_action].prior_logit = 20.0
+    root.children[eligible_action].visits = 2
+    root.children[eligible_action].value_sum = -2.0
+    target_with_q = _gumbel_policy_target(root)
+    executed = _gumbel_selected_action(root, 0.1, 50.0)
+    check(int(np.argmax(target_with_q)) == target_action and executed == eligible_action,
+          'Gumbel execution was not masked to maximum-visit actions')
+
+    # Gumbel noise changes the executed root action, while zero scale is
+    # deterministic for identical priors/visit statistics.
+    noisy_actions = set()
+    for seed in range(12):
+        noisy_root = Node(GameState())
+        _initialize_gumbel_root(noisy_root, np.zeros(ACTION_COUNT, dtype=np.float32), 0.0, 1, 4, 1.0,
+                                np.random.default_rng(seed))
+        noisy_actions.add(_gumbel_selected_action(noisy_root))
+    check(len(noisy_actions) > 1, 'root Gumbel scale did not influence action selection')
+    zero_actions = []
+    for seed in (1, 2, 3):
+        zero_root = Node(GameState())
+        _initialize_gumbel_root(zero_root, np.zeros(ACTION_COUNT, dtype=np.float32), 0.0, 1, 4, 0.0,
+                                np.random.default_rng(seed))
+        zero_actions.append(_gumbel_selected_action(zero_root))
+    check(len(set(zero_actions)) == 1, 'zero-scale Gumbel selection was not deterministic')
     model = PolicyValueNet(8, 1); model.eval(); evaluator = NetworkEvaluator(model, torch.device('cpu'), False)
     state = GameState(); legal = set(state.legal_actions())
-    target = search_batch([state], evaluator, 8, rng=np.random.default_rng(11), max_num_considered_actions=4)[0]
+    result = search_batch([state], evaluator, 8, rng=np.random.default_rng(11), max_num_considered_actions=4)[0]
+    target = result.policy
     check(np.isfinite(target).all() and abs(float(target.sum()) - 1.0) < 1e-5, 'Gumbel target is not normalized')
-    check(set(np.flatnonzero(target)).issubset(legal) and len(np.flatnonzero(target)) == len(legal), 'Gumbel target did not complete unvisited legal actions')
+    check(result.action in legal and set(np.flatnonzero(target)).issubset(legal) and len(np.flatnonzero(target)) == len(legal),
+          'Gumbel action/target did not complete legal actions')
 
     parent = GameState(); child = parent.copy(); action = parent.legal_actions()[0]; child.play_trusted(action)
     edge = Edge(action, BLUE, Node(child), 1.0, 0.0)
@@ -158,6 +214,10 @@ def test_gumbel_policy_improvement_and_backup():
     node.children = {a.action: a, b.action: b}
     completed = _completed_qvalues(node)
     check(np.allclose(completed, 0.0), 'unvisited completed Q values were not neutral and normalized')
+    public_copy = state.copy()
+    search_copy = state.copy(include_history=False)
+    check(len(public_copy.history) == len(state.history) and len(search_copy.history) == 0
+          and search_copy.ply_count == state.ply_count, 'search copy lost or copied the wrong rule history')
 
 
 def test_replay_checkpoint_and_tiny_training():
@@ -179,7 +239,7 @@ def test_replay_checkpoint_and_tiny_training():
         config = json.loads((ROOT / 'ai' / 'config.json').read_text())
         config.update({'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1, 'self_play_games': 1,
                        'self_play_batch_games': 1, 'train_min_samples': 1, 'train_batch_size': 8,
-                       'train_epochs': 1, 'arena_games': 2, 'arena_simulations': 1, 'max_game_plies': 300,
+                       'train_epochs': 1, 'arena_games': 2, 'arena_simulations': 1, 'max_game_plies': 2000,
                        'replay_max_episodes': 4, 'replay_max_samples': 1000})
         config_path = root / 'config.json'; config_path.write_text(json.dumps(config))
         trainer = Trainer(root / 'data', config_path, 'cpu')

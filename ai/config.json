@@ -25,6 +25,8 @@
   "gradient_clip": 1.0,
   "arena_games": 8,
   "arena_simulations": 8,
+  "arena_gumbel_scale": 1.0,
+  "arena_gumbel_scale": 1.0,
   "promotion_threshold": 0.55,
   "replay_max_episodes": 128,
   "replay_max_samples": 20000,

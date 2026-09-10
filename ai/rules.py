@@ -138,12 +138,14 @@ class GameState:
         self.winner: int | None = None
         self.draw_reason: str | None = None
         self.history: list[Move] = []
+        self.ply_count = 0
         self.last_move: Move | None = None
         self.position_counts: dict[str, int] = {}
         self.board_history: list[np.ndarray] = []
         self._record_position()
 
-    def copy(self) -> 'GameState':
+    def copy(self, *, include_history: bool = True) -> 'GameState':
+        """Copy exact rule state; search may omit the redundant move list."""
         other = object.__new__(GameState)
         other.board = self.board.copy()
         other.turn = self.turn
@@ -152,7 +154,8 @@ class GameState:
         other.status = self.status
         other.winner = self.winner
         other.draw_reason = self.draw_reason
-        other.history = list(self.history)
+        other.history = list(self.history) if include_history else []
+        other.ply_count = self.ply_count
         other.last_move = self.last_move
         other.position_counts = dict(self.position_counts)
         # The rule engine keeps complete position_counts/history. Only the
@@ -236,6 +239,7 @@ class GameState:
         self.board[to_r, to_c] = piece
         move = Move(action, from_c, from_r, to_c, to_r, target != 0, target)
         self.history.append(move)
+        self.ply_count += 1
         self.last_move = move
         self.halfmove_clock = 0 if target != 0 else self.halfmove_clock + 1
 

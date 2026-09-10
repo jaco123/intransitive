@@ -46,7 +46,6 @@ class ReplayBuffer:
                 or np.any(policies < 0) or not np.allclose(policies.sum(axis=1), 1.0, atol=1e-4)):
             return None
         return states, policies, values
-        return total
 
     def append(self, states: np.ndarray, policies: np.ndarray, values: np.ndarray, episode_id: int) -> Path:
         states = np.asarray(states, dtype=np.float16)

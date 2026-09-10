@@ -46,7 +46,6 @@ class Node:
     legal_actions: tuple[int, ...] = ()
     root_prior_logits: dict[int, float] = field(default_factory=dict)
     root_gumbel: dict[int, float] = field(default_factory=dict)
-    root_actions: tuple[int, ...] = ()
     root_schedule: tuple[int, ...] = ()
 
     @property
@@ -95,7 +94,10 @@ def _expand(node: Node, logits: np.ndarray, value: float, actions: Sequence[int]
 
 def _materialize_child(edge: Edge, parent: Node) -> Node:
     if edge.child is None:
-        child_state = parent.state.copy()
+        # MCTS already carries exact position_counts, clock, and ply_count.
+        # The public Move list is retained by ordinary copies, but is not
+        # needed by a search child and must not be copied at every expansion.
+        child_state = parent.state.copy(include_history=False)
         child_state.play_trusted(edge.action)
         edge.child = Node(child_state)
     return edge.child
@@ -153,8 +155,10 @@ def sequential_halving_schedule(max_num_considered_actions: int, simulations: in
         extra = max(1, int(simulations / (log2_max * considered)))
         for _ in range(extra):
             sequence.extend(visits[:considered])
-        for index in range(considered):
-            visits[index] += 1
+            # The official mctx schedule increments each considered arm for
+            # every extra-visit pass, not once after the whole inner loop.
+            for index in range(considered):
+                visits[index] += 1
         considered = max(2, considered // 2)
     return tuple(sequence[:simulations])
 
@@ -171,16 +175,14 @@ def _initialize_gumbel_root(node: Node, logits: np.ndarray, value: float, simula
     legal_logits = np.asarray(logits[list(legal)], dtype=np.float64)
     node.root_prior_logits = {action: float(logit) for action, logit in zip(legal, legal_logits)}
     gumbels = rng.gumbel(0.0, 1.0, len(legal)) * float(gumbel_scale)
-    ranking = np.argsort(-(gumbels + legal_logits), kind='stable')
     considered = min(int(max_num_considered_actions), len(legal))
-    node.root_actions = tuple(legal[int(index)] for index in ranking[:considered])
     node.root_gumbel = {action: float(gumbel) for action, gumbel in zip(legal, gumbels)}
     node.root_schedule = sequential_halving_schedule(considered, simulations)
     priors = _softmax(legal_logits)
     for action, prior, logit in zip(legal, priors, legal_logits):
-        # Keep all legal root edges as statistics. Sequential halving's visit
-        # count mask naturally confines later rounds to the Gumbel-Top-k set,
-        # while unvisited actions remain available for completed-Q targets.
+        # Keep every legal root edge as statistics. This is the mctx layout:
+        # sequential halving samples without replacement through visit-count
+        # eligibility, while unvisited actions remain in completed-Q targets.
         node.children[action] = Edge(action, node.state.turn, None, float(prior), float(logit))
 
 
@@ -196,6 +198,24 @@ def _select_gumbel_root(node: Node, value_scale: float = 0.1, maxvisit_init: flo
         minimum = min(edge.visits for edge in edges)
         eligible = [index for index, edge in enumerate(edges) if edge.visits == minimum]
     return edges[eligible[int(np.argmax(scores[eligible]))]]
+
+
+def _gumbel_selected_action(root: Node, value_scale: float = 0.1,
+                            maxvisit_init: float = 50.0) -> int | None:
+    """Return mctx's executed root action, separate from its train target."""
+    if not root.children:
+        return None
+    edges = list(root.children.values())
+    completed = _completed_qvalues(root, edges, value_scale, maxvisit_init)
+    considered_visit = max(edge.visits for edge in edges)
+    scores = np.asarray([
+        root.root_gumbel[edge.action] + root.root_prior_logits[edge.action] + qvalue
+        for edge, qvalue in zip(edges, completed)
+    ], dtype=np.float64)
+    eligible = [index for index, edge in enumerate(edges) if edge.visits == considered_visit]
+    if not eligible:
+        raise RuntimeError('Gumbel root has no max-visit action')
+    return edges[eligible[int(np.argmax(scores[eligible]))]].action
 
 
 def _add_root_noise(node: Node, rng: np.random.Generator, alpha: float, epsilon: float) -> None:
@@ -235,6 +255,14 @@ def _gumbel_policy_target(root: Node, value_scale: float = 0.1, maxvisit_init: f
     return policy
 
 
+@dataclass(frozen=True)
+class SearchResult:
+    """The action to execute and the distinct policy target for training."""
+
+    action: int | None
+    policy: np.ndarray
+
+
 def search_batch(
     states: Sequence[GameState], evaluator: NetworkEvaluator, simulations: int,
     c_puct: float = 1.5, add_noise: bool = False, rng: np.random.Generator | None = None,
@@ -242,8 +270,8 @@ def search_batch(
     algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
     gumbel_scale: float = 1.0, gumbel_value_scale: float = 0.1,
     gumbel_maxvisit_init: float = 50.0,
-) -> list[np.ndarray]:
-    """Run batched searches and return legal, normalized policy targets."""
+) -> list[SearchResult]:
+    """Run batched searches with distinct execution actions and targets."""
     if simulations < 1:
         raise ValueError('simulations must be positive')
     if algorithm not in ('gumbel', 'puct'):
@@ -292,10 +320,11 @@ def search_batch(
         for path, value in terminal_values:
             _backup(path, value)
 
-    policies: list[np.ndarray] = []
+    results: list[SearchResult] = []
     for root in roots:
         if algorithm == 'gumbel':
-            policies.append(_gumbel_policy_target(root, gumbel_value_scale, gumbel_maxvisit_init))
+            results.append(SearchResult(_gumbel_selected_action(root, gumbel_value_scale, gumbel_maxvisit_init),
+                                        _gumbel_policy_target(root, gumbel_value_scale, gumbel_maxvisit_init)))
             continue
         policy = np.zeros(648, dtype=np.float32)
         if root.children:
@@ -309,8 +338,9 @@ def search_batch(
             legal = root.state.legal_actions()
             if legal:
                 policy[legal] = 1.0 / len(legal)
-        policies.append(policy)
-    return policies
+        action = max(root.children.values(), key=lambda edge: (edge.visits, -edge.action)).action if root.children else None
+        results.append(SearchResult(action, policy))
+    return results
 
 
 def choose_from_policy(policy: np.ndarray, temperature: float, rng: np.random.Generator) -> int:

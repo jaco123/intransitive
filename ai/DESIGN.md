@@ -25,19 +25,24 @@ canonical directions. Search masks to legal actions. The default low-budget
 search is Full Gumbel: Gumbel-Top-k samples root actions without replacement,
 the official sequential-halving visit schedule allocates the small budget,
 unvisited actions receive mixed-value completed Q values, rescaled using the
-mctx reference transform (`0.1 * (50 + max visits) * normalized Q`), and the
-completed `softmax(logit + Q)` policy is the training target. Interior selection
+mctx reference transform (`0.1 * (50 + max visits) * normalized Q`). The
+executed action is selected only among maximum-visit root actions by
+`gumbel + prior logits + completed Q`; separately, completed `softmax(logit + Q)`
+is the policy training target. Interior selection
 uses the deterministic completed-policy rule. Classic PUCT remains available
 as an explicit benchmark option; it is not used for self-play. Values are backed up
 with the player-to-move perspective, including goal states where the engine
-retains the turn. Self-play samples the improved policy with a configurable
-temperature; later plies are greedy. Samples store encoded history planes,
+retains the turn. Self-play executes the selected Gumbel action and stores the
+separate improved policy target; the temperature sampler applies only to an
+explicit PUCT benchmark. Samples store encoded history planes,
 improved policy, and the final outcome from the player-to-move perspective.
 Draws are zero.
 
 Training uses AdamW, policy cross-entropy plus value MSE, gradient clipping,
 fixed-shape GPU batches, and CUDA AMP when CUDA is available. Candidate models
-play a color-swapped arena against the promoted checkpoint; promotion requires
+play a color-swapped, paired arena against the promoted checkpoint. Each pair
+reuses one exploration seed with models/colors swapped, while distinct pair
+seeds produce genuinely distinct algorithmically explored games; promotion requires
 the configured score threshold. The first trained model is promoted so a
 checkpoint is immediately usable, but no strength claim is made from the small
 initial arena.
