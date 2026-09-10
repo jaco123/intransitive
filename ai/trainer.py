@@ -60,6 +60,15 @@ class LowDiskPause(RuntimeError):
     """Expected operational pause while the configured disk floor is reached."""
 
 
+def _reject_duplicate_json_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f'duplicate config key: {key}')
+        result[key] = value
+    return result
+
+
 def _validate_config(config: dict) -> dict:
     required = {
         'seed', 'network_width', 'network_blocks', 'mcts_simulations', 'self_play_games',
@@ -126,7 +135,7 @@ def _validate_config(config: dict) -> dict:
 
 def load_config(path: Path) -> dict:
     with path.open(encoding='utf-8') as source:
-        config = json.load(source)
+        config = json.load(source, object_pairs_hook=_reject_duplicate_json_keys)
     if not isinstance(config, dict):
         raise ValueError('training config must be a JSON object')
     return _validate_config(config)
@@ -159,11 +168,21 @@ def migrate_input_channels(model_state: dict, saved_config: dict, expected: dict
     return migrated
 
 
+def seed_initialization(seed: int) -> None:
+    """Seed all model-construction RNGs before a fresh network is created."""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+
+
 class Trainer:
     def __init__(self, data_dir: Path, config_path: Path, device_name: str = 'auto'):
         self.data_dir = data_dir
         self.config_path = config_path
         self.config = load_config(config_path)
+        seed_initialization(int(self.config['seed']))
         self.data_dir.mkdir(parents=True, exist_ok=True)
         os.chmod(self.data_dir, 0o700)
         self.replay = ReplayBuffer(self.data_dir / 'replay', self.config.get('replay_max_episodes', 128),
@@ -235,12 +254,6 @@ class Trainer:
         payload = self.checkpoints.load_latest()
         self.recovery_info = self.checkpoints.last_recovery
         if payload is None:
-            seed = int(self.config.get('seed', 1))
-            random.seed(seed)
-            np.random.seed(seed)
-            torch.manual_seed(seed)
-            if torch.cuda.is_available():
-                torch.cuda.manual_seed_all(seed)
             return
         saved_config = payload.get('model_config', {})
         expected = self.model.config

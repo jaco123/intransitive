@@ -25,7 +25,7 @@ from ai.model import PolicyValueNet
 from ai.replay import ReplayBuffer
 from ai.rules import BLUE, RED, GameState, initial_board, piece_value, state_from_positions
 from ai.selfplay import generate_self_play
-from ai.trainer import Trainer
+from ai.trainer import Trainer, load_config
 
 
 def check(condition, message):
@@ -265,11 +265,37 @@ def test_replay_checkpoint_and_tiny_training():
         check(not missing_data.exists(), 'invalid config mutated trainer data directory')
 
 
+def test_config_duplicates_and_fresh_seed():
+    failures = []
+    with tempfile.TemporaryDirectory(prefix='intransitive-ai-config-test-') as temporary:
+        root = Path(temporary)
+        base_config = ROOT / 'ai' / 'config.json'
+        duplicate_config = root / 'duplicate.json'
+        text = base_config.read_text(encoding='utf-8')
+        marker = '  "promotion_threshold":'
+        duplicate_config.write_text(text.replace(marker, '  "arena_gumbel_scale": 1.0,\n' + marker, 1), encoding='utf-8')
+        try:
+            load_config(duplicate_config)
+        except ValueError:
+            pass
+        else:
+            failures.append('duplicate JSON config keys were silently accepted')
+
+        first = Trainer(root / 'first', base_config, 'cpu')
+        second = Trainer(root / 'second', base_config, 'cpu')
+        same = all(torch.equal(first.model.state_dict()[key], second.model.state_dict()[key])
+                   for key in first.model.state_dict())
+        if not same:
+            failures.append('fresh trainers with the same seed initialized different model weights')
+    check(not failures, '; '.join(failures))
+
+
 def main():
     torch.set_num_threads(1)
     test_rules_and_differential(); print('PASS AI rules and JS differential conformance')
     test_encoding_mcts_selfplay(); print('PASS AI encoding, MCTS, and self-play')
     test_gumbel_policy_improvement_and_backup(); print('PASS Gumbel policy improvement and MCTS backup semantics')
+    test_config_duplicates_and_fresh_seed(); print('PASS config duplicate rejection and deterministic fresh initialization')
     test_replay_checkpoint_and_tiny_training(); print('PASS AI replay, atomic checkpoint, tiny training, and resume')
     print('ALL AI TESTS PASSED')
 
