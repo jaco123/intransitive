@@ -31,6 +31,7 @@ from .model import PolicyValueNet
 from .replay import ReplayBuffer
 from .selfplay import SelfPlayPool, arena, generate_self_play
 from .symmetry import augment_batch
+from .teacher_data import TeacherDataset
 
 
 def utc_now() -> str:
@@ -82,7 +83,9 @@ def _validate_config(config: dict) -> dict:
         'arena_gumbel_scale',
         'promotion_threshold', 'replay_max_episodes', 'replay_max_samples',
         'replay_max_bytes', 'checkpoint_keep', 'min_free_bytes', 'amp', 'symmetry_augmentation',
-        'status_interval_seconds', 'log_max_bytes',
+        'status_interval_seconds', 'log_max_bytes', 'teacher_data_enabled', 'teacher_data_dir',
+        'teacher_batch_size', 'teacher_value_loss_weight', 'teacher_warmup_steps',
+        'teacher_max_records',
     }
     missing = sorted(required - config.keys())
     if missing:
@@ -107,7 +110,8 @@ def _validate_config(config: dict) -> dict:
         'train_min_samples': 1, 'train_batch_size': 1, 'train_epochs': 1,
         'arena_games': 2, 'arena_simulations': 1, 'replay_max_episodes': 1,
         'replay_max_samples': 1, 'replay_max_bytes': 1, 'checkpoint_keep': 2,
-        'min_free_bytes': 0,
+        'min_free_bytes': 0, 'teacher_batch_size': 1, 'teacher_warmup_steps': 0,
+        'teacher_max_records': 1,
     }.items():
         integer(name, minimum)
     for name, minimum, maximum in (
@@ -119,6 +123,7 @@ def _validate_config(config: dict) -> dict:
         ('value_loss_weight', 0.0, None), ('gradient_clip', 0.0, None),
         ('promotion_threshold', 0.5, 1.0), ('status_interval_seconds', 0.1, None),
         ('log_max_bytes', 1024.0, None),
+        ('teacher_value_loss_weight', 0.0, None),
     ):
         number(name, minimum, maximum)
     if config['search_algorithm'] != 'gumbel':
@@ -135,6 +140,10 @@ def _validate_config(config: dict) -> dict:
         raise ValueError('amp must be boolean')
     if not isinstance(config['symmetry_augmentation'], bool):
         raise ValueError('symmetry_augmentation must be boolean')
+    if not isinstance(config['teacher_data_enabled'], bool):
+        raise ValueError('teacher_data_enabled must be boolean')
+    if not isinstance(config['teacher_data_dir'], str) or not config['teacher_data_dir']:
+        raise ValueError('teacher_data_dir must be a non-empty path')
     return config
 
 
@@ -192,6 +201,8 @@ class Trainer:
         os.chmod(self.data_dir, 0o700)
         self.replay = ReplayBuffer(self.data_dir / 'replay', self.config.get('replay_max_episodes', 128),
                                    self.config.get('replay_max_samples', 20000), self.config.get('replay_max_bytes', 2_000_000_000))
+        self.teacher = (TeacherDataset(Path(self.config['teacher_data_dir']), self.config['teacher_max_records'])
+                        if self.config['teacher_data_enabled'] else None)
         self.checkpoints = CheckpointManager(self.data_dir / 'checkpoints', self.config.get('checkpoint_keep', 8))
         self.status_path = self.data_dir / 'status.json'
         self.log_path = self.data_dir / 'trainer.jsonl'
@@ -397,7 +408,9 @@ class Trainer:
         size = len(states)
         batch_size = min(int(self.config['train_batch_size']), size)
         epochs = int(self.config.get('train_epochs', 1))
-        total_policy = total_value = total_loss = 0.0
+        total_policy = total_value = total_teacher = total_loss = 0.0
+        total_teacher_weight = 0.0
+        teacher_batches = 0
         updates = 0
         for _ in range(epochs):
             order = self.rng.permutation(size)
@@ -410,12 +423,29 @@ class Trainer:
                 x = torch.from_numpy(batch_states).to(self.device, non_blocking=True)
                 target_policy = torch.from_numpy(batch_policies).to(self.device, non_blocking=True)
                 target_value = torch.from_numpy(values[indexes]).to(self.device, non_blocking=True)
+                teacher_weight = 0.0
+                teacher_x = teacher_target = None
+                if self.teacher is not None:
+                    warmup = int(self.config['teacher_warmup_steps'])
+                    teacher_weight = float(self.config['teacher_value_loss_weight'])
+                    if warmup:
+                        teacher_weight *= min(1.0, self.optimizer_step / warmup)
+                    if teacher_weight > 0.0:
+                        teacher_states, teacher_values = self.teacher.sample(
+                            int(self.config['teacher_batch_size']), self.rng)
+                        teacher_x = torch.from_numpy(teacher_states).to(self.device, non_blocking=True)
+                        teacher_target = torch.from_numpy(teacher_values).to(self.device, non_blocking=True)
                 self.optimizer.zero_grad(set_to_none=True)
                 with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.amp):
-                    logits, predicted_value = self.model(x)
-                    policy_loss = -(target_policy * torch.log_softmax(logits, dim=1)).sum(dim=1).mean()
+                    inputs = torch.cat((x, teacher_x), dim=0) if teacher_x is not None else x
+                    logits, predicted = self.model(inputs)
+                    predicted_value = predicted[:len(x)]
+                    policy_loss = -(target_policy * torch.log_softmax(logits[:len(x)], dim=1)).sum(dim=1).mean()
                     value_loss = nn.functional.mse_loss(predicted_value, target_value)
-                    loss = policy_loss + float(self.config.get('value_loss_weight', 1.0)) * value_loss
+                    teacher_loss = (nn.functional.mse_loss(predicted[len(x):], teacher_target)
+                                    if teacher_x is not None else torch.zeros((), device=self.device))
+                    loss = (policy_loss + float(self.config.get('value_loss_weight', 1.0)) * value_loss
+                            + teacher_weight * teacher_loss)
                 if not torch.isfinite(loss):
                     raise FloatingPointError('non-finite training loss')
                 self.scaler.scale(loss).backward()
@@ -425,13 +455,17 @@ class Trainer:
                 self.scaler.update()
                 total_policy += float(policy_loss.detach().cpu())
                 total_value += float(value_loss.detach().cpu())
+                total_teacher += float(teacher_loss.detach().cpu())
+                total_teacher_weight += teacher_weight
+                teacher_batches += int(teacher_x is not None)
                 total_loss += float(loss.detach().cpu())
                 updates += 1
                 self.optimizer_step += 1
         if not updates:
             return {}
         return {'policy_loss': total_policy / updates, 'value_loss': total_value / updates,
-                'loss': total_loss / updates, 'updates': updates}
+                'teacher_loss': total_teacher / updates, 'teacher_weight': total_teacher_weight / updates,
+                'teacher_batches': teacher_batches, 'loss': total_loss / updates, 'updates': updates}
 
     def _promote_or_retain(self) -> dict:
         candidate = NetworkEvaluator(self.model.eval(), self.device, self.amp)

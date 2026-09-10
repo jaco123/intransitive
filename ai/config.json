@@ -35,6 +35,12 @@
   "min_free_bytes": 5000000000,
   "amp": true,
   "symmetry_augmentation": true,
+  "teacher_data_enabled": true,
+  "teacher_data_dir": "/home/ubuntu/intransitive-ai-data/teacher",
+  "teacher_batch_size": 128,
+  "teacher_value_loss_weight": 0.05,
+  "teacher_warmup_steps": 10000,
+  "teacher_max_records": 2000000,
   "status_interval_seconds": 10,
   "log_max_bytes": 20000000
 }

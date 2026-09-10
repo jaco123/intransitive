@@ -167,6 +167,28 @@ samples/sec); the larger data-path benchmark measured about 27.8k transformed
 samples/sec. The short deterministic tests establish exactness, not a strength
 or sample-efficiency claim; that requires a longer controlled training run.
 
+## External teacher snapshots
+
+The seven ASCII files imported on 2026-09-10 are a separate, immutable source;
+they are not self-play replay and never provide policy targets. The format is
+strictly `FEN side_to_move integer_eval outcome`, with the supplied outcome
+definition from the side-to-move perspective. `ai.teacher_import` validates
+and atomically creates `records.npz` plus a manifest under the persistent data
+directory. Source hashes and evaluation ranges are recorded, but the integer
+engine evaluation is not trained on: its scale, calibration, and perspective
+are undocumented. The auxiliary loss uses only decisive outcome values
+(-1/+1); self-play remains the primary policy/value source.
+
+FEN snapshots cannot encode repetition or the source move-count convention.
+The importer therefore discards draw labels, goal/no-legal snapshots, and all
+board-plus-side states with conflicting outcome labels. It deduplicates the
+remaining states and assigns a deterministic hash split so an exact state
+cannot leak between training and validation. Snapshot encoding places only
+the current board and side-to-move in the neural input; unavailable history,
+clock, and repetition planes stay zero and are not treated as a fresh-game
+claim. A small configurable, warmed-up auxiliary value loss consumes this
+dataset independently of the self-play replay and can be disabled in config.
+
 The design follows the AlphaZero paper's tabula-rasa policy/value plus MCTS
 loop, the OpenSpiel decomposition into actors, evaluator, learner, replay,
 checkpoints, and arena evaluators, and PyTorch's guidance on pinned/batched

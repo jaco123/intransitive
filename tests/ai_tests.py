@@ -411,7 +411,7 @@ def test_replay_checkpoint_and_tiny_training():
         config.update({'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1, 'self_play_games': 1,
                        'self_play_batch_games': 1, 'self_play_workers': 1, 'train_min_samples': 1, 'train_batch_size': 8,
                        'train_epochs': 1, 'arena_games': 2, 'arena_simulations': 1, 'max_game_plies': 2000,
-                       'replay_max_episodes': 4, 'replay_max_samples': 1000})
+                       'replay_max_episodes': 4, 'replay_max_samples': 1000, 'teacher_data_enabled': False})
         config_path = root / 'config.json'; config_path.write_text(json.dumps(config))
         trainer = Trainer(root / 'data', config_path, 'cpu')
         original = {key: value.detach().clone() for key, value in trainer.model.state_dict().items()}
@@ -452,8 +452,12 @@ def test_config_duplicates_and_fresh_seed():
         else:
             failures.append('duplicate JSON config keys were silently accepted')
 
-        first = Trainer(root / 'first', base_config, 'cpu')
-        second = Trainer(root / 'second', base_config, 'cpu')
+        isolated_config = root / 'isolated.json'
+        isolated = json.loads(base_config.read_text(encoding='utf-8'))
+        isolated['teacher_data_enabled'] = False
+        isolated_config.write_text(json.dumps(isolated), encoding='utf-8')
+        first = Trainer(root / 'first', isolated_config, 'cpu')
+        second = Trainer(root / 'second', isolated_config, 'cpu')
         same = all(torch.equal(first.model.state_dict()[key], second.model.state_dict()[key])
                    for key in first.model.state_dict())
         if not same:
