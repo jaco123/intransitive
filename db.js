@@ -18,9 +18,6 @@ CREATE TABLE IF NOT EXISTS users (
   username TEXT NOT NULL UNIQUE COLLATE NOCASE,
   pass_salt TEXT NOT NULL,
   pass_hash TEXT NOT NULL,
-  rating REAL NOT NULL DEFAULT 1500,
-  rd REAL NOT NULL DEFAULT 350,
-  vol REAL NOT NULL DEFAULT 0.06,
   rating_bullet REAL NOT NULL DEFAULT 1500,
   rd_bullet REAL NOT NULL DEFAULT 350,
   vol_bullet REAL NOT NULL DEFAULT 0.06,
@@ -139,8 +136,6 @@ function publicUser(u) {
   return {
     id: u.id,
     username: u.username,
-    rating: Math.round(u.rating),
-    rd: Math.round(u.rd),
     ratings,
     wins: u.wins,
     losses: u.losses,
@@ -170,8 +165,8 @@ function createUser(username, password) {
   const now = Date.now();
 
   const insert = db.prepare(`
-    INSERT INTO users (username, pass_salt, pass_hash, rating, rd, vol, created_at)
-    VALUES (?, ?, ?, 1500, 350, 0.06, ?)
+    INSERT INTO users (username, pass_salt, pass_hash, created_at)
+    VALUES (?, ?, ?, ?)
   `);
   try {
     const info = insert.run(username, salt, hash, now);

@@ -2006,14 +2006,17 @@
     grid.className = 'profile-ratings';
     const topCategories = new Set(user.topCategories || []);
     for (const [key, label, range] of cats) {
-      const r = (user.ratings && user.ratings[key]) || { rating: user.rating, rd: user.rd };
+      const r = user.ratings && user.ratings[key];
+      const rating = r && Number.isFinite(Number(r.rating)) ? Math.round(Number(r.rating)) : '—';
+      const rd = r && Number.isFinite(Number(r.rd)) ? Math.round(Number(r.rd)) : '—';
       const cell = document.createElement('div');
       cell.className = 'profile-rating';
+      cell.dataset.category = key;
       cell.innerHTML =
         '<span class="profile-rating-label">' + timeControlIconMarkup(key) + label +
           (topCategories.has(key) ? '<span class="profile-crown" data-category="' + key + '" title="Top-rated in ' + label + '" aria-label="Top-rated in ' + label + '">♛</span>' : '') + '</span>' +
-        '<span class="profile-rating-value">' + Math.round(r.rating) + '</span>' +
-        '<span class="profile-rating-rd">±' + Math.round(r.rd) + '</span>' +
+        '<span class="profile-rating-value">' + rating + '</span>' +
+        '<span class="profile-rating-rd">±' + rd + '</span>' +
         '<span class="profile-rating-range">' + range + '</span>';
       grid.appendChild(cell);
     }

@@ -88,7 +88,7 @@ async function main() {
   const me = await api('GET', '/api/me', null, tokenA);
   assert.strictEqual(me.status, 200);
   assert.strictEqual(me.json.user.username, 'alice');
-  assert.strictEqual(me.json.user.rating, 1500);
+  assert.strictEqual(me.json.user.ratings.blitz.rating, 1500);
   pass('GET /api/me');
 
   const meAnon = await api('GET', '/api/me');

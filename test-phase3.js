@@ -201,8 +201,8 @@ async function main() {
 
   const meC = await api('GET', '/api/me', null, tokenC);
   const meD = await api('GET', '/api/me', null, tokenD);
-  assert.strictEqual(meC.json.user.rating, 1500, 'casual game does not change loser rating');
-  assert.strictEqual(meD.json.user.rating, 1500, 'casual game does not change winner rating');
+  assert.strictEqual(meC.json.user.ratings.blitz.rating, 1500, 'casual game does not change loser rating');
+  assert.strictEqual(meD.json.user.ratings.blitz.rating, 1500, 'casual game does not change winner rating');
   pass('casual game does not change either player rating');
 
   carol.close();
