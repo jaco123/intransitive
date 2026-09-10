@@ -52,10 +52,12 @@ def initial_board() -> np.ndarray:
 
 
 def clone_board(board: np.ndarray) -> np.ndarray:
-    result = np.asarray(board, dtype=np.int8).copy()
-    if result.shape != (SIZE, SIZE):
+    raw = np.asarray(board)
+    if raw.shape != (SIZE, SIZE):
         raise ValueError('board must be 9x9')
-    return result
+    if not np.issubdtype(raw.dtype, np.integer) or not np.isin(raw, (0, -3, -2, -1, 1, 2, 3)).all():
+        raise ValueError('board contains an invalid piece value')
+    return raw.astype(np.int8, copy=True)
 
 
 def board_string(board: np.ndarray) -> str:

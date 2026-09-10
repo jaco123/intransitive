@@ -74,14 +74,6 @@ class ReplayBuffer:
     def prune(self) -> int:
         paths = self.paths()
         removed = 0
-        total_samples = 0
-        for path in reversed(paths):
-            try:
-                with np.load(path, allow_pickle=False) as data:
-                    count = int(data['values'].shape[0])
-            except (OSError, ValueError, KeyError):
-                count = 0
-            total_samples += count
         keep: list[Path] = []
         bytes_used = 0
         for path in reversed(paths):

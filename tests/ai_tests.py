@@ -88,6 +88,13 @@ def test_rules_and_differential():
     check(state.status == 'draw' and state.draw_reason == 'threefold', 'threefold semantics mismatch')
     state = GameState(clock); state.halfmove_clock = 99; state.play(encode_action(1, 1, 2, 1))
     check(state.status == 'draw' and state.draw_reason == '100ply', '100-ply semantics mismatch')
+    invalid = np.zeros((9, 9), dtype=np.int64); invalid[0, 0] = 256
+    try:
+        GameState(invalid)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('invalid board values were accepted')
 
 
 def test_encoding_mcts_selfplay():

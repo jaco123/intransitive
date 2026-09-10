@@ -45,6 +45,11 @@ def atomic_json(payload: dict, destination: Path) -> None:
             output.flush()
             os.fsync(output.fileno())
         os.replace(temporary, destination)
+        fd_dir = os.open(destination.parent, os.O_RDONLY)
+        try:
+            os.fsync(fd_dir)
+        finally:
+            os.close(fd_dir)
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
