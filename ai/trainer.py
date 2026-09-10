@@ -188,7 +188,6 @@ class Trainer:
         self.last_losses: dict = {}
         self.started_at = utc_now()
         self.last_progress_at = time.time()
-        self.last_checkpoint_at: float | None = None
         self.last_error: str | None = None
         self.recovery_info: dict | None = None
         self.outcomes = Counter({'blue': 0, 'red': 0, 'draw': 0})
@@ -314,6 +313,7 @@ class Trainer:
             'game_length': {'average': average_length, 'min': self.game_length_min, 'max': self.game_length_max},
             'statistics_games': self.statistics_games,
             'statistics_scope': self.statistics_scope,
+            'statistics_complete': self.statistics_scope == 'cumulative' and self.statistics_games >= self.total_games,
             'last_arena': self.last_arena, 'checkpoint_age_seconds': checkpoint_age,
             'promoted_age_seconds': promoted_age, 'stale_seconds': max(0.0, now - self.last_progress_at),
             'last_error': self.last_error, 'checkpoint_recovery': self.recovery_info,
@@ -444,7 +444,6 @@ class Trainer:
         self.last_arena = promotion if 'games' in promotion else self.last_arena
         payload = self._payload()
         checkpoint = self.checkpoints.save(payload, self.optimizer_step or self.iteration, promote=bool(promotion.get('promoted')))
-        self.last_checkpoint_at = time.time()
         elapsed = max(time.monotonic() - started, 1e-6)
         metrics = {'games': len(episodes), 'positions': sum(episode.plies for episode in episodes),
                    'games_per_second': len(episodes) / elapsed, 'positions_per_second': sum(episode.plies for episode in episodes) / elapsed,
