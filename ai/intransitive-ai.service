@@ -8,18 +8,18 @@ User=ubuntu
 Group=ubuntu
 WorkingDirectory=/home/ubuntu/rps-prod
 Environment=PYTHONUNBUFFERED=1
-Environment=OMP_NUM_THREADS=2
-Environment=MKL_NUM_THREADS=2
+Environment=OMP_NUM_THREADS=4
+Environment=MKL_NUM_THREADS=4
 Environment=CUDA_VISIBLE_DEVICES=0
 ExecStart=/home/ubuntu/intransitive-ai-venv/bin/python -m ai.trainer --data-dir /home/ubuntu/intransitive-ai-data --config /home/ubuntu/rps-prod/ai/config.json
 Restart=always
 RestartSec=10
 KillMode=mixed
 TimeoutStopSec=30
-Nice=10
-CPUQuota=200%
-MemoryMax=12G
-TasksMax=32
+Nice=0
+CPUQuota=400%
+MemoryMax=20G
+TasksMax=64
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

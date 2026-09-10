@@ -20,6 +20,25 @@ ROCK, PAPER, SCISSORS = 1, 2, 3
 OTHER = {BLUE: RED, RED: BLUE}
 BEATS = {ROCK: SCISSORS, SCISSORS: PAPER, PAPER: ROCK}
 
+# Action geometry is static. Keeping it in compact NumPy arrays lets the
+# legality predicate run in C while preserving the engine.js row-major/action
+# direction ordering. The stateful repetition and terminal logic remains in
+# GameState below.
+_ACTION_SOURCES = np.repeat(np.arange(SIZE * SIZE, dtype=np.int16), len(DIRS))
+_ACTION_TARGETS = np.empty_like(_ACTION_SOURCES)
+_ACTION_IN_BOUNDS = np.zeros(_ACTION_SOURCES.shape, dtype=bool)
+for _action in range(SIZE * SIZE * len(DIRS)):
+    _source, _direction = divmod(_action, len(DIRS))
+    _row, _column = divmod(_source, SIZE)
+    _dc, _dr = DIRS[_direction]
+    _target_row, _target_column = _row + _dr, _column + _dc
+    if 0 <= _target_row < SIZE and 0 <= _target_column < SIZE:
+        _ACTION_TARGETS[_action] = _target_row * SIZE + _target_column
+        _ACTION_IN_BOUNDS[_action] = True
+    else:
+        _ACTION_TARGETS[_action] = 0
+_BEATS_BY_KIND = np.asarray((0, SCISSORS, ROCK, PAPER), dtype=np.int8)
+
 
 def piece_value(color: int, kind: int) -> int:
     return int(color * kind)
@@ -76,21 +95,14 @@ def board_string(board: np.ndarray) -> str:
 
 
 def legal_actions(board: np.ndarray, color: int) -> list[int]:
-    result: list[int] = []
-    for r in range(SIZE):
-        for c in range(SIZE):
-            piece = int(board[r, c])
-            if piece == 0 or piece_color(piece) != color:
-                continue
-            kind = piece_kind(piece)
-            for direction, (dc, dr) in enumerate(DIRS):
-                nc, nr = c + dc, r + dr
-                if not (0 <= nc < SIZE and 0 <= nr < SIZE):
-                    continue
-                target = int(board[nr, nc])
-                if target == 0 or (piece_color(target) != color and BEATS[kind] == piece_kind(target)):
-                    result.append((r * SIZE + c) * len(DIRS) + direction)
-    return result
+    flat = np.asarray(board).reshape(-1)
+    pieces = flat[_ACTION_SOURCES]
+    targets = flat[_ACTION_TARGETS]
+    kinds = np.abs(pieces)
+    legal = _ACTION_IN_BOUNDS & (pieces * color > 0) & (
+        (targets == 0) | ((targets * color < 0) & (_BEATS_BY_KIND[kinds] == np.abs(targets)))
+    )
+    return np.flatnonzero(legal).tolist()
 
 
 def decode_action(action: int) -> tuple[int, int, int, int]:

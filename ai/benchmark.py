@@ -11,7 +11,7 @@ import torch
 
 from .mcts import NetworkEvaluator, search_batch
 from .model import PolicyValueNet
-from .rules import GameState
+from .rules import GameState, legal_actions
 
 
 def benchmark(device_name: str = 'auto') -> dict:
@@ -32,9 +32,15 @@ def benchmark(device_name: str = 'auto') -> dict:
         elapsed = time.perf_counter() - started
         searches.append({'algorithm': algorithm, 'roots': 4, 'simulations': 8, 'seconds': elapsed,
                          'root_searches_per_second': 4 / max(elapsed, 1e-9)})
+    state = GameState()
+    started = time.perf_counter()
+    for _ in range(20000):
+        legal_actions(state.board, state.turn)
+    rule_elapsed = time.perf_counter() - started
     return {'device': str(device), 'cuda': torch.cuda.is_available(), 'gpu': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             'network_parameters': sum(parameter.numel() for parameter in model.parameters()), 'inference': rows,
-            'search_comparison': searches}
+            'search_comparison': searches,
+            'legal_actions': {'calls': 20000, 'seconds': rule_elapsed, 'calls_per_second': 20000 / max(rule_elapsed, 1e-9)}}
 
 
 if __name__ == '__main__':

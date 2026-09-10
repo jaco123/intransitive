@@ -71,11 +71,13 @@ residual blocks), sixteen Gumbel considered actions, 8 simulations, and a
 16.0 self-play Gumbel scale are intentionally modest for the 36-action root.
 The larger scale is a measured, rule-neutral exploration setting: on the
 collapsed latest model, a read-only four-game comparison produced 1 decisive
-game at scale 16 versus 0 at scales 1 and 4. Four self-play roots advance in
-lockstep and each search step batches
-its leaves for GPU inference; optimizer batches are also GPU-resident. Torch
-threads are capped at 2 and the service is CPU-limited to leave capacity for
-the website. Fixed board shapes enable cuDNN benchmarking. Lazy edges avoid
+game at scale 16 versus 0 at scales 1 and 4. Eight self-play roots advance in
+lockstep and each search step batches its leaves for GPU inference; optimizer
+batches are also GPU-resident. Torch/BLAS threads and the service CPU quota
+are sized to the four available CPUs while the website is intentionally
+stopped. Fixed board shapes enable cuDNN benchmarking. The static legality
+predicate uses precomputed action geometry and NumPy's C loops; it remains
+differential-tested against engine.js. Lazy edges avoid
 materializing unvisited successors, trusted internal transitions avoid
 repeating public legal validation, and only the four-board observation tail is
 copied; complete move/repetition state remains exact. The old path spent
