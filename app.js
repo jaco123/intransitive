@@ -2638,7 +2638,14 @@
     pending = { type: 'createAI', timeControl: parseTimeControl() };
     const t = sessionToken();
     if (t) pending.session = t;
-    connect();
+    // Keep an existing game connection when returning to the lobby so the
+    // server can reject a duplicate AI-game request on the same socket.
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(pending));
+      pending = null;
+    } else {
+      connect();
+    }
   });
 
   joinBtn.addEventListener('click', () => {
