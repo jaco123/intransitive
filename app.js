@@ -76,7 +76,6 @@
   const opponentCapturedPiecesEl = $('opponentCapturedPieces');
   const gameLinkEl = $('gameLink');
   const createBtn = $('createBtn');
-  const aiBtn = $('aiBtn');
   const joinBtn = $('joinBtn');
   const joinInput = $('joinInput');
   const tcMinutesEl = $('tcMinutes');
@@ -123,7 +122,6 @@
   const gameActionsEl = $('gameActions');
   const waitingActionsEl = $('waitingActions');
   const cancelPrivateGameBtn = $('cancelPrivateGame');
-  const retryAiBtn = $('retryAi');
   const actionConfirmEl = $('actionConfirm');
   const actionConfirmTextEl = $('actionConfirmText');
   const actionConfirmYesEl = $('actionConfirmYes');
@@ -912,11 +910,6 @@ let inboxAudioContext = null;
       }
       return;
     }
-    if (state.aiError) {
-      gameStatusEl.textContent = state.aiError;
-      gameStatusEl.className = 'gamestatus waiting';
-      return;
-    }
     if (state.status === 'waiting') {
       gameStatusEl.textContent = 'Waiting for opponent…';
       gameStatusEl.className = 'gamestatus waiting';
@@ -925,8 +918,8 @@ let inboxAudioContext = null;
         gameStatusEl.textContent = 'Opponent disconnected — waiting…';
         gameStatusEl.className = 'gamestatus waiting';
       } else {
-        gameStatusEl.textContent = state.computer && state.aiThinking ? 'AI is thinking…' : '';
-        gameStatusEl.className = 'gamestatus ' + (state.computer && state.aiThinking ? 'waiting' : 'game-status-hidden');
+        gameStatusEl.textContent = '';
+        gameStatusEl.className = 'gamestatus game-status-hidden';
       }
     } else {
       gameStatusEl.textContent = '';
@@ -1080,8 +1073,8 @@ let inboxAudioContext = null;
     };
     const configureName = (nameEl, player, color, linkEnabled) => {
       nameEl.className = 'pname ' + color + (linkEnabled ? ' profile-link' : '');
-      nameEl.disabled = !linkEnabled || !player || !!player.guest || !!player.ai;
-      nameEl.title = player && player.ai ? 'Intransitive AI' : player && !player.guest
+      nameEl.disabled = !linkEnabled || !player || !!player.guest;
+      nameEl.title = player && !player.guest
         ? 'View ' + player.name + "'s profile" : 'Guest player';
     };
     renderIdentity(playerNameEl, playerRatingInfoEl, firstPlayer, firstColor);
@@ -1102,11 +1095,6 @@ let inboxAudioContext = null;
     }
     if (state.spectating) {
       gameModeEl.textContent = 'Spectating';
-      gameModeEl.classList.add('casual');
-      return;
-    }
-    if (state.computer) {
-      gameModeEl.textContent = 'Computer';
       gameModeEl.classList.add('casual');
       return;
     }
@@ -1132,7 +1120,7 @@ let inboxAudioContext = null;
     waitingActionsEl.classList.toggle('hidden', !waitingPrivate);
     resignBtn.classList.toggle('hidden', !playing);
     offerDrawBtn.classList.toggle('hidden', !playing || !!state.drawOffer);
-    takebackBtn.classList.toggle('hidden', !playing || !!state.takebackOffer || !!state.computer || !state.history.length || !!(state.takebackBlocked && state.takebackBlocked[myColor]));
+    takebackBtn.classList.toggle('hidden', !playing || !!state.takebackOffer || !state.history.length || !!(state.takebackBlocked && state.takebackBlocked[myColor]));
     // Abort is possible until both players have made their first move.
     const canAbort = playing && !!state && state.history.length < 2;
     abortBtn.classList.toggle('hidden', !canAbort);
@@ -1140,7 +1128,6 @@ let inboxAudioContext = null;
     newGameBtn.classList.toggle('hidden', !participantFinished);
     finishedAnalysisBtn.classList.toggle('hidden', !finished);
     if (spectateRematchBtn) spectateRematchBtn.classList.toggle('hidden', !(spectatorFinished && spectatorRematchGameId));
-    retryAiBtn.classList.toggle('hidden', !(state && state.computer && state.aiError && state.status === 'playing' && state.turn !== myColor));
 
     actionConfirmEl.classList.toggle('hidden', !confirmAction);
     if (confirmAction) {
@@ -1864,12 +1851,6 @@ let inboxAudioContext = null;
 
       case 'error':
         showToast(msg.message);
-        break;
-      case 'aiError':
-        if (state) {
-          state.aiError = msg.message || 'AI inference is temporarily unavailable. You can retry.';
-          render();
-        }
         break;
     }
   }
@@ -3766,21 +3747,6 @@ let inboxAudioContext = null;
     cancelPrivateGame();
   });
 
-  if (aiBtn) aiBtn.addEventListener('click', () => {
-    homeErrorEl.classList.add('hidden');
-    pending = { type: 'createAI', timeControl: parseTimeControl(), variant: selectedVariant(), publicChat: !!(publicChatEl && publicChatEl.checked) };
-    const t = sessionToken();
-    if (t) pending.session = t;
-    // Keep an existing game connection when returning to the lobby so the
-    // server can reject a duplicate AI-game request on the same socket.
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(pending));
-      pending = null;
-    } else {
-      connect();
-    }
-  });
-
   joinBtn.addEventListener('click', () => {
     homeErrorEl.classList.add('hidden');
     const id = extractGameId(joinInput.value);
@@ -3899,10 +3865,6 @@ let inboxAudioContext = null;
 
   cancelPrivateGameBtn.addEventListener('click', () => {
     cancelPrivateGame();
-  });
-
-  retryAiBtn.addEventListener('click', () => {
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'retryAI' }));
   });
 
   if (spectateRematchBtn) spectateRematchBtn.addEventListener('click', () => {
@@ -4178,7 +4140,7 @@ let inboxAudioContext = null;
   const openGamePlayerProfile = (color) => {
     if (!state || !state.players[color]) return;
     const player = state.players[color];
-    if (!player.guest && !player.ai && player.name) loadPlayerProfile(player.name);
+    if (!player.guest && player.name) loadPlayerProfile(player.name);
   };
   playerNameEl.addEventListener('click', () => {
     if (state && state.spectating) openGamePlayerProfile(myColor || 'blue');
