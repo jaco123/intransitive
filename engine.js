@@ -9,6 +9,12 @@
 
   // The type that the key type can capture.
   const BEATS = { rock: 'scissors', scissors: 'paper', paper: 'rock' };
+  const VARIANTS = { STANDARD: 'standard', RPS4200: 'rps4200' };
+  const RPS4200_BLUE_SQUARES = [
+    ['b5', 'paper'], ['c4', 'paper'], ['d3', 'paper'], ['e2', 'paper'],
+    ['c5', 'scissors'], ['d4', 'scissors'], ['e3', 'scissors'],
+    ['b4', 'rock'], ['c3', 'rock'], ['d2', 'rock'],
+  ];
 
   // King moves: 8 directions as [dc, dr].
   const DIRS = [
@@ -55,6 +61,29 @@
     put('e7', 'red', 'scissors'); put('f6', 'red', 'scissors'); put('g5', 'red', 'scissors');
     put('f8', 'red', 'rock'); put('g7', 'red', 'rock'); put('h6', 'red', 'rock');
 
+    return b;
+  }
+
+  function mirrorSquare(c, r) {
+    return { c: SIZE - 1 - r, r: SIZE - 1 - c };
+  }
+
+  function initialBoardForVariant(variant) {
+    if (variant !== VARIANTS.RPS4200) return initialBoard();
+    const b = [];
+    for (let r = 0; r < SIZE; r++) b.push(new Array(SIZE).fill(null));
+    const inventory = RPS4200_BLUE_SQUARES.map((entry) => entry[1]);
+    for (let i = inventory.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = inventory[i]; inventory[i] = inventory[j]; inventory[j] = tmp;
+    }
+    for (let i = 0; i < RPS4200_BLUE_SQUARES.length; i++) {
+      const { c, r } = parseSquare(RPS4200_BLUE_SQUARES[i][0]);
+      const type = inventory[i];
+      b[r][c] = { color: 'blue', type };
+      const mirror = mirrorSquare(c, r);
+      b[mirror.r][mirror.c] = { color: 'red', type };
+    }
     return b;
   }
 
@@ -258,9 +287,9 @@
   }
 
   const api = {
-    SIZE, FILES, COLORS, TYPES, BEATS, DIRS,
+    SIZE, FILES, COLORS, TYPES, BEATS, DIRS, VARIANTS,
     inBounds, squareName, parseSquare, beats,
-    initialBoard, cloneBoard, boardToString, stringToBoard,
+    initialBoard, initialBoardForVariant, cloneBoard, boardToString, stringToBoard,
     isGoalSquare, getWinner,
     legalMovesFrom, allLegalMoves, hasLegalMoves,
     Game,

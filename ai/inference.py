@@ -54,7 +54,26 @@ def build_state(request: dict) -> GameState:
     history = request.get('history')
     if not isinstance(history, list) or len(history) > 2000:
         raise ValueError('invalid game history')
-    state = GameState()
+    raw_board = request.get('startBoard')
+    if raw_board is None:
+        state = GameState()
+    else:
+        if not isinstance(raw_board, list) or len(raw_board) != 9 or any(not isinstance(row, list) or len(row) != 9 for row in raw_board):
+            raise ValueError('invalid starting board')
+        values = {'rock': 1, 'paper': 2, 'scissors': 3}
+        board = np.zeros((9, 9), dtype=np.int8)
+        for row_index, row in enumerate(raw_board):
+            for column_index, piece in enumerate(row):
+                if piece is None:
+                    continue
+                if not isinstance(piece, dict) or piece.get('color') not in ('blue', 'red') or piece.get('type') not in values:
+                    raise ValueError('invalid starting board')
+                value = values[piece['type']]
+                board[row_index, column_index] = value if piece['color'] == 'blue' else -value
+        start_turn = request.get('startTurn')
+        if start_turn not in ('blue', 'red'):
+            raise ValueError('invalid starting turn')
+        state = GameState(board, BLUE if start_turn == 'blue' else RED)
     for index, item in enumerate(history):
         if not isinstance(item, dict):
             raise ValueError('invalid game move')

@@ -12,7 +12,9 @@ const { WebSocketServer } = require('ws');
 const engine = require('./engine.js');
 const db = require('./db.js');
 const rating = require('./rating.js');
+const { buildRatingPreview, roundedDelta } = require('./rating-preview.js');
 const aiInference = require('./ai-inference.js');
+const heuristicTeacher = require('./heuristic-teacher.js');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 8090;
@@ -36,6 +38,13 @@ const MIME = {
 const PUBLIC_ASSETS = new Map([
   ['/', 'index.html'],
   ['/index.html', 'index.html'],
+  ['/analysis', 'index.html'],
+  ['/editor', 'index.html'],
+  ['/leaderboard', 'index.html'],
+  ['/players', 'index.html'],
+  ['/profile', 'index.html'],
+  ['/rating-stats', 'index.html'],
+  ['/watch', 'index.html'],
   ['/engine.js', 'engine.js'],
   ['/app.js', 'app.js'],
   ['/style.css', 'style.css'],
@@ -46,6 +55,11 @@ const PUBLIC_ASSETS = new Map([
   ['/assets/lichess-icons.LICENSE.txt', 'assets/lichess-icons.LICENSE.txt'],
   ['/sound/Move.mp3', 'sound/Move.mp3'],
   ['/sound/Capture.mp3', 'sound/Capture.mp3'],
+  ['/sound/GameStart.mp3', 'sound/GameStart.mp3'],
+  ['/sound/LowTime.mp3', 'sound/LowTime.mp3'],
+  ['/sound/Victory.mp3', 'sound/Victory.mp3'],
+  ['/sound/Defeat.mp3', 'sound/Defeat.mp3'],
+  ['/sound/Draw.mp3', 'sound/Draw.mp3'],
 ]);
 
 const DEFAULT_TIMECONTROL = { initial: 300, increment: 3 }; // 5+3, in seconds
@@ -66,11 +80,18 @@ const games = new Map();          // gameId -> game state
 const aiGames = new Set();        // admitted AI game states
 const slotBySocket = new WeakMap(); // ws -> { gameId, color }
 const spectateBySocket = new WeakMap(); // ws -> gameId (spectators)
+const spectatorColorBySocket = new WeakMap(); // ws -> viewed board orientation
+const spectatorPerspectiveBySocket = new WeakMap(); // ws -> preferred player user id
 const queue = [];                 // lobby seeks: { id, ws, user, timeControl, rating, queuedAt }
 const clients = new Set();        // all open WebSocket connections (for lobby broadcasts)
 const userBySocket = new WeakMap();
+const presenceBySocket = new WeakMap();
 const challenges = new Map();      // challengeId -> pending direct challenge
+const analysisInvites = new Map(); // inviteId -> pending study invitation
+const analysisRooms = new Map();   // analysisId -> shared analysis room
 let seekSeq = 0;
+let guestSeq = 0;
+const guestNames = new WeakMap();
 const chatLog = [];               // recent public chat messages (in-memory)
 const MAX_CHAT = 100;
 
@@ -87,6 +108,10 @@ function normalizeTimeControl(tc) {
   const initial = Number.isFinite(i) && i >= 0 && i <= 10800 ? Math.round(i) : DEFAULT_TIMECONTROL.initial;
   const increment = Number.isFinite(inc) && inc >= 0 && inc <= 60 ? Math.round(inc) : DEFAULT_TIMECONTROL.increment;
   return { initial, increment };
+}
+
+function isInfiniteTimeControl(tc) {
+  return Number(tc && tc.initial) === 0;
 }
 
 function parseStartPosition(value) {
@@ -107,6 +132,10 @@ function startPositionFromMessage(msg) {
   return msg.board === undefined ? undefined : parseStartPosition({ board: msg.board, turn: msg.turn });
 }
 
+function normalizeVariant(value) {
+  return value === 'rps4200' ? 'rps4200' : 'standard';
+}
+
 // Lichess-style category from a time control (initial seconds + 40 * increment seconds).
 function timeControlCategory(tc) {
   const initial = Number(tc && tc.initial) || 0;
@@ -118,9 +147,14 @@ function timeControlCategory(tc) {
   return 'classical';
 }
 
+function ratingCategoryForGame(g) {
+  return g.variant === 'rps4200' ? 'rps4200' : timeControlCategory(g.timeControl);
+}
+
 function newGame(timeControl, casual, startPosition, options = {}) {
   const tc = normalizeTimeControl(timeControl);
-  const position = startPosition || { board: engine.initialBoard(), turn: 'blue' };
+  const variant = normalizeVariant(options.variant);
+  const position = startPosition || { board: engine.initialBoardForVariant(variant), turn: 'blue' };
   const game = new engine.Game();
   game.board = engine.cloneBoard(position.board);
   game.turn = position.turn;
@@ -134,7 +168,9 @@ function newGame(timeControl, casual, startPosition, options = {}) {
     id: randomId(),
     createdAt: Date.now(),
     timeControl: tc,
+    variant,
     casual: !!casual,
+    publicChat: !!options.publicChat,
     blue: null,
     red: null,
     game,
@@ -156,9 +192,13 @@ function newGame(timeControl, casual, startPosition, options = {}) {
     lastAbandoned: null,
     chat: [],               // in-game chat history
     drawOffer: null,        // color that offered a draw
+    takebackOffer: null,     // { color, moveIndex } while awaiting a response
+    takebackDeclines: { blue: 0, red: 0 },
+    takebackDeclinedMoves: new Set(),
     rematchOffer: null,     // color that offered a rematch
     spectators: new Set(),  // spectator WebSockets
     aiGame: !!options.aiGame,
+    aiType: options.aiType || null,
     aiColor: options.aiColor || null,
     aiPending: false,
     aiOperation: null,
@@ -168,6 +208,96 @@ function newGame(timeControl, casual, startPosition, options = {}) {
   };
 }
 
+function hydrateFinishedGame(saved) {
+  const start = saved.startPosition || { board: engine.initialBoard(), turn: 'blue' };
+  const g = newGame({ initial: saved.tcInitial, increment: saved.tcIncrement }, !saved.rated, start, { variant: saved.variant, publicChat: !!saved.publicChat });
+  g.id = saved.id;
+  g.createdAt = saved.createdAt;
+  g.status = saved.status || 'finished';
+  g.result = saved.result;
+  g.reason = saved.reason;
+  g.rated = !!saved.rated;
+  const blueUser = saved.blueUserId ? db.getUserById(saved.blueUserId) : null;
+  const redUser = saved.redUserId ? db.getUserById(saved.redUserId) : null;
+  g.blue = seatFor(blueUser, null, g.timeControl, g.variant);
+  g.red = seatFor(redUser, null, g.timeControl, g.variant);
+  g.blue.username = saved.blueName; g.blue.rating = saved.blueRatingBefore;
+  g.red.username = saved.redName; g.red.rating = saved.redRatingBefore;
+  const history = Array.isArray(saved.history) ? saved.history : [];
+  for (const move of history) g.game.move(move.fromC, move.fromR, move.toC, move.toR);
+  g.game.history = history;
+  for (const move of history) {
+    if (move.clockAfterMs != null && (move.color === 'blue' || move.color === 'red')) g.clocks[move.color + 'Ms'] = move.clockAfterMs;
+  }
+  if (g.reason === 'timeout' && (g.result === 'blue' || g.result === 'red')) {
+    g.clocks[g.result === 'blue' ? 'redMs' : 'blueMs'] = 0;
+  }
+  g.clocks.running = null;
+  ensureTerminalGameChat(g, false);
+  return g;
+}
+
+function restoreSeat(savedSeat, tc, variant) {
+  const user = savedSeat && savedSeat.userId ? db.getUserById(savedSeat.userId) : null;
+  const seat = makeSeat(user, null, variant === 'rps4200' ? 'rps4200' : timeControlCategory(tc), {
+    username: savedSeat && savedSeat.username || null,
+  });
+  if (savedSeat && savedSeat.token) seat.token = savedSeat.token;
+  if (savedSeat && savedSeat.username) seat.username = savedSeat.username;
+  if (savedSeat && savedSeat.rating != null) seat.rating = savedSeat.rating;
+  if (savedSeat && savedSeat.rd != null) seat.rd = savedSeat.rd;
+  if (savedSeat && savedSeat.vol != null) seat.vol = savedSeat.vol;
+  seat.ws = null;
+  seat.connected = false;
+  seat.disconnectedAt = null;
+  return seat;
+}
+
+function hydrateActiveGame(saved) {
+  const start = saved.startPosition || { board: engine.initialBoardForVariant(saved.variant), turn: 'blue' };
+  const g = newGame(saved.timeControl, !!saved.casual, start, {
+    variant: saved.variant,
+    publicChat: !!saved.publicChat,
+  });
+  g.id = saved.id;
+  g.createdAt = saved.createdAt || Date.now();
+  g.status = 'playing';
+  g.rated = !!saved.rated;
+  g.blue = restoreSeat(saved.blue, g.timeControl, g.variant);
+  g.red = restoreSeat(saved.red, g.timeControl, g.variant);
+
+  const history = Array.isArray(saved.history) ? saved.history : [];
+  for (const move of history) g.game.move(move.fromC, move.fromR, move.toC, move.toR);
+  g.game.history = history;
+  if (saved.clocks && typeof saved.clocks === 'object') {
+    for (const color of ['blue', 'red']) {
+      for (const field of ['Ms', 'GraceMs']) {
+        const key = color + field;
+        if (Number.isFinite(Number(saved.clocks[key]))) g.clocks[key] = Number(saved.clocks[key]);
+      }
+    }
+  }
+
+  g.chat = Array.isArray(saved.chat) ? saved.chat.slice(-MAX_GAME_CHAT) : [];
+  g.drawOffer = saved.drawOffer === 'blue' || saved.drawOffer === 'red' ? saved.drawOffer : null;
+  g.takebackOffer = saved.takebackOffer && typeof saved.takebackOffer === 'object'
+    ? saved.takebackOffer : null;
+  g.takebackDeclines = {
+    blue: Number(saved.takebackDeclines && saved.takebackDeclines.blue) || 0,
+    red: Number(saved.takebackDeclines && saved.takebackDeclines.red) || 0,
+  };
+  g.takebackDeclinedMoves = new Set(Array.isArray(saved.takebackDeclinedMoves) ? saved.takebackDeclinedMoves : []);
+  g.rematchOffer = saved.rematchOffer === 'blue' || saved.rematchOffer === 'red' ? saved.rematchOffer : null;
+
+  // Do not charge time while the service is being restarted. The first player
+  // to reconnect resumes the same side's clock from a fresh server timestamp.
+  g.resumeRunning = saved.clocks && (saved.clocks.running === 'blue' || saved.clocks.running === 'red')
+    ? saved.clocks.running : g.game.turn;
+  g.pausedForRestart = true;
+  g.clocks.running = null;
+  g.clocks.lastTick = Date.now();
+  return g;
+}
 function makeSeat(user, ws, category, options = {}) {
   const r = user ? db.ratingFor(user, category) : null;
   return {
@@ -175,7 +305,7 @@ function makeSeat(user, ws, category, options = {}) {
     ws,
     connected: options.ai ? true : !!ws,
     userId: user ? user.id : null,
-    username: user ? user.username : (options.username || null),
+    username: user ? user.username : (options.username || (ws ? guestNameFor(ws) : null)),
     ai: !!options.ai,
     rating: r ? r.rating : null,     // rating at game start (before)
     rd: r ? r.rd : null,
@@ -185,12 +315,24 @@ function makeSeat(user, ws, category, options = {}) {
   };
 }
 
-function seatFor(user, ws, tc) {
-  return makeSeat(user, ws, timeControlCategory(tc));
+function guestNameFor(ws) {
+  if (!ws) return 'Guest' + (++guestSeq);
+  let name = guestNames.get(ws);
+  if (!name) {
+    name = 'Guest' + (++guestSeq);
+    guestNames.set(ws, name);
+  }
+  return name;
 }
 
-function aiSeat(tc) {
-  return makeSeat(null, null, timeControlCategory(tc), { ai: true, username: 'Intransitive AI' });
+function seatFor(user, ws, tc, variant = 'standard') {
+  return makeSeat(user, ws, variant === 'rps4200' ? 'rps4200' : timeControlCategory(tc));
+}
+
+function aiSeat(tc, aiType = 'neural', variant = 'standard') {
+  return makeSeat(null, null, variant === 'rps4200' ? 'rps4200' : timeControlCategory(tc), {
+    ai: true, username: aiType === 'teacher' ? 'Bootstrap Teacher' : 'Intransitive AI',
+  });
 }
 
 function resolveUser(sessionToken) {
@@ -216,6 +358,8 @@ function publicChallenge(challenge) {
     challenger: challenge.challengerUsername,
     target: challenge.targetUsername,
     timeControl: challenge.timeControl,
+    variant: challenge.variant,
+    publicChat: !!challenge.publicChat,
     rated: challenge.rated,
     createdAt: challenge.createdAt,
   };
@@ -226,7 +370,21 @@ function sendPendingChallenges(ws, userId) {
   for (const challenge of challenges.values()) {
     if (challenge.targetId === userId) pending.push(publicChallenge(challenge));
   }
-  if (pending.length) send(ws, { type: 'challengeList', challenges: pending });
+  // Also acknowledge an empty list so clients know identification completed.
+  send(ws, { type: 'challengeList', challenges: pending });
+}
+
+function publicAnalysisInvite(invite) {
+  return { id: invite.id, from: invite.from, link: invite.link, createdAt: invite.createdAt };
+}
+
+function sendPendingAnalysisInvites(ws, userId) {
+  const pending = userId ? db.listAnalysisInvites(userId) : [];
+  const known = new Set(pending.map((invite) => invite.id));
+  for (const invite of analysisInvites.values()) {
+    if (invite.targetId === userId && !known.has(invite.id)) pending.push(publicAnalysisInvite(invite));
+  }
+  send(ws, { type: 'analysisInviteList', invites: pending });
 }
 
 function notifyUser(userId, message) {
@@ -236,14 +394,104 @@ function notifyUser(userId, message) {
   }
 }
 
+function handleAnalysisJoin(ws, msg) {
+  const id = typeof msg.analysisId === 'string' ? msg.analysisId.slice(0, 64) : '';
+  if (!id) return;
+  let room = analysisRooms.get(id);
+  if (!room) {
+    room = { owner: ws, members: new Set(), state: null, syncUsers: false, ownerMovesOnly: false };
+    analysisRooms.set(id, room);
+  }
+  room.members.add(ws);
+  if (room.state && room.syncUsers) send(ws, { type: 'analysisState', analysisId: id, ...room.state, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly });
+  send(ws, { type: 'analysisSettings', analysisId: id, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly, owner: room.owner === ws });
+}
+
+function handleAnalysisSettings(ws, msg) {
+  const room = analysisRooms.get(msg.analysisId);
+  if (!room || !room.members.has(ws)) return;
+  if (typeof msg.syncUsers === 'boolean') room.syncUsers = msg.syncUsers;
+  if (room.owner === ws && typeof msg.ownerMovesOnly === 'boolean') room.ownerMovesOnly = msg.ownerMovesOnly;
+  for (const member of room.members) send(member, { type: 'analysisSettings', analysisId: msg.analysisId, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly, owner: room.owner === member });
+}
+
+function handleAnalysisState(ws, msg) {
+  const room = analysisRooms.get(msg.analysisId);
+  if (!room || !room.syncUsers || (room.ownerMovesOnly && room.owner !== ws)) return;
+  if (!msg.state || typeof msg.state !== 'object') return;
+  let baseBoard = null;
+  if (msg.state.baseBoard != null) {
+    try {
+      baseBoard = engine.cloneBoard(msg.state.baseBoard);
+    } catch (_) {
+      return;
+    }
+  }
+  const baseTurn = msg.state.baseTurn === 'red' ? 'red' : 'blue';
+  if (!Array.isArray(msg.state.moves) || msg.state.moves.length > 2000) return;
+  const variant = normalizeVariant(msg.variant);
+  room.state = { baseBoard, baseTurn, moves: msg.state.moves, variant };
+  for (const member of room.members) if (member !== ws) send(member, { type: 'analysisState', analysisId: msg.analysisId, ...room.state, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly });
+}
+
+function connectedSocketForUser(userId) {
+  for (const client of clients) {
+    const user = userBySocket.get(client);
+    if (user && user.id === userId && client.readyState === 1) return client;
+  }
+  return null;
+}
+
+function handleAnalysisInvite(ws, msg) {
+  const from = authenticatedUser(ws, msg);
+  const targetUsername = typeof msg.targetUsername === 'string' ? msg.targetUsername.trim() : '';
+  const target = targetUsername ? db.getUserByUsername(targetUsername) : null;
+  if (!from) {
+    send(ws, { type: 'error', message: 'You must be logged in to send an analysis invite.' });
+    return;
+  }
+  if (!target) {
+    send(ws, { type: 'error', message: 'That player was not found.' });
+    return;
+  }
+  if (typeof msg.link !== 'string' || !msg.link.trim() || msg.link.length > 10000) {
+    send(ws, { type: 'error', message: 'The analysis link is invalid or too long.' });
+    return;
+  }
+  const invite = {
+    id: randomId(),
+    from: from.username,
+    targetId: target.id,
+    link: msg.link,
+    createdAt: Date.now(),
+  };
+  db.saveAnalysisInvite({ id: invite.id, inviterUserId: from.id, inviterName: from.username, targetUserId: target.id, targetName: target.username, link: msg.link, createdAt: invite.createdAt });
+  analysisInvites.set(invite.id, invite);
+  send(ws, { type: 'analysisInviteSent', target: target.username });
+  notifyUser(target.id, { type: 'analysisInvite', invite: publicAnalysisInvite(invite) });
+}
+
+function handleAnalysisInviteDismiss(ws, msg) {
+  const user = authenticatedUser(ws, msg);
+  const invite = analysisInvites.get(msg.inviteId);
+  if (user && invite && invite.targetId === user.id) { analysisInvites.delete(invite.id); db.resolveAnalysisInvite(invite.id, user.id); }
+}
+
 function playerInfo(g, color) {
   const p = g[color];
   if (!p) return null;
   if (p.ai) return { name: p.username, guest: false, ai: true, rating: null, userId: null };
-  if (!p.userId) return { name: CAP[color], guest: true, rating: null, userId: null };
+  if (!p.userId) return { name: p.username || CAP[color], guest: true, rating: null, userId: null };
   let r = p.rating;
   if (g.status === 'finished' && p.ratingAfter != null) r = p.ratingAfter;
   return { name: p.username || CAP[color], guest: false, rating: r == null ? null : Math.round(r), userId: p.userId };
+}
+
+function ratingPreview(g) {
+  if (!g.rated || !g.blue || !g.red || g.blue.rating == null || g.red.rating == null) return null;
+  const blue = { rating: g.blue.rating, rd: g.blue.rd, vol: g.blue.vol };
+  const red = { rating: g.red.rating, rd: g.red.rd, vol: g.red.vol };
+  return buildRatingPreview(blue, red);
 }
 
 function snapshot(g, color, spectating) {
@@ -258,7 +506,10 @@ function snapshot(g, color, spectating) {
     reason: g.reason,
     rated: !!g.rated,
     casual: !!g.casual,
+    variant: g.variant,
+    publicChat: !!g.publicChat,
     ratingDelta: g.ratingDelta || null,
+    ratingPreview: ratingPreview(g),
     turn: g.game.turn,
     board: engine.cloneBoard(g.game.board),
     startPosition: { board: engine.cloneBoard(g.startPosition.board), turn: g.startPosition.turn },
@@ -282,8 +533,11 @@ function snapshot(g, color, spectating) {
     opponentAbandoned: isSpec ? false : (g.status === 'playing' && abandonedColor(g) === opp),
     spectating: isSpec,
     drawOffer: g.drawOffer || null,
+    takebackOffer: g.takebackOffer || null,
+    takebackBlocked: takebackBlockedState(g),
     rematchOffer: g.rematchOffer || null,
     computer: !!g.aiGame,
+    aiType: g.aiType || null,
     aiThinking: !!g.aiPending,
     aiError: g.aiError || null,
   };
@@ -292,7 +546,7 @@ function snapshot(g, color, spectating) {
 function broadcastState(g) {
   if (g.blue && g.blue.ws) send(g.blue.ws, snapshot(g, 'blue'));
   if (g.red && g.red.ws) send(g.red.ws, snapshot(g, 'red'));
-  for (const ws of g.spectators) send(ws, snapshot(g, 'blue', true));
+  for (const ws of g.spectators) send(ws, snapshot(g, spectatorColorBySocket.get(ws) || 'blue', true));
 }
 
 function broadcastClock(g) {
@@ -319,9 +573,10 @@ function stopTicker(g) {
 function settleClock(g) {
   const now = Date.now();
   const c = g.clocks;
-  if (g.status === 'playing' && c.running) {
+  if (g.status === 'playing' && c.running && !isInfiniteTimeControl(g.timeControl)) {
     const color = c.running;
     let remaining = now - c.lastTick;
+  persistActiveGame(g);
     c.lastTick = now;
 
     // First-move grace: the clock doesn't start until the grace period elapses.
@@ -371,7 +626,7 @@ function startGame(g) {
 
   if (!g.casual && g.blue && g.blue.userId && g.red && g.red.userId) {
     g.rated = true;
-    const cat = timeControlCategory(g.timeControl);
+    const cat = ratingCategoryForGame(g);
     const b = db.getUserById(g.blue.userId);
     const r = db.getUserById(g.red.userId);
     const br = db.ratingFor(b, cat);
@@ -410,7 +665,17 @@ function attach(ws, g, color) {
   slot.color = color;
 
   send(ws, { type: 'joined', gameId: g.id, color, token: player.token });
-  send(ws, { type: 'gameChatHistory', messages: g.chat });
+  sendGameChatHistory(ws, g);
+
+  if (g.status === 'playing' && g.pausedForRestart) {
+    g.pausedForRestart = false;
+    g.clocks.running = g.resumeRunning || g.game.turn;
+    g.resumeRunning = null;
+    g.clocks.lastTick = Date.now();
+    g.ticker = setInterval(() => tick(g), TICK_MS);
+    broadcastClock(g);
+    persistActiveGame(g);
+  }
 
   const opp = OTHER[color];
   if (g.status === 'waiting' && g.blue && g.blue.connected && g.red && g.red.connected) {
@@ -431,14 +696,17 @@ function finishGame(g, result, reason) {
   g.reason = reason;
   g.clocks.running = null;
   stopTicker(g);
+  db.deleteActiveGame(g.id);
 
   const delta = applyRatings(g);
   if (g.persistHistory) {
     persistGame(g);
-    recordOpenings(g);
+    if (g.variant === 'standard') recordOpenings(g);
   }
   g.ratingDelta = delta;
+  const terminalChat = ensureTerminalGameChat(g, false);
   broadcastState(g);
+  if (terminalChat) broadcastGameChat(g, terminalChat);
   if (g.aiGame) disposeAiGame(g, false);
 }
 
@@ -454,21 +722,66 @@ function applyRatings(g) {
   const beforeRed = { rating: g.red.rating, rd: g.red.rd, vol: g.red.vol };
   const res = rating.apply(beforeBlue, beforeRed, outcome);
 
-  const cat = timeControlCategory(g.timeControl);
+  const cat = ratingCategoryForGame(g);
   db.updateRatingFor(cat, g.blue.userId, res.blue);
   db.updateRatingFor(cat, g.red.userId, res.red);
   db.incrementStats(g.blue.userId, g.result, 'blue');
   db.incrementStats(g.red.userId, g.result, 'red');
 
-  g.blue.ratingAfter = res.blue.rating;
-  g.red.ratingAfter = res.red.rating;
+  g.blue.ratingAfter = Math.round(res.blue.rating);
+  g.red.ratingAfter = Math.round(res.red.rating);
 
   return {
-    blue: res.blue.rating - Math.round(beforeBlue.rating),
-    red: res.red.rating - Math.round(beforeRed.rating),
+    blue: roundedDelta(res.blue, beforeBlue),
+    red: roundedDelta(res.red, beforeRed),
   };
 }
 
+function activeSeatSnapshot(seat) {
+  if (!seat) return null;
+  return {
+    token: seat.token,
+    userId: seat.userId,
+    username: seat.username,
+    rating: seat.rating,
+    rd: seat.rd,
+    vol: seat.vol,
+  };
+}
+
+function activeGameSnapshot(g) {
+  return {
+    id: g.id,
+    createdAt: g.createdAt,
+    timeControl: g.timeControl,
+    variant: g.variant,
+    casual: !!g.casual,
+    publicChat: !!g.publicChat,
+    rated: !!g.rated,
+    blue: activeSeatSnapshot(g.blue),
+    red: activeSeatSnapshot(g.red),
+    history: g.game.history,
+    startPosition: g.startPosition,
+    clocks: {
+      blueMs: g.clocks.blueMs,
+      redMs: g.clocks.redMs,
+      blueGraceMs: g.clocks.blueGraceMs,
+      redGraceMs: g.clocks.redGraceMs,
+      running: g.clocks.running,
+    },
+    chat: g.chat.slice(-MAX_GAME_CHAT),
+    drawOffer: g.drawOffer,
+    takebackOffer: g.takebackOffer,
+    takebackDeclines: g.takebackDeclines,
+    takebackDeclinedMoves: Array.from(g.takebackDeclinedMoves),
+    rematchOffer: g.rematchOffer,
+  };
+}
+
+function persistActiveGame(g) {
+  if (!g || g.status !== 'playing' || g.aiGame || !g.blue || !g.red) return;
+  db.saveActiveGame(activeGameSnapshot(g));
+}
 function persistGame(g) {
   db.saveGame({
     id: g.id,
@@ -488,6 +801,7 @@ function persistGame(g) {
     result: g.result,
     reason: g.reason,
     rated: g.rated,
+    variant: g.variant,
     history: JSON.stringify(g.game.history),
     startPosition: g.startPosition,
   });
@@ -568,6 +882,9 @@ function handleMove(ws, msg) {
   // Add increment to the player who just moved, then start the opponent's clock.
   if (slot.color === 'blue') { g.clocks.blueMs += g.timeControl.increment * 1000; g.clocks.blueGraceMs = 0; }
   else { g.clocks.redMs += g.timeControl.increment * 1000; g.clocks.redGraceMs = 0; }
+  const recordedMove = g.game.history[g.game.history.length - 1];
+  if (recordedMove) recordedMove.color = slot.color;
+  if (recordedMove) recordedMove.clockAfterMs = Math.max(0, Math.round(g.clocks[slot.color + 'Ms']));
 
   const st = g.game.status;
   if (st !== 'playing') {
@@ -582,6 +899,7 @@ function handleMove(ws, msg) {
     g.clocks.lastTick = Date.now();
     if (g.aiGame && g.game.turn === g.aiColor) requestAiMove(g);
     broadcastState(g);
+    persistActiveGame(g);
   }
 }
 
@@ -625,10 +943,37 @@ function requestAiMove(g) {
   if (!g.aiGame || g.status !== 'playing' || g.aiPending || g.game.turn !== g.aiColor) return;
   g.aiPending = true;
   g.aiError = null;
+  if (g.aiType === 'teacher') {
+    setImmediate(() => {
+      if (games.get(g.id) !== g || g.status !== 'playing' || !g.aiPending) return;
+      try {
+        const move = heuristicTeacher.chooseMove(g.game);
+        const result = g.game.move(move.fromC, move.fromR, move.toC, move.toR);
+        if (!result.ok) throw new Error('teacher returned an illegal move');
+        g.aiPending = false;
+        g.clocks.redMs += g.timeControl.increment * 1000;
+        const recordedMove = g.game.history[g.game.history.length - 1];
+        if (recordedMove) { recordedMove.color = 'red'; recordedMove.clockAfterMs = Math.max(0, Math.round(g.clocks.redMs)); }
+        if (g.game.status !== 'playing') {
+          if (g.game.status === 'draw') finishGame(g, 'draw', g.game.drawReason);
+          else finishGame(g, g.game.winner, engine.getWinner(g.game.board) ? 'goal' : 'noMoves');
+        } else {
+          g.clocks.running = g.game.turn;
+          g.clocks.lastTick = Date.now();
+          broadcastState(g);
+        }
+      } catch (error) {
+        failAiMove(g, 'Teacher move failed. You can retry.');
+      }
+    });
+    return;
+  }
   const requestSerial = ++g.aiRequestSerial;
   const request = {
     history: aiHistory(g),
     turn: g.game.turn,
+    startBoard: engine.cloneBoard(g.startPosition.board),
+    startTurn: g.startPosition.turn,
   };
   const operation = aiInference.request(request);
   g.aiOperation = operation;
@@ -662,6 +1007,8 @@ function requestAiMove(g) {
     g.aiPending = false;
     g.aiError = null;
     g.clocks.redMs += g.timeControl.increment * 1000;
+    const recordedMove = g.game.history[g.game.history.length - 1];
+    if (recordedMove) { recordedMove.color = 'red'; recordedMove.clockAfterMs = Math.max(0, Math.round(g.clocks.redMs)); }
     if (g.game.status !== 'playing') {
       if (g.game.status === 'draw') finishGame(g, 'draw', g.game.drawReason);
       else finishGame(g, g.game.winner, engine.getWinner(g.game.board) ? 'goal' : 'noMoves');
@@ -752,21 +1099,108 @@ function handleDeclineDraw(ws) {
   broadcastDrawOffer(g);
 }
 
-function seatFrom(oldSeat, tc) {
+function takebackMoveIndex(g, color) {
+  for (let i = g.game.history.length - 1; i >= 0; i--) {
+    if (g.game.history[i].color === color) return i;
+  }
+  return -1;
+}
+
+function takebackBlockedState(g) {
+  return { blue: takebackBlocked(g, 'blue'), red: takebackBlocked(g, 'red') };
+}
+
+function takebackBlocked(g, color) {
+  if (g.takebackDeclines[color] >= 3) return true;
+  const moveIndex = takebackMoveIndex(g, color);
+  return moveIndex >= 0 && g.takebackDeclinedMoves.has(color + ':' + moveIndex);
+}
+
+function broadcastTakebackOffer(g) {
+  const msg = { type: 'takebackOffer', offer: g.takebackOffer || null, blocked: takebackBlockedState(g) };
+  if (g.blue && g.blue.ws) send(g.blue.ws, msg);
+  if (g.red && g.red.ws) send(g.red.ws, msg);
+}
+
+function handleTakebackRequest(ws) {
+  const slot = slotBySocket.get(ws);
+  const g = slot ? games.get(slot.gameId) : null;
+  if (!g || g.status !== 'playing' || !g.blue || !g.red || !g.blue.connected || !g.red.connected) return;
+  if (g.takebackOffer || !g.game.history.length) return;
+  settleClock(g);
+  const moveIndex = takebackMoveIndex(g, slot.color);
+  if (moveIndex < 0) return;
+  if (takebackBlocked(g, slot.color)) return;
+  g.takebackOffer = { color: slot.color, moveIndex };
+  broadcastTakebackOffer(g);
+}
+
+function restoreTakeback(g, moveIndex) {
+  const kept = g.game.history.slice(0, moveIndex).map((move) => ({ ...move }));
+  const restored = new engine.Game();
+  restored.board = engine.cloneBoard(g.startPosition.board);
+  restored.turn = g.startPosition.turn;
+  restored.history = [];
+  restored.lastMove = null;
+  restored.halfmoveClock = 0;
+  restored.fullmoveNumber = 1;
+  restored.status = 'playing';
+  restored.winner = null;
+  restored.drawReason = null;
+  restored.positionCounts = new Map();
+  restored.recordPosition();
+  for (const move of kept) restored.move(move.fromC, move.fromR, move.toC, move.toR);
+  restored.history = kept;
+  g.game = restored;
+  g.clocks.blueMs = g.timeControl.initial * 1000;
+  g.clocks.redMs = g.timeControl.initial * 1000;
+  g.clocks.blueGraceMs = kept.length ? 0 : GRACE_MS;
+  g.clocks.redGraceMs = kept.length ? 0 : GRACE_MS;
+  for (const move of kept) {
+    if ((move.color === 'blue' || move.color === 'red') && move.clockAfterMs != null) {
+      g.clocks[move.color + 'Ms'] = move.clockAfterMs;
+    }
+  }
+  g.clocks.running = g.game.turn;
+  g.clocks.lastTick = Date.now();
+  g.drawOffer = null;
+  g.takebackOffer = null;
+  broadcastState(g);
+  broadcastTakebackOffer(g);
+  persistActiveGame(g);
+}
+
+function handleTakebackResponse(ws, accept) {
+  const slot = slotBySocket.get(ws);
+  const g = slot ? games.get(slot.gameId) : null;
+  const offer = g && g.takebackOffer;
+  if (!g || g.status !== 'playing' || !offer || offer.color === slot.color) return;
+  if (!accept) {
+    g.takebackDeclines[offer.color] += 1;
+    g.takebackDeclinedMoves.add(offer.color + ':' + offer.moveIndex);
+    g.takebackOffer = null;
+    broadcastTakebackOffer(g);
+    return;
+  }
+  restoreTakeback(g, offer.moveIndex);
+}
+
+function seatFrom(oldSeat, tc, variant = 'standard') {
   const user = oldSeat.userId ? db.getUserById(oldSeat.userId) : null;
-  return makeSeat(user, oldSeat.ws, timeControlCategory(tc));
+  return makeSeat(user, oldSeat.ws, variant === 'rps4200' ? 'rps4200' : timeControlCategory(tc));
 }
 
 function startRematch(old) {
   if (!old.blue || !old.red || !old.blue.connected || !old.red.connected) return false;
-  const g = newGame(old.timeControl, old.casual, old.startPosition);
+  const g = newGame(old.timeControl, old.casual, old.variant === 'rps4200' ? undefined : old.startPosition, { variant: old.variant, publicChat: old.publicChat });
   games.set(g.id, g);
-  g.blue = seatFrom(old.red, old.timeControl);   // colors reversed
-  g.red = seatFrom(old.blue, old.timeControl);
+  g.blue = seatFrom(old.red, old.timeControl, old.variant);   // colors reversed
+  g.red = seatFrom(old.blue, old.timeControl, old.variant);
   slotBySocket.set(g.blue.ws, { gameId: g.id, color: 'blue' });
   slotBySocket.set(g.red.ws, { gameId: g.id, color: 'red' });
   send(g.blue.ws, { type: 'rematchStarted', gameId: g.id, color: 'blue', token: g.blue.token });
   send(g.red.ws, { type: 'rematchStarted', gameId: g.id, color: 'red', token: g.red.token });
+  for (const ws of old.spectators) send(ws, { type: 'spectatorRematch', oldGameId: old.id, gameId: g.id });
   startGame(g);
   return true;
 }
@@ -793,6 +1227,14 @@ function handleRematch(ws) {
   }
 }
 
+function handleRematchCancel(ws) {
+  const slot = slotBySocket.get(ws);
+  const g = slot ? games.get(slot.gameId) : null;
+  if (!g || g.status !== 'finished' || g.rematchOffer !== slot.color) return;
+  g.rematchOffer = null;
+  broadcastRematchOffer(g);
+}
+
 function abortGame(g) {
   if (g.status !== 'playing') return;
   g.status = 'aborted';
@@ -800,7 +1242,10 @@ function abortGame(g) {
   g.result = null;
   g.clocks.running = null;
   stopTicker(g);
+  db.deleteActiveGame(g.id);
+  const terminalChat = ensureTerminalGameChat(g, false);
   broadcastState(g);
+  if (terminalChat) broadcastGameChat(g, terminalChat);
   if (g.aiGame) disposeAiGame(g, false);
 }
 
@@ -816,12 +1261,16 @@ function handleAbort(ws) {
   abortGame(g);
 }
 
-function addSpectator(ws, g) {
+function addSpectator(ws, g, color = 'blue', perspectiveUserId = null) {
+  removeSpectator(ws);
   g.spectators.add(ws);
   spectateBySocket.set(ws, g.id);
-  send(ws, { type: 'spectating', gameId: g.id, color: 'blue' });
-  send(ws, snapshot(g, 'blue', true));
-  send(ws, { type: 'gameChatHistory', messages: g.chat });
+  spectatorColorBySocket.set(ws, color === 'red' ? 'red' : 'blue');
+  if (perspectiveUserId != null) spectatorPerspectiveBySocket.set(ws, String(perspectiveUserId));
+  else spectatorPerspectiveBySocket.delete(ws);
+  send(ws, { type: 'spectating', gameId: g.id, color: spectatorColorBySocket.get(ws) });
+  send(ws, snapshot(g, spectatorColorBySocket.get(ws), true));
+  sendGameChatHistory(ws, g);
 }
 
 function removeSpectator(ws) {
@@ -830,13 +1279,69 @@ function removeSpectator(ws) {
   const g = games.get(gid);
   if (g) g.spectators.delete(ws);
   spectateBySocket.delete(ws);
+  spectatorColorBySocket.delete(ws);
+  spectatorPerspectiveBySocket.delete(ws);
+}
+
+function chatEntryVisibleTo(g, entry, audience) {
+  if (g.publicChat) return true;
+  if (!entry || !entry.audience) return audience === 'players';
+  return entry.audience === 'public' || entry.audience === 'both' || entry.audience === audience;
 }
 
 function broadcastGameChat(g, entry) {
-  const msg = { type: 'gameChat', message: entry };
-  if (g.blue && g.blue.ws) send(g.blue.ws, msg);
-  if (g.red && g.red.ws) send(g.red.ws, msg);
-  for (const ws of g.spectators) send(ws, msg);
+  const msg = { type: 'gameChat', gameId: g.id, message: entry };
+  const visibleToPlayers = g.publicChat || chatEntryVisibleTo(g, entry, 'players');
+  const visibleToSpectators = g.publicChat || chatEntryVisibleTo(g, entry, 'spectators');
+  if (visibleToPlayers) {
+    if (g.blue && g.blue.ws) send(g.blue.ws, msg);
+    if (g.red && g.red.ws) send(g.red.ws, msg);
+  }
+  if (visibleToSpectators) {
+    for (const ws of g.spectators) send(ws, msg);
+  }
+}
+
+function sendGameChatHistory(ws, g) {
+  const slot = slotBySocket.get(ws);
+  const audience = slot && slot.gameId === g.id ? 'players'
+    : spectateBySocket.get(ws) === g.id ? 'spectators' : 'players';
+  send(ws, { type: 'gameChatHistory', gameId: g.id, messages: g.chat.filter((entry) => chatEntryVisibleTo(g, entry, audience)) });
+}
+
+function gameResultText(g) {
+  if (g.status === 'aborted') return 'Game aborted';
+  if (g.result === 'draw') {
+    if (g.reason === 'threefold') return 'Draw — threefold repetition';
+    if (g.reason === '100ply') return 'Draw — 50-move rule';
+    return 'Draw';
+  }
+  const winner = g.result === 'blue' ? 'Blue' : 'Red';
+  if (g.reason === 'timeout') return winner + ' wins on time';
+  if (g.reason === 'resign') return winner + ' wins by resignation';
+  if (g.reason === 'noMoves') return winner + ' wins — opponent has no legal moves';
+  return winner + ' wins';
+}
+
+function ensureTerminalGameChat(g, announce) {
+  if (g.status !== 'finished' && g.status !== 'aborted') return null;
+  const existing = g.chat.find((entry) => entry && entry.terminal);
+  if (existing) return existing;
+  const entry = {
+    gameId: g.id,
+    username: 'Game',
+    userId: null,
+    color: null,
+    text: gameResultText(g),
+    time: Date.now(),
+    system: true,
+    terminal: true,
+    audience: 'both',
+  };
+  g.chat.push(entry);
+  if (g.chat.length > MAX_GAME_CHAT) g.chat.shift();
+  if (announce) broadcastGameChat(g, entry);
+  return entry;
 }
 
 function handleGameChat(ws, msg) {
@@ -858,18 +1363,23 @@ function handleGameChat(ws, msg) {
     }
   }
   if (!g) return;
+  // Older clients did not send gameId. The socket's authoritative seat still
+  // scopes those messages; explicit mismatches are always rejected.
+  if (msg.gameId != null && msg.gameId !== g.id) return;
 
   const user = resolveUser(msg.session);
   let username;
   if (user) username = user.username;
-  else if (role === 'blue') username = CAP.blue;
-  else if (role === 'red') username = CAP.red;
+  else if (role === 'blue') username = g.blue && g.blue.username || CAP.blue;
+  else if (role === 'red') username = g.red && g.red.username || CAP.red;
   else username = 'Spectator';
 
   const entry = {
+    gameId: g.id,
     username,
     userId: user ? user.id : null,
     color: role === 'blue' || role === 'red' ? role : null,
+    audience: g.publicChat ? 'public' : role === 'spectator' ? 'spectators' : 'players',
     text,
     time: Date.now(),
   };
@@ -894,7 +1404,8 @@ function handleChallengeCreate(ws, msg) {
     return;
   }
   const timeControl = normalizeTimeControl(msg.timeControl);
-  const rated = msg.rated !== false;
+  const rated = msg.rated !== false && !isInfiniteTimeControl(timeControl);
+  const variant = normalizeVariant(msg.variant);
   for (const challenge of challenges.values()) {
     if (challenge.challengerId === challenger.id && challenge.targetId === target.id) {
       send(ws, { type: 'error', message: 'You already have a pending challenge to that player.' });
@@ -909,6 +1420,8 @@ function handleChallengeCreate(ws, msg) {
     targetId: target.id,
     targetUsername: target.username,
     timeControl,
+    variant,
+    publicChat: msg.publicChat === true,
     rated,
     createdAt: Date.now(),
   };
@@ -925,23 +1438,49 @@ function handleChallengeAccept(ws, msg) {
     return;
   }
   const challenger = db.getUserById(challenge.challengerId);
-  if (!challenger || !challenge.challengerWs || challenge.challengerWs.readyState !== 1 ||
-      slotBySocket.get(ws) || slotBySocket.get(challenge.challengerWs) || spectateBySocket.get(ws) || spectateBySocket.get(challenge.challengerWs)) {
+  const activeSeat = (socket) => {
+    const slot = slotBySocket.get(socket);
+    const game = slot && games.get(slot.gameId);
+    return game && (game.status === 'waiting' || game.status === 'playing') ? { slot, game } : null;
+  };
+  const challengerWs = challenge.challengerWs && challenge.challengerWs.readyState === 1
+    ? challenge.challengerWs : connectedSocketForUser(challenge.challengerId);
+  const targetActive = activeSeat(ws);
+  const challengerActive = challengerWs ? activeSeat(challengerWs) : null;
+  const reusablePrivateGame = challengerActive && challengerActive.game.status === 'waiting' &&
+    challengerActive.game[challengerActive.slot.color] &&
+    challengerActive.game[challengerActive.slot.color].userId === challenge.challengerId &&
+    !challengerActive.game[challengerActive.slot.color === 'blue' ? 'red' : 'blue'];
+  if (!challenger || !challengerWs || challengerWs.readyState !== 1 || targetActive ||
+      (challengerActive && !reusablePrivateGame)) {
     challenges.delete(challenge.id);
     send(ws, { type: 'error', message: 'That challenge can no longer be accepted.' });
     return;
   }
   challenges.delete(challenge.id);
   leaveLobby(ws);
-  leaveLobby(challenge.challengerWs);
-  const g = newGame(challenge.timeControl, !challenge.rated);
-  games.set(g.id, g);
-  g.blue = seatFor(challenger, challenge.challengerWs, g.timeControl);
-  g.red = seatFor(target, ws, g.timeControl);
-  slotBySocket.set(challenge.challengerWs, { gameId: g.id, color: 'blue' });
-  slotBySocket.set(ws, { gameId: g.id, color: 'red' });
-  send(challenge.challengerWs, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
-  send(ws, { type: 'joined', gameId: g.id, color: 'red', token: g.red.token });
+  leaveLobby(challengerWs);
+  removeSpectator(ws);
+  removeSpectator(challengerWs);
+  const g = reusablePrivateGame ? challengerActive.game : newGame(challenge.timeControl, !challenge.rated, undefined, { variant: challenge.variant, publicChat: challenge.publicChat });
+  if (!reusablePrivateGame) games.set(g.id, g);
+  const challengerColor = reusablePrivateGame ? challengerActive.slot.color
+    : (challenge.rated || Math.random() < 0.5 ? (Math.random() < 0.5 ? 'blue' : 'red') : 'blue');
+  const targetColor = challengerColor === 'blue' ? 'red' : 'blue';
+  if (!reusablePrivateGame) g[challengerColor] = seatFor(challenger, challengerWs, g.timeControl, g.variant);
+  g[targetColor] = seatFor(target, ws, g.timeControl, g.variant);
+  slotBySocket.set(challengerWs, { gameId: g.id, color: challengerColor });
+  slotBySocket.set(ws, { gameId: g.id, color: targetColor });
+  send(challengerWs, {
+    type: 'challengeAccepted', challengeId: challenge.id, gameId: g.id,
+    color: challengerColor, token: g[challengerColor].token, private: true,
+  });
+  send(ws, {
+    type: 'challengeAccepted', challengeId: challenge.id, gameId: g.id,
+    color: targetColor, token: g[targetColor].token, private: true,
+  });
+  sendGameChatHistory(challengerWs, g);
+  sendGameChatHistory(ws, g);
   startGame(g);
 }
 
@@ -954,7 +1493,14 @@ function handleChallengeDecline(ws, msg) {
 }
 
 function handleSpectate(ws, msg) {
-  const g = games.get(msg.gameId);
+  let g = games.get(msg.gameId);
+  if (!g) {
+    const saved = db.getGame(msg.gameId);
+    if (saved && (saved.status === 'finished' || saved.status === 'aborted')) {
+      g = hydrateFinishedGame(saved);
+      games.set(g.id, g);
+    }
+  }
   if (!g) {
     send(ws, { type: 'error', message: 'Game not found.' });
     return;
@@ -964,11 +1510,22 @@ function handleSpectate(ws, msg) {
     return;
   }
   leaveLobby(ws);
-  addSpectator(ws, g);
+  const perspectiveUserId = msg.perspectiveUserId != null ? String(msg.perspectiveUserId) : null;
+  const color = perspectiveUserId && g.blue && String(g.blue.userId) === perspectiveUserId
+    ? 'blue'
+    : perspectiveUserId && g.red && String(g.red.userId) === perspectiveUserId ? 'red' : 'blue';
+  addSpectator(ws, g, color, perspectiveUserId);
 }
 
 function handleJoin(ws, msg) {
-  const g = games.get(msg.gameId);
+  let g = games.get(msg.gameId);
+  if (!g) {
+    const saved = db.getGame(msg.gameId);
+    if (saved && (saved.status === 'finished' || saved.status === 'aborted')) {
+      g = hydrateFinishedGame(saved);
+      games.set(g.id, g);
+    }
+  }
   if (!g) {
     send(ws, { type: 'error', message: 'Game not found.' });
     return;
@@ -1003,12 +1560,12 @@ function handleJoin(ws, msg) {
   // 3. New player: take the first open seat.
   leaveLobby(ws); // joining a game removes any open seek
   if (!g.blue) {
-    g.blue = seatFor(user, ws, g.timeControl);
+    g.blue = seatFor(user, ws, g.timeControl, g.variant);
     attach(ws, g, 'blue');
     return;
   }
   if (!g.red) {
-    g.red = seatFor(user, ws, g.timeControl);
+    g.red = seatFor(user, ws, g.timeControl, g.variant);
     attach(ws, g, 'red');
     return;
   }
@@ -1029,9 +1586,15 @@ function handleCreate(ws, msg) {
     send(ws, { type: 'error', message: 'Custom starting positions are casual only.' });
     return;
   }
-  const g = newGame(msg.timeControl, msg.rated === false || !user, startPosition);
+  const tc = normalizeTimeControl(msg.timeControl);
+  const variant = normalizeVariant(msg.variant);
+  const g = newGame(tc, msg.rated === false || !user || isInfiniteTimeControl(tc), startPosition, { variant, publicChat: msg.publicChat === true });
   games.set(g.id, g);
-  g.blue = seatFor(user, ws, g.timeControl);
+  const ownerColor = (msg.rated !== false && user && !isInfiniteTimeControl(tc))
+    ? (msg.color === 'random' ? 'random' : (msg.color === 'red' ? 'red' : 'blue'))
+    : (msg.color === 'red' ? 'red' : msg.color === 'blue' ? 'blue' : msg.color === 'random' ? 'random' : 'blue');
+  const color = ownerColor === 'random' ? (Math.random() < 0.5 ? 'blue' : 'red') : ownerColor;
+  g[color] = seatFor(user, ws, g.timeControl, g.variant);
 
   let slot = slotBySocket.get(ws);
   if (!slot) {
@@ -1039,9 +1602,9 @@ function handleCreate(ws, msg) {
     slotBySocket.set(ws, slot);
   }
   slot.gameId = g.id;
-  slot.color = 'blue';
+  slot.color = color;
 
-  send(ws, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
+  send(ws, { type: 'created', gameId: g.id, color, token: g[color].token, private: true });
   send(ws, snapshot(g, 'blue'));
 }
 
@@ -1055,18 +1618,21 @@ function handleCreateAi(ws, msg) {
     send(ws, { type: 'error', message: 'You are already in an AI game. Return to that game before starting another.' });
     return;
   }
-  if (aiGames.size >= MAX_AI_GAMES) {
+  const aiType = msg.aiType === 'teacher' ? 'teacher' : 'neural';
+  if (aiType === 'neural' && aiGames.size >= MAX_AI_GAMES) {
     send(ws, { type: 'error', message: 'AI games are at capacity. Please try again shortly.' });
     return;
   }
   leaveLobby(ws);
   const g = newGame(msg.timeControl, true, undefined, {
-    aiGame: true, aiColor: 'red', persistHistory: false,
+    variant: normalizeVariant(msg.variant),
+    publicChat: msg.publicChat === true,
+    aiGame: true, aiType, aiColor: 'red', persistHistory: false,
   });
   games.set(g.id, g);
   aiGames.add(g);
-  g.blue = seatFor(user, ws, g.timeControl);
-  g.red = aiSeat(g.timeControl);
+  g.blue = seatFor(user, ws, g.timeControl, g.variant);
+  g.red = aiSeat(g.timeControl, aiType, g.variant);
   slotBySocket.set(ws, { gameId: g.id, color: 'blue' });
   send(ws, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
   startGame(g);
@@ -1104,6 +1670,16 @@ function handleClose(ws) {
   }
 }
 
+function leaveAnalysisRooms(ws) {
+  for (const [id, room] of analysisRooms) {
+    room.members.delete(ws);
+    if (room.owner === ws) {
+      room.owner = room.members.values().next().value || null;
+      if (!room.owner) analysisRooms.delete(id);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Matchmaking queue
 // ---------------------------------------------------------------------------
@@ -1118,20 +1694,32 @@ function removeFromQueue(ws) {
 function seekList() {
   return queue.map((e) => ({
     id: e.id,
-    username: e.user ? e.user.username : null,
+    username: e.user ? e.user.username : guestNameFor(e.ws),
     rating: e.rating != null ? Math.round(e.rating) : null,
     guest: !e.user,
     casual: !!e.casual,
+    variant: e.variant,
     timeControl: e.timeControl,
   }));
 }
 
+function lobbyPlayers() {
+  const users = new Map();
+  for (const client of clients) {
+    const user = userBySocket.get(client);
+    if (user && presenceBySocket.get(client) === 'home' && !users.has(user.id)) users.set(user.id, user);
+  }
+  return Array.from(users.values()).map((user) => ({
+    id: user.id, username: user.username, ratings: db.publicUser(user).ratings,
+  })).sort((a, b) => a.username.localeCompare(b.username));
+}
+
 function sendLobby(ws) {
-  send(ws, { type: 'lobby', seeks: seekList() });
+  send(ws, { type: 'lobby', seeks: seekList(), lobbyPlayers: lobbyPlayers() });
 }
 
 function broadcastLobby() {
-  const msg = { type: 'lobby', seeks: seekList() };
+  const msg = { type: 'lobby', seeks: seekList(), lobbyPlayers: lobbyPlayers() };
   for (const c of clients) send(c, msg);
 }
 
@@ -1141,10 +1729,12 @@ function activeGameInfo(g) {
     status: g.status,
     rated: !!g.rated,
     casual: !!g.casual,
-    category: timeControlCategory(g.timeControl),
+    variant: g.variant,
+    category: ratingCategoryForGame(g),
     tcInitial: g.timeControl.initial,
     tcIncrement: g.timeControl.increment,
     createdAt: g.createdAt,
+    moveCount: g.game.history.length,
     board: engine.cloneBoard(g.game.board),
     turn: g.game.turn,
     players: {
@@ -1157,15 +1747,14 @@ function activeGameInfo(g) {
 
 function activeGames() {
   return Array.from(games.values())
-    .filter((g) => g.status === 'waiting' || g.status === 'playing')
+    .filter((g) => g.status === 'playing')
     .sort((a, b) => (b.createdAt - a.createdAt) || a.id.localeCompare(b.id))
-    .slice(0, 100)
     .map(activeGameInfo);
 }
 
 function activeGamesForUser(userId) {
   return Array.from(games.values())
-    .filter((g) => (g.status === 'waiting' || g.status === 'playing') &&
+    .filter((g) => g.status === 'playing' &&
       ((g.blue && g.blue.userId === userId) || (g.red && g.red.userId === userId)))
     .sort((a, b) => (b.createdAt - a.createdAt) || a.id.localeCompare(b.id))
     .map(activeGameInfo);
@@ -1188,7 +1777,7 @@ function handleChat(ws, msg) {
   if (!text) return;
   const user = resolveUser(msg.session);
   const entry = {
-    username: user ? user.username : null,
+    username: user ? user.username : guestNameFor(ws),
     userId: user ? user.id : null,
     text,
     time: Date.now(),
@@ -1240,9 +1829,14 @@ function handleQueue(ws, msg) {
     ws,
     user,
     timeControl: tc,
+    variant: normalizeVariant(msg.variant),
+    publicChat: msg.publicChat === true,
     startPosition,
-    casual: !user || msg.rated === false,
-    rating: user ? db.ratingFor(user, timeControlCategory(tc)).rating : 1500,
+    // API clients that omit color retain the historical blue default; the UI
+    // always sends its explicit Blue/Random/Red choice.
+    color: msg.color === 'blue' || msg.color === 'red' || msg.color === 'random' ? msg.color : 'blue',
+    casual: !user || msg.rated === false || isInfiniteTimeControl(tc),
+    rating: user ? db.ratingFor(user, normalizeVariant(msg.variant) === 'rps4200' ? 'rps4200' : timeControlCategory(tc)).rating : 1500,
     queuedAt: Date.now(),
   });
 
@@ -1257,16 +1851,28 @@ function handleQueueCancel(ws) {
   }
 }
 
-function handleCancelPrivate(ws) {
+function handleCancelPrivate(ws, msg = {}) {
   const slot = slotBySocket.get(ws);
-  const g = slot ? games.get(slot.gameId) : null;
-  if (!g || g.status !== 'waiting' || slot.color !== 'blue' || !g.blue || g.blue.ws !== ws || g.red) {
+  const requestedGameId = typeof msg.gameId === 'string' ? msg.gameId : '';
+  const g = requestedGameId ? games.get(requestedGameId) : (slot ? games.get(slot.gameId) : null);
+  const user = resolveUser(msg.session);
+  const owner = g && ['blue', 'red'].some((color) => {
+    const seat = g[color];
+    return seat && (seat.ws === ws || (user && seat.userId != null && seat.userId === user.id));
+  });
+  if (!g || g.status !== 'waiting' || !owner) {
     send(ws, { type: 'error', message: 'This private game cannot be cancelled.' });
     return;
   }
 
   games.delete(g.id);
-  send(ws, { type: 'privateCancelled', gameId: g.id });
+  for (const color of ['blue', 'red']) {
+    if (g[color] && g[color].ws) {
+      send(g[color].ws, { type: 'privateCancelled', gameId: g.id });
+      slotBySocket.delete(g[color].ws);
+    }
+  }
+  if (slotBySocket.get(ws)?.gameId === g.id) slotBySocket.delete(ws);
 }
 
 function handleAcceptSeek(ws, msg) {
@@ -1281,6 +1887,10 @@ function handleAcceptSeek(ws, msg) {
     return;
   }
   const user = resolveUser(msg.session);
+  if (!seek.casual && !user) {
+    send(ws, { type: 'error', message: 'Guests cannot accept rated games.' });
+    return;
+  }
   if (user && seek.user && user.id === seek.user.id) {
     send(ws, { type: 'error', message: "You can't play yourself." });
     return;
@@ -1288,17 +1898,23 @@ function handleAcceptSeek(ws, msg) {
   queue.splice(idx, 1);
   leaveLobby(ws); // cancel any seek the acceptor had open
 
-  const g = newGame(seek.timeControl, seek.casual, seek.startPosition);
+  const g = newGame(seek.timeControl, seek.casual, seek.startPosition, { variant: seek.variant, publicChat: seek.publicChat });
   games.set(g.id, g);
 
-  g.blue = seatFor(seek.user, seek.ws, g.timeControl); // seeker takes Blue
-  g.red = seatFor(user, ws, g.timeControl);           // acceptor takes Red
+  const acceptColor = (!seek.casual && user) ? 'random' : (msg.color === 'blue' || msg.color === 'red' ? msg.color : 'random');
+  let seekerColor;
+  if (seek.color === 'blue' || acceptColor === 'red') seekerColor = 'blue';
+  else if (seek.color === 'red' || acceptColor === 'blue') seekerColor = 'red';
+  else seekerColor = Math.random() < 0.5 ? 'blue' : 'red';
+  const acceptorColor = seekerColor === 'blue' ? 'red' : 'blue';
+  g[seekerColor] = seatFor(seek.user, seek.ws, g.timeControl, g.variant);
+  g[acceptorColor] = seatFor(user, ws, g.timeControl, g.variant);
 
-  slotBySocket.set(seek.ws, { gameId: g.id, color: 'blue' });
-  slotBySocket.set(ws, { gameId: g.id, color: 'red' });
+  slotBySocket.set(seek.ws, { gameId: g.id, color: seekerColor });
+  slotBySocket.set(ws, { gameId: g.id, color: acceptorColor });
 
-  send(seek.ws, { type: 'queueMatched', gameId: g.id, color: 'blue', token: g.blue.token });
-  send(ws, { type: 'queueMatched', gameId: g.id, color: 'red', token: g.red.token });
+  send(seek.ws, { type: 'queueMatched', gameId: g.id, color: seekerColor, token: g[seekerColor].token });
+  send(ws, { type: 'queueMatched', gameId: g.id, color: acceptorColor, token: g[acceptorColor].token });
 
   startGame(g);
   broadcastLobby();
@@ -1355,6 +1971,12 @@ function sendJson(res, status, obj) {
   res.end(body);
 }
 
+function profileUser(user) {
+  const result = db.publicUser(user);
+  result.ratingRanks = Object.fromEntries(db.CATEGORIES.map((category) => [category, db.leaderboardRank(category, user.id)]));
+  return result;
+}
+
 async function handleApi(req, res, urlPath, query) {
   try {
     // --- auth ---
@@ -1390,7 +2012,7 @@ async function handleApi(req, res, urlPath, query) {
         sendJson(res, 401, { error: 'Not authenticated.' });
         return;
       }
-      sendJson(res, 200, { user: db.publicUser(user), activeGames: activeGamesForUser(user.id) });
+      sendJson(res, 200, { user: profileUser(user), activeGames: activeGamesForUser(user.id) });
       return;
     }
 
@@ -1401,12 +2023,32 @@ async function handleApi(req, res, urlPath, query) {
 
     if (req.method === 'GET' && urlPath === '/api/players') {
       const search = query ? query.get('search') || '' : '';
-      sendJson(res, 200, { players: db.listPlayers(search, 50) });
+      const online = new Set(Array.from(clients).map((client) => userBySocket.get(client)?.id).filter(Boolean));
+      sendJson(res, 200, { players: db.listPlayers(search, 5000).map((player) => ({ ...player, online: online.has(player.id) })) });
+      return;
+    }
+
+    const distributionMatch = urlPath.match(/^\/api\/rating-distribution\/(bullet|blitz|rapid|classical)$/);
+    if (req.method === 'GET' && distributionMatch) {
+      sendJson(res, 200, { category: distributionMatch[1], ratings: db.ratingDistribution(distributionMatch[1]) });
       return;
     }
 
     if (req.method === 'GET' && urlPath === '/api/leaderboard') {
-      sendJson(res, 200, { leaderboards: db.listLeaderboards(10) });
+      const viewer = db.getSessionUser(getAuthToken(req));
+      const leaderboards = db.listLeaderboards(10);
+      const ranks = {};
+      if (viewer) for (const category of db.CATEGORIES) ranks[category] = db.leaderboardRank(category, viewer.id);
+      const publicViewer = viewer ? db.publicUser(viewer) : null;
+      sendJson(res, 200, {
+        leaderboards,
+        ranks,
+        viewer: publicViewer ? {
+          id: publicViewer.id,
+          username: publicViewer.username,
+          ratings: Object.fromEntries(db.CATEGORIES.map((category) => [category, publicViewer.ratings[category].rating])),
+        } : null,
+      });
       return;
     }
 
@@ -1418,7 +2060,7 @@ async function handleApi(req, res, urlPath, query) {
         return;
       }
       sendJson(res, 200, {
-        user: db.publicUser(user),
+        user: profileUser(user),
         games: db.listPublicGames(user.id, 50),
         activeGames: activeGamesForUser(user.id),
       });
@@ -1433,6 +2075,35 @@ async function handleApi(req, res, urlPath, query) {
         return;
       }
       sendJson(res, 200, { games: db.listGames(user.id) });
+      return;
+    }
+
+    if (req.method === 'GET' && urlPath === '/api/analysis-saves') {
+      const user = db.getSessionUser(getAuthToken(req));
+      if (!user) { sendJson(res, 401, { error: 'Not authenticated.' }); return; }
+      sendJson(res, 200, { analyses: db.listAnalyses(user.id) });
+      return;
+    }
+
+    if (req.method === 'POST' && urlPath === '/api/analysis-saves') {
+      const user = db.getSessionUser(getAuthToken(req));
+      if (!user) { sendJson(res, 401, { error: 'Not authenticated.' }); return; }
+      const body = await readBody(req);
+      const name = typeof body.name === 'string' ? body.name.trim().slice(0, 80) : '';
+      const baseTurn = body.baseTurn === 'red' ? 'red' : 'blue';
+      const baseBoard = parseStartPosition({ board: body.baseBoard, turn: baseTurn });
+      const moves = Array.isArray(body.moves) ? body.moves.slice(0, 2000).filter((move) => typeof move === 'string' && /^[a-i][1-9][-x][a-i][1-9]$/.test(move)) : [];
+      if (!name || !baseBoard) { sendJson(res, 400, { error: 'A name and valid analysis position are required.' }); return; }
+      sendJson(res, 200, { analysis: db.saveAnalysis(user.id, name, baseBoard.board, baseTurn, moves) });
+      return;
+    }
+
+    const analysisSaveMatch = urlPath.match(/^\/api\/analysis-saves\/(\d+)$/);
+    if (req.method === 'DELETE' && analysisSaveMatch) {
+      const user = db.getSessionUser(getAuthToken(req));
+      if (!user) { sendJson(res, 401, { error: 'Not authenticated.' }); return; }
+      if (!db.deleteAnalysis(user.id, analysisSaveMatch[1])) { sendJson(res, 404, { error: 'Analysis not found.' }); return; }
+      sendJson(res, 200, { deleted: true });
       return;
     }
 
@@ -1507,7 +2178,8 @@ async function handleApi(req, res, urlPath, query) {
 }
 
 function serveStatic(req, res, urlPath) {
-  const relativeAsset = PUBLIC_ASSETS.get(urlPath);
+  const cleanRoute = /^\/(?:analysis|game|spectate|profile|rating-stats)(?:\/[A-Za-z0-9_-]+)?$/.test(urlPath);
+  const relativeAsset = PUBLIC_ASSETS.get(urlPath) || (cleanRoute ? 'index.html' : null);
   if (!relativeAsset) {
     res.writeHead(404);
     res.end('Not found');
@@ -1563,6 +2235,7 @@ const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
 
 wss.on('connection', (ws) => {
   clients.add(ws);
+  presenceBySocket.set(ws, 'home');
   sendLobby(ws);
   sendChatHistory(ws);
 
@@ -1580,10 +2253,24 @@ wss.on('connection', (ws) => {
       return;
     }
 
-    if (msg.session) authenticatedUser(ws, msg);
+    if (msg.session) {
+      authenticatedUser(ws, msg);
+      broadcastLobby();
+    }
 
     switch (msg.type) {
-      case 'identify': sendPendingChallenges(ws, authenticatedUser(ws, msg)?.id); break;
+      case 'identify': {
+        const user = authenticatedUser(ws, msg);
+        sendPendingChallenges(ws, user?.id);
+        sendPendingAnalysisInvites(ws, user?.id);
+        break;
+      }
+      case 'presence': {
+        const screen = typeof msg.screen === 'string' ? msg.screen.slice(0, 24) : 'home';
+        presenceBySocket.set(ws, screen);
+        broadcastLobby();
+        break;
+      }
       case 'create': handleCreate(ws, msg); break;
       case 'createAI': handleCreateAi(ws, msg); break;
       case 'join': handleJoin(ws, msg); break;
@@ -1593,7 +2280,7 @@ wss.on('connection', (ws) => {
       case 'resign': handleResign(ws); break;
       case 'queue': handleQueue(ws, msg); break;
       case 'queueCancel': handleQueueCancel(ws); break;
-      case 'cancelPrivate': handleCancelPrivate(ws); break;
+      case 'cancelPrivate': handleCancelPrivate(ws, msg); break;
       case 'acceptSeek': handleAcceptSeek(ws, msg); break;
       case 'challengeCreate': handleChallengeCreate(ws, msg); break;
       case 'challengeAccept': handleChallengeAccept(ws, msg); break;
@@ -1604,7 +2291,16 @@ wss.on('connection', (ws) => {
       case 'offerDraw': handleOfferDraw(ws); break;
       case 'acceptDraw': handleAcceptDraw(ws); break;
       case 'declineDraw': handleDeclineDraw(ws); break;
+      case 'takeback': handleTakebackRequest(ws); break;
+      case 'acceptTakeback': handleTakebackResponse(ws, true); break;
+      case 'declineTakeback': handleTakebackResponse(ws, false); break;
       case 'rematch': handleRematch(ws); break;
+      case 'rematchCancel': handleRematchCancel(ws); break;
+      case 'analysisInvite': handleAnalysisInvite(ws, msg); break;
+      case 'analysisInviteDismiss': handleAnalysisInviteDismiss(ws, msg); break;
+      case 'analysisJoin': handleAnalysisJoin(ws, msg); break;
+      case 'analysisSettings': handleAnalysisSettings(ws, msg); break;
+      case 'analysisState': handleAnalysisState(ws, msg); break;
       case 'abort': handleAbort(ws); break;
       case 'chat': handleChat(ws, msg); break;
       default: send(ws, { type: 'error', message: 'Unknown message type.' }); break;
@@ -1616,22 +2312,46 @@ wss.on('connection', (ws) => {
     if (removeFromQueue(ws)) broadcastLobby();
     handleClose(ws);
     removeSpectator(ws);
+    leaveAnalysisRooms(ws);
+    broadcastLobby();
   });
   ws.on('error', () => {
     clients.delete(ws);
     if (removeFromQueue(ws)) broadcastLobby();
     handleClose(ws);
     removeSpectator(ws);
+    leaveAnalysisRooms(ws);
+    broadcastLobby();
   });
 });
 
+function restoreActiveGames() {
+  for (const saved of db.listActiveGames()) {
+    try {
+      const g = hydrateActiveGame(saved);
+      if (!g.id || !g.blue || !g.red) throw new Error('incomplete active game snapshot');
+      games.set(g.id, g);
+    } catch (error) {
+      console.error('Discarding invalid active game snapshot:', saved && saved.id, error.message);
+      if (saved && saved.id) db.deleteActiveGame(saved.id);
+    }
+  }
+}
+
+restoreActiveGames();
 httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('Intransitive server on http://0.0.0.0:' + PORT);
 });
 
 function shutdown() {
   aiInference.close();
-  for (const g of games.values()) stopTicker(g);
+  for (const g of games.values()) {
+    if (g.status === 'playing' && !g.aiGame) {
+      if (!g.pausedForRestart) settleClock(g);
+      if (g.status === 'playing') persistActiveGame(g);
+    }
+    stopTicker(g);
+  }
   for (const ws of clients) ws.close(1001, 'Server shutting down');
   wss.close();
   httpServer.close(() => process.exit(0));
@@ -1647,6 +2367,9 @@ setInterval(() => {
   const challengeCutoff = Date.now() - 30 * 60 * 1000;
   for (const [id, challenge] of challenges) {
     if (challenge.createdAt < challengeCutoff) challenges.delete(id);
+  }
+  for (const [id, invite] of analysisInvites) {
+    if (invite.createdAt < challengeCutoff) analysisInvites.delete(id);
   }
   for (const [id, g] of games) {
     if ((g.status === 'finished' || g.status === 'aborted') && g.createdAt < cutoff) {

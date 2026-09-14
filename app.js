@@ -10,11 +10,13 @@
   const homeEl = $('home');
   const gameEl = $('game');
   const historyEl = $('history');
-  const replayEl = $('replay');
   const editorEl = $('editor');
   const watchEl = $('watch');
   const playersEl = $('players');
   const leaderboardEl = $('leaderboard');
+  const ratingStatsEl = $('ratingStats');
+  const ratingStatsContentEl = $('ratingStatsContent');
+  const ratingStatsBackEl = $('ratingStatsBack');
 
   // Nav
   const navGuestEl = $('navGuest');
@@ -23,6 +25,10 @@
   const loginBtn = $('loginBtn');
   const signupBtn = $('signupBtn');
   const profileBtn = $('profileBtn');
+  const mailBtn = $('mailBtn');
+  const mailPanelEl = $('mailPanel');
+  const mailCountEl = $('mailCount');
+  const mailEmptyEl = $('mailEmpty');
   const settingsBtn = $('settingsBtn');
   const analysisBtn = $('analysisBtn');
   const editorBtn = $('editorBtn');
@@ -49,10 +55,13 @@
 
   // Game
   const boardEl = $('board');
+  const capturedPiecesEl = $('capturedPieces');
   const liveArrowsEl = $('liveArrows');
   const movesEl = $('moves');
   const gameStatusEl = $('gameStatus');
+  const ratingPreviewEl = $('ratingPreview');
   const gameModeEl = $('gameMode');
+  const gameTimeControlEl = $('gameTimeControl');
   const playerClockEl = $('playerClock');
   const opponentClockEl = $('opponentClock');
   const playerGraceEl = $('playerGrace');
@@ -61,9 +70,14 @@
   const opponentBarEl = $('opponentBar');
   const playerNameEl = $('playerName');
   const opponentNameEl = $('opponentName');
+  const playerRatingInfoEl = $('playerRatingInfo');
+  const opponentRatingInfoEl = $('opponentRatingInfo');
+  const playerCapturedPiecesEl = $('playerCapturedPieces');
+  const opponentCapturedPiecesEl = $('opponentCapturedPieces');
   const gameLinkEl = $('gameLink');
   const createBtn = $('createBtn');
   const aiBtn = $('aiBtn');
+  const teacherBtn = $('teacherBtn');
   const joinBtn = $('joinBtn');
   const joinInput = $('joinInput');
   const tcMinutesEl = $('tcMinutes');
@@ -71,12 +85,14 @@
   const tcMinutesValEl = $('tcMinutesVal');
   const tcIncrementValEl = $('tcIncrementVal');
   const tcPresetsEl = $('tcPresets');
+  const variantSelectEl = $('variantSelect');
+  const colorChoiceEl = $('colorChoice');
   const timeControlSummaryEl = $('timeControlSummary');
   const timeControlSummarySymbolEl = $('timeControlSummarySymbol');
   const timeControlCategoryEl = $('timeControlCategory');
+  const timeControlRatingLabelEl = $('timeControlRatingLabel');
   const timeControlRatingEl = $('timeControlRating');
   const modeRatedEl = $('modeRated');
-  const modeCasualEl = $('modeCasual');
   const playFromPositionEl = $('playFromPosition');
   const playFromPositionPreviewEl = $('playFromPositionPreview');
   const playPositionBoardEl = $('playPositionBoard');
@@ -88,9 +104,16 @@
   const claimVictoryBtn = $('claimVictory');
   const claimDrawBtn = $('claimDraw');
   const gameChatLogEl = $('gameChatLog');
+  const gameChatLabelEl = $('gameChatLabel');
+  const spectateRematchBtn = $('spectateRematch');
   const gameChatInputEl = $('gameChatInput');
   const gameChatSendEl = $('gameChatSend');
   const offerDrawBtn = $('offerDraw');
+  const takebackBtn = $('takeback');
+  const takebackActionsEl = $('takebackActions');
+  const takebackTextEl = $('takebackText');
+  const acceptTakebackBtn = $('acceptTakeback');
+  const declineTakebackBtn = $('declineTakeback');
   const drawOfferNoticeEl = $('drawOfferNotice');
   const drawOfferTextEl = $('drawOfferNotice').querySelector('.draw-offer-text');
   const acceptDrawBtn = $('acceptDraw');
@@ -107,28 +130,18 @@
   const actionConfirmYesEl = $('actionConfirmYes');
   const actionConfirmNoEl = $('actionConfirmNo');
 
-  // History & replay
-  const historyListEl = $('historyList');
+  // History
   const profilePanelEl = $('profilePanel');
   const profileHistoryEl = $('profileHistory');
   const profileRatingsEl = $('profileRatings');
+  const profileGameFiltersEl = $('profileGameFilters');
   const historyBackEl = $('historyBack');
   const profileLogoutEl = $('profileLogout');
-  const replayBoardEl = $('replayBoard');
-  const replayMovesEl = $('replayMoves');
-  const replayResultEl = $('replayResult');
-  const replayTitleEl = $('replayTitle');
-  const replayBackEl = $('replayBack');
-  const replayPrevEl = $('replayPrev');
-  const replayNextEl = $('replayNext');
   const gameMoveNavEl = $('gameMoveNav');
-  const replayMoveNavEl = $('replayMoveNav');
-  const replayMoveSettingsEl = $('replayMoveSettings');
   const watchBackEl = $('watchBack');
   const watchFiltersEl = $('watchFilters');
   const watchListEl = $('watchList');
   const watchEmptyEl = $('watchEmpty');
-  const homeFeaturedGameEl = $('homeFeaturedGame');
   const playersBackEl = $('playersBack');
   const playersSearchEl = $('playersSearch');
   const playersListEl = $('playersList');
@@ -142,16 +155,40 @@
   const explorerBoardEl = $('explorerBoard');
   const explorerMovesEl = $('explorerMoves');
   const explorerHistoryEl = $('explorerHistory');
+  const analysisContextMenuEl = $('analysisContextMenu');
   const explorerHistoryLabelEl = $('explorerHistoryLabel');
   const explorerOpeningLabelEl = $('explorerOpeningLabel');
   const explorerBackEl = $('explorerBack');
   const explorerMoveNavEl = $('explorerMoveNav');
   const explorerMoveSettingsEl = $('explorerMoveSettings');
+  const analysisFenEl = $('analysisFen');
+  const analysisPgnEl = $('analysisPgn');
+  const analysisInviteEl = $('analysisInvite');
+  const analysisSaveEl = $('analysisSave');
+  const analysisSavedEl = $('analysisSaved');
+  const analysisSavePanelEl = $('analysisSavePanel');
+  const analysisSaveNameEl = $('analysisSaveName');
+  const analysisSaveConfirmEl = $('analysisSaveConfirm');
+  const analysisSavedPanelEl = $('analysisSavedPanel');
+  const analysisSyncUsersEl = $('analysisSyncUsers');
+  const analysisOwnerOnlyEl = $('analysisOwnerOnly');
+  const analysisInvitePanelEl = $('analysisInvitePanel');
+  const analysisInviteLinkEl = $('analysisInviteLink');
+  const analysisCopyInviteEl = $('analysisCopyInvite');
+  const analysisInviteUserEl = $('analysisInviteUser');
+  const analysisSendInviteEl = $('analysisSendInvite');
+  const analysisTopPlayerEl = $('analysisTopPlayer');
+  const analysisBottomPlayerEl = $('analysisBottomPlayer');
+  const analysisTopNameEl = $('analysisTopName');
+  const analysisBottomNameEl = $('analysisBottomName');
+  const analysisTopClockEl = $('analysisTopClock');
+  const analysisBottomClockEl = $('analysisBottomClock');
 
   // Board editor
   const editorBoardEl = $('editorBoard');
   const editorPaletteTopEl = $('editorPaletteTop');
   const editorPaletteBottomEl = $('editorPaletteBottom');
+  const editorFenEl = $('editorFen');
   const editorTurnEl = $('editorTurn');
   const editorClearEl = $('editorClear');
   const editorResetEl = $('editorReset');
@@ -163,6 +200,8 @@
 
   // Lobby
   const lobbyListEl = $('lobbyList');
+  const lobbyPlayersEl = $('lobbyPlayers');
+  const lobbyPlayersEmptyEl = $('lobbyPlayersEmpty');
   const lobbyEmptyEl = $('lobbyEmpty');
   const lobbyCountEl = $('lobbyCount');
   const inGameNoticeEl = $('inGameNotice');
@@ -177,25 +216,43 @@
   const challengeCasualEl = $('challengeCasual');
   const challengeSendEl = $('challengeSend');
   const challengeCloseEl = $('challengeClose');
+  const privateGamePanelEl = $('privateGamePanel');
+  const privateGameLinkEl = $('privateGameLink');
+  const privateOpponentEl = $('privateOpponent');
+  const privateChallengeBtn = $('privateChallenge');
+  const privateCopyLinkBtn = $('privateCopyLink');
+  const privateCancelBtn = $('privateCancel');
+  const lightModeEl = $('lightMode');
+  const blindfoldModeEl = $('blindfoldMode');
+  const pieceAnimationsEl = $('pieceAnimations');
+  const flipBoardOnRedEl = $('flipBoardOnRed');
+  const autoSpectateRematchEl = $('autoSpectateRematch');
+  const publicChatEl = $('publicChat');
+  const boardThemeEl = $('boardTheme');
+  const pieceStyleEl = $('pieceStyle');
+  const gameFlipBoardEl = $('gameFlipBoard');
 
   // Chat
   const chatLogEl = $('chatLog');
   const chatInputEl = $('chatInput');
   const chatSendEl = $('chatSend');
+  const homeActiveGamesEl = $('homeActiveGames');
+  const homeActiveGamesEmptyEl = $('homeActiveGamesEmpty');
 
   const COLOR = { blue: '#4a86f0', red: '#ef6a6a' };
   const COLOR_STROKE = { blue: '#1f4f9e', red: '#9e2b2b' };
   const CAP = { blue: 'Blue', red: 'Red' };
-  const TIME_CONTROL_LABELS = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical' };
-  const TIME_CONTROL_SYMBOLS = { bullet: '\ue032', blitz: '\ue008', rapid: '\ue002', classical: '\ue00a' };
+  const TIME_CONTROL_LABELS = { bullet: 'Bullet', blitz: 'Blitz', rapid: 'Rapid', classical: 'Classical', infinite: 'Infinite', rps4200: 'RPS4200' };
+  const TIME_CONTROL_SYMBOLS = { bullet: '\ue032', blitz: '\ue008', rapid: '\ue002', classical: '\ue00a', rps4200: '\ue006' };
   const SESSION_KEY = 'rps_session';
   const SOUND_VOLUME_KEY = 'rps_sound_volume';
+  const PREF_KEY = 'rps_preferences';
 
   function storedSoundVolume() {
     try {
       const value = Number(localStorage.getItem(SOUND_VOLUME_KEY));
-      return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.75;
-    } catch (e) { return 0.75; }
+      return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+    } catch (e) { return 0.5; }
   }
 
   let soundVolume = storedSoundVolume();
@@ -215,16 +272,23 @@
   let lowTimePlayed = { blue: false, red: false }; // low-time beep dedupe per color
   let audioCtx = null;
   let lastMoveKey = null; // detects move transitions to play piece sounds
+  let pendingAnimationKey = null; // consumed once when a genuinely new move arrives
+  let lastGameStatus = null;
+  let spectatorRematchGameId = null;
+  let spectatorPerspectiveUserId = null;
+  let privateInviteActive = false;
+  let preferences = loadPreferences();
 
   let authMode = 'login'; // 'login' | 'register'
-  let replay = null;      // { game, boards, step }
   let queued = false;     // whether we're currently in the matchmaking queue
   let challengeTarget = null;
   let challengeRated = true;
   let incomingChallenges = [];
+  let analysisInvites = [];
   let mySeekId = null;    // id of the open seek we created (if any)
   let seeks = [];         // latest lobby seek list from the server
   let ratedMode = true;   // true = rated, false = casual
+  let playerColorChoice = 'random';
   let confirmAction = null; // 'resign' | 'offerDraw' while awaiting confirmation
   let reviewStep = null;     // live-game history review position (null = live view)
   let liveArrows = [];       // board arrows drawn on the live board
@@ -232,11 +296,16 @@
   let arrowDrag = null;      // in-progress right-click-drag arrow
   let queueStatusTimer = null;
   let activeGamesTimer = null;
+  let homeFeaturedGameId = null;
+  let playersRefreshTimer = null;
   let activeGamesData = [];
+  let currentScreenName = 'home';
+  let profileGamesState = { active: [], finished: [], userId: null };
   let watchCategory = 'all';
   let playersSearchTimer = null;
   let dismissedInGameNoticeId = null;
   let explorer = {        // analysis / opening explorer state
+    variant: 'standard',
     baseBoard: null,      // custom start board (null = standard initial position)
     baseTurn: 'blue',     // side to move at the start position
     path: [],             // array of move strings chosen from the start position
@@ -245,9 +314,21 @@
     totalGames: 0,
     moves: [],            // [{ move, games, wins, draws, losses }]
     selected: null,       // { c, r } selected piece
-    history: [],           // the single source of truth for displayed analysis moves
+    history: [],          // moves on the currently selected branch
+    root: null,           // root of the analysis move tree
+    node: null,           // currently displayed tree node
+    nodes: new Map(),
+    nextNodeId: 1,
+    gameContext: null,    // clocks and player names for post-game analysis
     loadSerial: 0,
   };
+  let analysisRoomId = null;
+  let analysisRoomOwner = false;
+  let analysisSyncUsers = false;
+  let analysisOwnerOnly = false;
+  let analysisSavedContextItem = null;
+  let applyingRemoteAnalysis = false;
+  let suppressNextAnalysisBroadcast = false;
 
   let editor = {          // board editor state
     board: engine.initialBoard(),
@@ -259,6 +340,36 @@
   };
   let editorCursorPoint = null;
   let playPosition = null;  // { board, turn } while Play from position is enabled
+
+  function loadPreferences() {
+    try { return { light: false, blindfold: false, animations: false, flipOnRed: true, autoSpectateRematch: false, boardTheme: 'default', pieceStyle: 'classic', ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') }; }
+    catch (e) { return { light: false, blindfold: false, animations: false, flipOnRed: true, autoSpectateRematch: false, boardTheme: 'default', pieceStyle: 'classic' }; }
+  }
+  function savePreferences() { try { localStorage.setItem(PREF_KEY, JSON.stringify(preferences)); } catch (e) {} }
+  function applyPreferences() {
+    document.body.classList.toggle('light-mode', !!preferences.light);
+    document.body.classList.toggle('blindfold-mode', !!preferences.blindfold);
+    document.body.classList.toggle('no-piece-animations', !preferences.animations);
+    for (const theme of ['default', 'light', 'white', 'blue', 'green']) document.body.classList.toggle('board-theme-' + theme, preferences.boardTheme === theme);
+    for (const style of ['classic', 'flat', 'outline', 'mono', 'shapes']) document.body.classList.toggle('piece-style-' + style, preferences.pieceStyle === style);
+    if (lightModeEl) lightModeEl.checked = !!preferences.light;
+    if (blindfoldModeEl) blindfoldModeEl.checked = !!preferences.blindfold;
+    if (pieceAnimationsEl) pieceAnimationsEl.checked = !!preferences.animations;
+    if (flipBoardOnRedEl) flipBoardOnRedEl.checked = !!preferences.flipOnRed;
+    if (autoSpectateRematchEl) autoSpectateRematchEl.checked = !!preferences.autoSpectateRematch;
+    if (boardThemeEl) boardThemeEl.value = preferences.boardTheme || 'default';
+    if (pieceStyleEl) pieceStyleEl.value = preferences.pieceStyle || 'classic';
+  }
+  function boardOrientation() {
+    if (!myColor) return 'blue';
+    if (state && state.spectating) {
+      const viewed = myColor === 'red' ? 'red' : 'blue';
+      return gameFlipBoardEl && gameFlipBoardEl.checked
+        ? (viewed === 'red' ? 'blue' : 'red') : viewed;
+    }
+    const flip = myColor === 'red' ? preferences.flipOnRed : false;
+    return (flip !== !!(gameFlipBoardEl && gameFlipBoardEl.checked)) ? 'red' : 'blue';
+  }
 
   // ---------------------------------------------------------------------------
   // Session (localStorage)
@@ -275,6 +386,7 @@
   function clearSession() {
     try { localStorage.removeItem(SESSION_KEY); } catch (e) {}
     incomingChallenges = [];
+    analysisInvites = [];
     renderChallengeInbox();
   }
 
@@ -284,22 +396,76 @@
   function pieceSvg(type, color) {
     const c = COLOR[color];
     const s = COLOR_STROKE[color];
+    const style = preferences && preferences.pieceStyle ? preferences.pieceStyle : 'classic';
+    const open = '<svg class="piece-svg-' + style + '" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">';
+
+    // Each selectable style has its own geometry. Player colour remains the
+    // primary fill in every set so a design change never obscures ownership.
+    if (style === 'flat') {
+      if (type === 'rock') return `${open}
+        <path d="M18 58 27 31 49 17 74 27 84 53 69 79 37 84 16 69Z" fill="${c}" stroke="${s}" stroke-width="5" stroke-linejoin="round"/>
+        <path d="m29 55 13-24 25 5 7 20-17 17-26-5Z" fill="rgba(255,255,255,.16)"/>
+      </svg>`;
+      if (type === 'paper') return `${open}
+        <path d="M22 13h39l18 18v56H22Z" fill="${c}" stroke="${s}" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M61 13v19h18" fill="rgba(255,255,255,.28)" stroke="${s}" stroke-width="5" stroke-linejoin="round"/>
+        <path d="M34 48h34M34 61h34M34 74h24" fill="none" stroke="rgba(255,255,255,.55)" stroke-width="5" stroke-linecap="square"/>
+      </svg>`;
+      return `${open}
+        <path d="m46 50-25-31M54 50l25-31M47 52 78 79M53 52 22 79" fill="none" stroke="${s}" stroke-width="12" stroke-linecap="square"/>
+        <path d="m46 50-25-31M54 50l25-31M47 52 78 79M53 52 22 79" fill="none" stroke="${c}" stroke-width="6" stroke-linecap="square"/>
+        <circle cx="23" cy="78" r="12" fill="${c}" stroke="${s}" stroke-width="5"/><circle cx="77" cy="78" r="12" fill="${c}" stroke="${s}" stroke-width="5"/>
+      </svg>`;
+    }
+
+    if (style === 'shapes') {
+      if (type === 'rock') return `${open}<circle cx="50" cy="50" r="33" fill="${c}" stroke="${s}" stroke-width="5"/></svg>`;
+      if (type === 'paper') return `${open}<rect x="27" y="17" width="46" height="66" fill="${c}" stroke="${s}" stroke-width="5"/></svg>`;
+      return `${open}<g transform="rotate(45 50 50)"><path d="M50 14v72M14 50h72" fill="none" stroke="${s}" stroke-width="21" stroke-linecap="square"/><path d="M50 14v72M14 50h72" fill="none" stroke="${c}" stroke-width="9" stroke-linecap="square"/></g></svg>`;
+    }
+
+    if (style === 'outline') {
+      if (type === 'rock') return `${open}
+        <path d="M17 61c2-11 8-13 11-22 3-10 8-18 18-18 7-8 18-4 22 4 10 1 14 10 12 18 8 8 6 20-2 27-12 12-46 16-57 2-3-3-5-7-4-11Z" fill="${c}" stroke="${s}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M31 52c8-6 13-15 16-25M48 49c8-6 14-12 18-21M49 67c10-3 20-8 27-16" fill="none" stroke="rgba(255,255,255,.38)" stroke-width="4" stroke-linecap="round"/>
+      </svg>`;
+      if (type === 'paper') return `${open}
+        <path d="M25 17c14 3 30-4 49 1-3 20 2 44-2 65-16-4-29 4-47-1 3-20-2-44 0-65Z" fill="${c}" stroke="${s}" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M35 36c9 2 18-2 28 0M35 51c9 2 19-2 29 0M35 66c7 2 14-1 21 0" fill="none" stroke="rgba(255,255,255,.5)" stroke-width="4" stroke-linecap="round"/>
+      </svg>`;
+      return `${open}
+        <path d="M45 53 70 18M55 53 30 18M45 52l27 27M55 52 28 79" fill="none" stroke="${s}" stroke-width="10" stroke-linecap="round"/>
+        <path d="M45 53 70 18M55 53 30 18M45 52l27 27M55 52 28 79" fill="none" stroke="${c}" stroke-width="5" stroke-linecap="round"/>
+        <ellipse cx="24" cy="79" rx="13" ry="10" fill="${c}" stroke="${s}" stroke-width="5" transform="rotate(-24 24 79)"/><ellipse cx="76" cy="79" rx="13" ry="10" fill="${c}" stroke="${s}" stroke-width="5" transform="rotate(24 76 79)"/>
+      </svg>`;
+    }
+
+    if (style === 'mono') {
+      const glyph = type === 'rock'
+        ? '<path d="M27 61 34 39 50 29 68 38 75 59 64 72 38 73Z"/>'
+        : type === 'paper'
+          ? '<path d="M34 27h25l10 10v37H34Zm25 0v11h10M42 48h19M42 58h19M42 67h13" fill="none" stroke="white" stroke-width="5" stroke-linejoin="round"/>'
+          : '<path d="m34 31 32 38M66 31 34 69M29 73a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm42 0a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" fill="none" stroke="white" stroke-width="6" stroke-linecap="round"/>';
+      return `${open}<path d="M50 8 82 26v48L50 92 18 74V26Z" fill="${c}" stroke="${s}" stroke-width="5"/>` +
+        `<g fill="white" stroke="white" stroke-linejoin="round">${glyph}</g></svg>`;
+    }
+
     if (type === 'rock') {
-      return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      return `${open}
         <circle cx="50" cy="50" r="34" fill="${c}" stroke="${s}" stroke-width="5"/>
         <circle cx="40" cy="40" r="11" fill="rgba(255,255,255,0.25)"/>
-        <circle cx="52" cy="58" r="7" fill="rgba(0,0,0,0.12)"/>
+        <circle cx="52" cy="58" r="7" fill="${s}" opacity="0.28"/>
       </svg>`;
     }
     if (type === 'paper') {
-      return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+      return `${open}
         <rect x="26" y="20" width="48" height="60" rx="6" fill="${c}" stroke="${s}" stroke-width="5"/>
-        <path d="M26 36 L74 36" stroke="rgba(255,255,255,0.35)" stroke-width="4"/>
-        <path d="M26 50 L74 50" stroke="rgba(255,255,255,0.35)" stroke-width="4"/>
-        <path d="M26 64 L58 64" stroke="rgba(255,255,255,0.35)" stroke-width="4"/>
+        <path d="M26 36 L74 36" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"/>
+        <path d="M26 50 L74 50" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"/>
+        <path d="M26 64 L58 64" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="4"/>
       </svg>`;
     }
-    return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    return `${open}
       <line x1="30" y1="32" x2="70" y2="68" stroke="${s}" stroke-width="8" stroke-linecap="round"/>
       <line x1="70" y1="32" x2="30" y2="68" stroke="${s}" stroke-width="8" stroke-linecap="round"/>
       <line x1="30" y1="32" x2="72" y2="66" stroke="${c}" stroke-width="5" stroke-linecap="round"/>
@@ -310,9 +476,9 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Board rendering (shared between live game and replay)
+  // Board rendering shared by live games, analysis and editors.
   // ---------------------------------------------------------------------------
-  function drawBoard(el, board, orientation, lastMove, selectedSq, legalTargetsList, premoveArg, editorMode) {
+  function drawBoard(el, board, orientation, lastMove, selectedSq, legalTargetsList, premoveArg, editorMode, animateMove = false) {
     el.innerHTML = '';
     for (let dr = 0; dr < SIZE; dr++) {
       for (let dc = 0; dc < SIZE; dc++) {
@@ -355,6 +521,13 @@
           p.dataset.r = r;
           p.dataset.color = piece.color;
           p.innerHTML = pieceSvg(piece.type, piece.color);
+          if (animateMove && lastMove && lastMove.toC === c && lastMove.toR === r && preferences.animations && !selectedSq) {
+            const from = boardToDisplayCoord(lastMove.fromC, lastMove.fromR, orientation);
+            const to = boardToDisplayCoord(lastMove.toC, lastMove.toR, orientation);
+            p.classList.add('piece-moving');
+            p.style.setProperty('--piece-dx', ((from.dc - to.dc) * 100) + '%');
+            p.style.setProperty('--piece-dy', ((from.dr - to.dr) * 100) + '%');
+          }
           sq.appendChild(p);
         }
 
@@ -410,9 +583,9 @@
     line.setAttribute('x2', x2 - headLen * Math.cos(angle));
     line.setAttribute('y2', y2 - headLen * Math.sin(angle));
     line.setAttribute('stroke', color);
-    line.setAttribute('stroke-width', cell * 0.3);
+    line.setAttribute('stroke-width', cell * 0.14);
     line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.92');
+    line.setAttribute('opacity', '0.62');
     svg.appendChild(line);
 
     const px = -Math.sin(angle);
@@ -425,7 +598,7 @@
       (bx + px * headW) + ',' + (by + py * headW) + ' ' +
       (bx - px * headW) + ',' + (by - py * headW));
     poly.setAttribute('fill', color);
-    poly.setAttribute('opacity', '0.92');
+    poly.setAttribute('opacity', '0.62');
     svg.appendChild(poly);
   }
 
@@ -458,6 +631,11 @@
     boardEl.addEventListener('contextmenu', (e) => e.preventDefault());
 
     boardEl.addEventListener('pointerdown', (e) => {
+      if (e.button === 0) {
+        arrowsRef.length = 0;
+        renderArrows(svgEl, arrowsRef, orientationFn());
+        return;
+      }
       if (e.button !== 2) return;
       e.preventDefault();
       const sq = squareFromBoardPoint(e.clientX, e.clientY, boardEl, orientationFn());
@@ -509,21 +687,32 @@
     if (!state) return;
     const view = currentBoardView();
     const reviewing = reviewStep != null;
-    drawBoard(boardEl, view.board, myColor, view.lastMove,
-      reviewing ? null : selected, reviewing ? [] : legalTargets, reviewing ? null : premove);
-    renderArrows(liveArrowsEl, liveArrows, myColor || 'blue');
+    const moveKey = view.lastMove
+      ? view.lastMove.fromC + ',' + view.lastMove.fromR + ',' + view.lastMove.toC + ',' + view.lastMove.toR
+      : null;
+    const animateMove = !reviewing && !!moveKey && pendingAnimationKey === moveKey;
+    drawBoard(boardEl, view.board, boardOrientation(), view.lastMove,
+      reviewing ? null : selected, reviewing ? [] : legalTargets, reviewing ? null : premove, false, animateMove);
+    const start = state.startPosition && state.startPosition.board
+      ? state.startPosition.board : defaultBoardForVariant(state.variant);
+    if (capturedPiecesEl) capturedPiecesEl.innerHTML = capturedPiecesMarkup(start, view.board);
+    if (animateMove) pendingAnimationKey = null;
+    renderArrows(liveArrowsEl, liveArrows, boardOrientation());
   }
 
   // The board to display: the live position, or a historical position when reviewing.
   function currentBoardView() {
     if (!state) return { board: engine.initialBoard(), lastMove: null };
     if (reviewStep == null) return { board: state.board, lastMove: state.lastMove };
-    const boards = buildBoards(state.history);
+    const startBoard = state.startPosition && state.startPosition.board
+      ? state.startPosition.board : defaultBoardForVariant(state.variant);
+    const boards = buildBoards(state.history, startBoard);
     const step = Math.max(0, Math.min(reviewStep, state.history.length));
     return { board: boards[step], lastMove: step > 0 ? state.history[step - 1] : null };
   }
 
   function formatClock(ms) {
+    if (state && state.timeControl && Number(state.timeControl.initial) === 0) return '∞';
     ms = Math.max(0, ms);
     const totalSec = Math.floor(ms / 1000);
     const h = Math.floor(totalSec / 3600);
@@ -532,8 +721,8 @@
     const pad = (n) => String(n).padStart(2, '0');
     if (h > 0) return h + ':' + pad(m) + ':' + pad(s);
     if (totalSec >= 60) return m + ':' + pad(s);
-    if (totalSec >= 10) return String(totalSec);
-    return s + '.' + Math.floor((ms % 1000) / 100);
+    if (totalSec < 60) return '0:' + pad(totalSec);
+    return String(totalSec);
   }
 
   function renderClocks() {
@@ -573,24 +762,7 @@
   }
 
   function playLowTimeBeep() {
-    try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
-      if (!audioCtx) audioCtx = new AC();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const t = audioCtx.currentTime;
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = 880;
-      gain.gain.setValueAtTime(0.0001, t);
-      gain.gain.exponentialRampToValueAtTime(0.3, t + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.start(t);
-      osc.stop(t + 0.22);
-    } catch (e) {}
+    playSound('LowTime');
   }
 
   const soundCache = {};
@@ -604,8 +776,9 @@
 
   function playSound(name) {
     try {
+      if (state && state.spectating && (currentScreenName !== 'game' || document.hidden)) return;
       if (!soundCache[name]) {
-        soundCache[name] = new Audio('sound/' + name + '.mp3');
+        soundCache[name] = new Audio('/sound/' + name + '.mp3');
       }
       const a = soundCache[name];
       a.volume = soundVolume;
@@ -614,30 +787,96 @@
       if (p && p.catch) p.catch(() => {});
     } catch (e) {}
   }
+  function stopGameSounds() {
+    for (const audio of Object.values(soundCache)) {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (e) {}
+    }
+    lowTimePlayed = { blue: false, red: false };
+    if (titleAlertTimer) {
+      clearInterval(titleAlertTimer);
+      titleAlertTimer = null;
+      document.title = 'Intransitive';
+    }
+  }
 
-  function playStartSound() {
+  function isSpectatingSession() {
+    const route = location.pathname.replace(/\/+$/, '');
+    return !!(state && state.spectating) || !!(pending && pending.type === 'spectate') ||
+      (!!gameId && !myToken && route.startsWith('/spectate/'));
+  }
+
+  function stopSpectatingSession() {
+    if (!isSpectatingSession()) return;
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    pending = null;
+    const socket = ws;
+    ws = null;
+    if (socket && socket.readyState < 2) socket.close(1000, 'Spectator left game');
+    state = null;
+    myColor = null;
+    myToken = null;
+    spectatorRematchGameId = null;
+    lastMoveKey = null;
+    pendingAnimationKey = null;
+    lastGameStatus = null;
+    stopGameSounds();
+  }
+let inboxAudioContext = null;
+  function playInboxSound() {
+    if (soundVolume <= 0) return;
     try {
-      const AC = window.AudioContext || window.webkitAudioContext;
-      if (!AC) return;
-      if (!audioCtx) audioCtx = new AC();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
-      const t = audioCtx.currentTime;
-      [523.25, 783.99].forEach((freq, i) => {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq;
-        const start = t + i * 0.11;
-        gain.gain.setValueAtTime(0.0001, start);
-        gain.gain.exponentialRampToValueAtTime(0.22, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.18);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start(start);
-        osc.stop(start + 0.2);
-      });
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      if (!inboxAudioContext) inboxAudioContext = new AudioContext();
+      const context = inboxAudioContext;
+      if (context.state === 'suspended') context.resume().catch(() => {});
+      const now = context.currentTime;
+      const gain = context.createGain();
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.02, soundVolume * 0.12), now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+      gain.connect(context.destination);
+      for (const [offset, frequency] of [[0, 880], [0.09, 1175]]) {
+        const oscillator = context.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        oscillator.connect(gain);
+        oscillator.start(now + offset);
+        oscillator.stop(now + offset + 0.12);
+      }
     } catch (e) {}
   }
+
+  function playStartSound() {
+    playSound('Victory');
+    alertGameStart();
+  }
+
+  let titleAlertTimer = null;
+  function alertGameStart() {
+    if (document.hidden) {
+      const originalTitle = document.title;
+      let flip = false;
+      clearInterval(titleAlertTimer);
+      titleAlertTimer = setInterval(() => { document.title = (flip = !flip) ? 'Game started — Intransitive' : originalTitle; }, 900);
+      if ('Notification' in window && Notification.permission === 'granted') {
+        new Notification('Game started', { body: 'Your Intransitive game has started.' });
+      } else if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission().then((permission) => {
+          if (permission === 'granted' && document.hidden) new Notification('Game started', { body: 'Your Intransitive game has started.' });
+        }).catch(() => {});
+      }
+    }
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden && state && state.spectating) stopGameSounds();
+    if (!document.hidden && titleAlertTimer) { clearInterval(titleAlertTimer); titleAlertTimer = null; document.title = 'Intransitive'; }
+  });
+  window.addEventListener('pagehide', stopSpectatingSession);
 
   function resultText() {
     if (state.status === 'aborted') return 'Game aborted';
@@ -666,11 +905,11 @@
         gameStatusEl.textContent = 'Waiting for players…';
         gameStatusEl.className = 'gamestatus waiting';
       } else if (state.status === 'playing') {
-        gameStatusEl.textContent = CAP[state.turn] + ' to move';
-        gameStatusEl.className = 'gamestatus';
+        gameStatusEl.textContent = '';
+        gameStatusEl.className = 'gamestatus game-status-hidden';
       } else {
-        gameStatusEl.textContent = resultText();
-        gameStatusEl.className = 'gamestatus over';
+        gameStatusEl.textContent = '';
+        gameStatusEl.className = 'gamestatus game-status-hidden';
       }
       return;
     }
@@ -687,22 +926,34 @@
         gameStatusEl.textContent = 'Opponent disconnected — waiting…';
         gameStatusEl.className = 'gamestatus waiting';
       } else {
-        const your = state.turn === myColor;
-        gameStatusEl.textContent = your ? 'Your move' : (state.computer && state.aiThinking ? 'Intransitive AI is thinking…' : CAP[state.turn] + ' to move');
-        gameStatusEl.className = 'gamestatus ' + (your ? 'yourturn' : '');
+        gameStatusEl.textContent = state.computer && state.aiThinking ? 'AI is thinking…' : '';
+        gameStatusEl.className = 'gamestatus ' + (state.computer && state.aiThinking ? 'waiting' : 'game-status-hidden');
       }
     } else {
-      gameStatusEl.textContent = resultText();
-      gameStatusEl.className = 'gamestatus over';
+      gameStatusEl.textContent = '';
+      gameStatusEl.className = 'gamestatus game-status-hidden';
     }
+  }
+
+  function renderRatingPreview() {
+    if (!ratingPreviewEl) return;
+    ratingPreviewEl.classList.add('hidden');
   }
 
   function moveText(m) {
     return engine.FILES[m.fromC] + (m.fromR + 1) + (m.capture ? 'x' : '-') + engine.FILES[m.toC] + (m.toR + 1);
   }
 
-  function renderMovesList(el, history, currentIndex) {
+  function renderMovesList(el, history, currentIndex, options = {}) {
     el.innerHTML = '';
+    if (options.includeStart) {
+      const start = document.createElement('li');
+      start.className = 'analysis-start';
+      const num = document.createElement('span'); num.className = 'num'; num.textContent = '0.'; start.appendChild(num);
+      const move = document.createElement('span'); move.className = 'move' + (currentIndex < 0 ? ' current' : ''); move.dataset.step = '-1'; move.textContent = '...'; start.appendChild(move);
+      start.appendChild(document.createElement('span'));
+      el.appendChild(start);
+    }
     for (let i = 0; i < history.length; i += 2) {
       const li = document.createElement('li');
 
@@ -714,14 +965,14 @@
       const wEl = document.createElement('span');
       wEl.className = 'move' + (i === currentIndex ? ' current' : '');
       wEl.dataset.step = i;
-      wEl.textContent = moveText(history[i]);
+      wEl.innerHTML = escapeHtml(moveText(history[i])) + clockMarkup(history[i]);
       li.appendChild(wEl);
 
       if (history[i + 1]) {
         const bEl = document.createElement('span');
         bEl.className = 'move' + (i + 1 === currentIndex ? ' current' : '');
         bEl.dataset.step = i + 1;
-        bEl.textContent = moveText(history[i + 1]);
+        bEl.innerHTML = escapeHtml(moveText(history[i + 1])) + clockMarkup(history[i + 1]);
         li.appendChild(bEl);
       } else {
         const empty = document.createElement('span');
@@ -742,6 +993,10 @@
     } else {
       el.scrollTop = el.scrollHeight;
     }
+  }
+
+  function clockMarkup(move) {
+    return move && move.clockAfterMs != null ? '<small class="move-clock">' + (move.clockAfterMs === 0 && state && state.timeControl && state.timeControl.initial === 0 ? '∞' : formatClock(move.clockAfterMs)) + '</small>' : '';
   }
 
   function renderMoves() {
@@ -804,22 +1059,36 @@
 
   function renderPlayers() {
     if (!state) return;
-    const opp = myColor === 'blue' ? 'red' : 'blue';
-    const opponent = state.players[opp];
-    playerNameEl.textContent = formatPlayer(state.players[myColor]);
-    opponentNameEl.textContent = formatPlayer(opponent);
-    for (const [el, color] of [[playerNameEl, myColor], [opponentNameEl, opp]]) {
+    const spectator = !!state.spectating;
+    const firstColor = myColor;
+    const secondColor = myColor === 'blue' ? 'red' : 'blue';
+    const firstPlayer = state.players[firstColor];
+    const secondPlayer = state.players[secondColor];
+    const preview = (color) => {
+      const p = state.ratingPreview && state.ratingPreview[color];
+      if (!p || state.status !== 'playing' || p.win == null || p.draw == null || p.loss == null) return '';
+      const f = (n) => {
+        return (n > 0 ? '+' : '') + n;
+      };
+      return ' <small class="player-rating-preview">W ' + f(p.win) + ' / D ' + f(p.draw) + ' / L ' + f(p.loss) + '</small>';
+    };
+    const renderIdentity = (nameEl, infoEl, player, color) => {
+      nameEl.textContent = player ? player.name : 'Waiting…';
       const delta = state.ratingDelta && state.ratingDelta[color];
-      if (delta != null && state.players[color] && state.players[color].rating != null) {
-        el.textContent += ' ' + (delta > 0 ? '+' : '') + delta;
-        el.classList.toggle('rating-up', delta > 0);
-        el.classList.toggle('rating-down', delta < 0);
-      }
-    }
-    playerNameEl.className = 'pname ' + myColor;
-    opponentNameEl.className = 'pname profile-link ' + opp;
-    opponentNameEl.disabled = !opponent || !!opponent.guest || !!opponent.ai;
-    opponentNameEl.title = opponent && opponent.ai ? 'Intransitive AI' : opponent && !opponent.guest ? 'View ' + opponent.name + "'s profile" : 'Guest player';
+      let info = player && player.rating != null ? '(' + Math.round(player.rating) + ')' : '';
+      if (delta != null) info += (info ? ' ' : '') + '<small class="rating-delta ' + (delta > 0 ? 'rating-up' : 'rating-down') + '">' + (delta > 0 ? '+' : '') + delta + '</small>';
+      infoEl.innerHTML = info + (info && preview(color) ? ' ' : '') + preview(color);
+    };
+    const configureName = (nameEl, player, color, linkEnabled) => {
+      nameEl.className = 'pname ' + color + (linkEnabled ? ' profile-link' : '');
+      nameEl.disabled = !linkEnabled || !player || !!player.guest || !!player.ai;
+      nameEl.title = player && player.ai ? 'Intransitive AI' : player && !player.guest
+        ? 'View ' + player.name + "'s profile" : 'Guest player';
+    };
+    renderIdentity(playerNameEl, playerRatingInfoEl, firstPlayer, firstColor);
+    renderIdentity(opponentNameEl, opponentRatingInfoEl, secondPlayer, secondColor);
+    configureName(playerNameEl, firstPlayer, firstColor, spectator);
+    configureName(opponentNameEl, secondPlayer, secondColor, spectator || secondColor !== myColor);
   }
 
   function renderMode() {
@@ -828,6 +1097,10 @@
       return;
     }
     gameModeEl.classList.remove('hidden');
+    if (gameTimeControlEl) {
+      const tc = state.timeControl || {};
+      gameTimeControlEl.textContent = Number(tc.initial) === 0 ? '∞' : Math.round(Number(tc.initial) / 60) + '+' + Number(tc.increment || 0);
+    }
     if (state.spectating) {
       gameModeEl.textContent = 'Spectating';
       gameModeEl.classList.add('casual');
@@ -838,7 +1111,7 @@
       gameModeEl.classList.add('casual');
       return;
     }
-    gameModeEl.textContent = state.casual ? 'Casual' : 'Rated';
+    gameModeEl.textContent = (state.casual ? 'Casual' : 'Rated') + (state.variant === 'rps4200' ? ' · RPS4200' : '');
     gameModeEl.classList.toggle('casual', !!state.casual);
   }
 
@@ -849,7 +1122,9 @@
 
   function renderActions() {
     const playing = !!(state && state.status === 'playing' && !state.spectating);
-    const finished = !!(state && state.status === 'finished' && !state.spectating);
+    const finished = !!(state && (state.status === 'finished' || state.status === 'aborted'));
+    const participantFinished = finished && !state.spectating;
+    const spectatorFinished = finished && !!state.spectating;
     const waitingPrivate = !!(state && state.status === 'waiting' && !state.spectating && myColor === 'blue');
     if (!playing && confirmAction) confirmAction = null;
 
@@ -858,12 +1133,14 @@
     waitingActionsEl.classList.toggle('hidden', !waitingPrivate);
     resignBtn.classList.toggle('hidden', !playing);
     offerDrawBtn.classList.toggle('hidden', !playing || !!state.drawOffer);
+    takebackBtn.classList.toggle('hidden', !playing || !!state.takebackOffer || !!state.computer || !state.history.length || !!(state.takebackBlocked && state.takebackBlocked[myColor]));
     // Abort is possible until both players have made their first move.
     const canAbort = playing && !!state && state.history.length < 2;
     abortBtn.classList.toggle('hidden', !canAbort);
-    rematchBtn.classList.toggle('hidden', !finished);
-    newGameBtn.classList.toggle('hidden', !finished);
+    rematchBtn.classList.toggle('hidden', !participantFinished);
+    newGameBtn.classList.toggle('hidden', !participantFinished);
     finishedAnalysisBtn.classList.toggle('hidden', !finished);
+    if (spectateRematchBtn) spectateRematchBtn.classList.toggle('hidden', !(spectatorFinished && spectatorRematchGameId));
     retryAiBtn.classList.toggle('hidden', !(state && state.computer && state.aiError && state.status === 'playing' && state.turn !== myColor));
 
     actionConfirmEl.classList.toggle('hidden', !confirmAction);
@@ -889,7 +1166,20 @@
     }
   }
 
+  function renderTakebackActions() {
+    const offer = state && state.takebackOffer;
+    const visible = !!(offer && state.status === 'playing' && !state.spectating);
+    takebackActionsEl.classList.toggle('hidden', !visible);
+    if (!visible) return;
+    const incoming = offer.color !== myColor;
+    takebackTextEl.textContent = incoming ? 'Opponent requested a takeback' : 'Takeback requested';
+    acceptTakebackBtn.classList.toggle('hidden', !incoming);
+    declineTakebackBtn.classList.toggle('hidden', !incoming);
+  }
+
   function renderRematch() {
+    const spectatorFinished = !!(state && state.status === 'finished' && state.spectating);
+    if (spectateRematchBtn) spectateRematchBtn.classList.toggle('hidden', !(spectatorFinished && spectatorRematchGameId));
     if (!state || state.status !== 'finished' || state.spectating) {
       rematchBtn.classList.add('hidden');
       return;
@@ -897,21 +1187,38 @@
     const opp = myColor === 'blue' ? 'red' : 'blue';
     let label = 'Rematch';
     if (state.rematchOffer === opp) label = 'Accept rematch';
-    else if (state.rematchOffer === myColor) label = 'Rematch offered';
+    else if (state.rematchOffer === myColor) label = 'Rescind rematch offer';
     rematchBtn.textContent = label;
     rematchBtn.classList.remove('hidden');
   }
 
+  function renderGameChatMode() {
+    if (!gameChatLabelEl || !gameChatInputEl) return;
+    if (!state || state.publicChat) {
+      gameChatLabelEl.textContent = 'Public chat';
+      gameChatInputEl.placeholder = 'Chat with everyone…';
+    } else if (state.spectating) {
+      gameChatLabelEl.textContent = 'Spectator chat';
+      gameChatInputEl.placeholder = 'Chat with spectators…';
+    } else {
+      gameChatLabelEl.textContent = 'Player chat';
+      gameChatInputEl.placeholder = 'Chat with your opponent…';
+    }
+  }
+
   function render() {
+    renderGameChatMode();
     renderBoard();
     renderClocks();
     renderStatus();
+    renderRatingPreview();
     renderMoves();
     renderPlayers();
     renderMode();
     renderClaimActions();
     renderActions();
     renderDrawOffer();
+    renderTakebackActions();
     renderRematch();
     renderInGameNotice();
   }
@@ -992,6 +1299,8 @@
   }
 
   function handleClick(sqC, sqR, pressedC, pressedR, wasSelected) {
+    liveArrows.length = 0;
+    renderArrows(liveArrowsEl, liveArrows, boardOrientation());
     const piece = state && state.board[sqR][sqC];
     const myTurn = canMoveNow();
     const pre = premoveAllowed();
@@ -1190,7 +1499,6 @@
     }
     activePieceDrag = null;
   });
-
   window.addEventListener('blur', () => {
     if (arrowDrag) {
       renderArrows(arrowDrag.svgEl, arrowDrag.arrows, arrowDrag.orientationFn());
@@ -1211,6 +1519,8 @@
     ws.onopen = () => {
       const session = sessionToken();
       if (session) ws.send(JSON.stringify({ type: 'identify', session }));
+      ws.send(JSON.stringify({ type: 'presence', screen: currentScreenName }));
+      if (analysisRoomId) ws.send(JSON.stringify({ type: 'analysisJoin', analysisId: analysisRoomId }));
       if (pending) {
         ws.send(JSON.stringify(pending));
         pending = null;
@@ -1238,29 +1548,47 @@
       case 'joined':
       case 'queueMatched':
       case 'rematchStarted':
+        if (gameId && gameId !== msg.gameId) {
+          gameChatLogEl.innerHTML = '';
+          liveArrows.length = 0;
+          renderArrows(liveArrowsEl, liveArrows, 'blue');
+        }
         gameId = msg.gameId;
         myColor = msg.color;
         myToken = msg.token;
+        privateInviteActive = !!msg.private;
         premove = null;
         lastMoveKey = 'init';
+        pendingAnimationKey = null;
+        lastGameStatus = null;
+        activateGameChat(gameId);
         clearSeek();
         try {
           sessionStorage.setItem('rps_token_' + gameId, myToken);
           sessionStorage.setItem('rps_color_' + gameId, myColor);
         } catch (e) {}
-        history.replaceState(null, '', '?game=' + gameId);
+        if (!msg.private) history.replaceState(null, '', '/game/' + encodeURIComponent(gameId));
         updateLink();
-        showGame();
+        if (msg.private) {
+          privateGamePanelEl.classList.remove('hidden');
+          showHome(false);
+        } else showGame();
         break;
 
       case 'spectating':
+        spectatorRematchGameId = null;
+        liveArrows.length = 0;
+        renderArrows(liveArrowsEl, liveArrows, 'blue');
         gameId = msg.gameId;
         myColor = msg.color || 'blue';
         myToken = null;
         premove = null;
         lastMoveKey = 'init';
+        pendingAnimationKey = null;
+        lastGameStatus = null;
+        activateGameChat(gameId);
         clearSeek();
-        history.replaceState(null, '', '?spectate=' + gameId);
+        history.replaceState(null, '', '/spectate/' + encodeURIComponent(gameId));
         updateLink();
         showGame();
         break;
@@ -1305,10 +1633,13 @@
         gameId = null;
         myToken = null;
         myColor = null;
+        privateInviteActive = false;
+        privateGamePanelEl.classList.add('hidden');
+        privateOpponentEl.value = '';
         state = null;
         pending = null;
         if (ws) { ws.close(); ws = null; }
-        history.replaceState({ rpsScreen: 'home' }, '', '?');
+        history.replaceState({ rpsScreen: 'home' }, '', '/');
         updateLink();
         showHome(false);
         showToast('Private game cancelled.');
@@ -1316,6 +1647,7 @@
 
       case 'lobby':
         seeks = msg.seeks || [];
+        renderLobbyPlayers(msg.lobbyPlayers || []);
         renderLobby();
         break;
 
@@ -1324,11 +1656,16 @@
         renderChallengeInbox();
         break;
 
+      case 'analysisInviteList':
+        analysisInvites = Array.isArray(msg.invites) ? msg.invites : [];
+        renderChallengeInbox();
+        break;
+
       case 'challengeReceived':
         if (msg.challenge) {
           incomingChallenges = [msg.challenge, ...incomingChallenges.filter((c) => c.id !== msg.challenge.id)];
           renderChallengeInbox();
-          showToast(msg.challenge.challenger + ' sent you a challenge.');
+          notifyMail(msg.challenge.challenger + ' sent you a challenge.');
         }
         break;
 
@@ -1337,8 +1674,93 @@
         showToast('Challenge sent to ' + (msg.challenge ? msg.challenge.target : 'player') + '.');
         break;
 
+      case 'analysisInviteSent':
+        showToast('Analysis invite sent to ' + (msg.target || 'player') + '.');
+        break;
+
       case 'challengeDeclined':
         showToast('Challenge declined.');
+        break;
+
+      case 'challengeAccepted':
+        incomingChallenges = incomingChallenges.filter((challenge) => challenge.id !== msg.challengeId);
+        renderChallengeInbox();
+        privateGamePanelEl.classList.add('hidden');
+        privateOpponentEl.value = '';
+        privateInviteActive = false;
+        if (msg.gameId && msg.color && msg.token) {
+          gameId = msg.gameId;
+          myColor = msg.color;
+          myToken = msg.token;
+          privateInviteActive = false;
+          premove = null;
+          lastMoveKey = 'init';
+          pendingAnimationKey = null;
+          lastGameStatus = null;
+          activateGameChat(gameId);
+          try {
+            sessionStorage.setItem('rps_token_' + gameId, myToken);
+            sessionStorage.setItem('rps_color_' + gameId, myColor);
+          } catch (e) {}
+          clearSeek();
+          history.replaceState({ rpsScreen: 'game' }, '', '/game/' + encodeURIComponent(msg.gameId));
+          updateLink();
+          showGame();
+        }
+        break;
+
+      case 'analysisInvite': {
+        const invite = msg.invite || msg;
+        if (invite && invite.link) {
+          const normalized = {
+            id: invite.id || ('local-' + Date.now()),
+            from: invite.from || 'A player',
+            link: invite.link,
+            createdAt: invite.createdAt || Date.now(),
+          };
+          analysisInvites = [normalized, ...analysisInvites.filter((item) => item.id !== normalized.id)];
+          renderChallengeInbox();
+          notifyMail((normalized.from || 'A player') + ' invited you to a study.');
+        }
+        break;
+      }
+
+      case 'analysisSettings':
+        if (msg.analysisId !== analysisRoomId) break;
+        analysisSyncUsers = !!msg.syncUsers;
+        analysisOwnerOnly = !!msg.ownerMovesOnly;
+        analysisRoomOwner = !!msg.owner;
+        updateAnalysisCollaborationControls();
+        break;
+
+      case 'analysisState': {
+        if (msg.analysisId !== analysisRoomId || !analysisSyncUsers || !Array.isArray(msg.moves) || msg.moves.length > 2000) break;
+        const validMoves = msg.moves.every((move) => move && [move.fromC, move.fromR, move.toC, move.toR]
+          .every((value) => Number.isInteger(value) && value >= 0 && value < SIZE));
+        if (!validMoves) break;
+        suppressNextAnalysisBroadcast = true;
+        applyingRemoteAnalysis = true;
+        try {
+          openAnalysis(msg.baseBoard, msg.baseTurn, false, msg.moves, { variant: msg.variant }, msg.analysisId, true);
+        } catch (error) {
+          console.warn('Could not apply synchronized analysis state.', error);
+        } finally {
+          applyingRemoteAnalysis = false;
+        }
+        break;
+      }
+
+      case 'spectatorRematch':
+        if (gameId !== msg.oldGameId) break;
+        if (!state || !state.spectating || currentScreenName !== 'game') break;
+        const activeSpectatorTab = !document.hidden && document.visibilityState === 'visible';
+        if (preferences.autoSpectateRematch && activeSpectatorTab && msg.gameId) {
+          spectateGame(msg.gameId);
+        } else {
+          spectatorRematchGameId = msg.gameId || null;
+          renderRematch();
+          if (spectatorRematchGameId) showToast('The players started a rematch.');
+        }
         break;
 
       case 'gameStart':
@@ -1346,23 +1768,33 @@
         break;
 
       case 'state':
+        if (gameId && gameId !== msg.gameId) break;
+        if (!gameId) activateGameChat(msg.gameId);
         state = msg;
         gameId = msg.gameId;
         myColor = msg.color;
+        if ((msg.status === 'finished' || msg.status === 'aborted') && lastGameStatus !== msg.status) {
+          if (msg.status === 'finished' && !msg.spectating) playSound(msg.result === 'draw' ? 'Draw' : msg.result === myColor ? 'Victory' : 'Defeat');
+        }
+        lastGameStatus = msg.status;
         const moveKey = msg.lastMove ? msg.lastMove.fromC + ',' + msg.lastMove.fromR + ',' + msg.lastMove.toC + ',' + msg.lastMove.toR : null;
         if (moveKey) {
-        if (lastMoveKey !== 'init' && lastMoveKey !== moveKey) {
-          playSound(msg.lastMove.capture ? 'Capture' : 'Move');
+          if (lastMoveKey !== moveKey) {
+            pendingAnimationKey = moveKey;
+            if (lastMoveKey !== 'init' && lastMoveKey !== null) {
+              playSound(msg.lastMove.capture ? 'Capture' : 'Move');
+            }
           }
           lastMoveKey = moveKey;
         } else {
           lastMoveKey = null;
+          pendingAnimationKey = null;
         }
         if (msg.status !== 'playing' || msg.turn !== myColor) clearSelection();
         if (msg.status !== 'playing') premove = null;
         updateLink();
         const gameRoute = new URLSearchParams(location.search).has('game') || new URLSearchParams(location.search).has('spectate');
-        if (gameRoute || !gameEl.classList.contains('hidden')) showGame();
+        if (gameRoute || !gameEl.classList.contains('hidden') || (privateInviteActive && msg.status === 'playing')) showGame();
         render();
         // Auto-play a queued premove the instant it becomes our turn.
         if (msg.status === 'playing' && msg.turn === myColor && premove) {
@@ -1405,16 +1837,25 @@
         break;
 
       case 'gameChat':
-        if (msg.message) appendGameChat(msg.message);
+        if (msg.gameId === gameId && msg.message && msg.message.gameId === gameId) appendGameChat(msg.message);
         break;
 
       case 'gameChatHistory':
-        populateGameChat(msg.messages || []);
+        if (msg.gameId === gameId) populateGameChat(msg.gameId, msg.messages || []);
         break;
 
       case 'drawOffer':
         if (state) { state.drawOffer = msg.color; }
         renderDrawOffer();
+        break;
+
+      case 'takebackOffer':
+        if (state) {
+          state.takebackOffer = msg.offer || null;
+          if (msg.blocked) state.takebackBlocked = msg.blocked;
+        }
+        renderTakebackActions();
+        renderActions();
         break;
 
       case 'rematchOffer':
@@ -1438,14 +1879,22 @@
   // UI helpers
   // ---------------------------------------------------------------------------
   function timeControlIconMarkup(category) {
+    if (category === 'rps4200') {
+      return '<span class="time-control-symbol" data-time-control="rps4200" data-icon="&#xe006;" aria-hidden="true"></span>';
+    }
+    if (category === 'infinite') {
+      return '<span class="time-control-symbol infinite-symbol" data-time-control="infinite" aria-hidden="true">∞</span>';
+    }
     const icon = TIME_CONTROL_SYMBOLS[category];
     if (!icon) return '';
     return '<span class="time-control-symbol" data-time-control="' + category + '" data-icon="' + icon + '" aria-hidden="true"></span>';
   }
 
   function timeControlCategory(game) {
+    if (game.variant === 'rps4200') return 'rps4200';
     if (game.category && TIME_CONTROL_LABELS[game.category]) return game.category;
     const initial = Number(game.tcInitial) || 0;
+    if (initial === 0) return 'infinite';
     const increment = Number(game.tcIncrement) || 0;
     const estimated = initial + 40 * increment;
     if (estimated < 180) return 'bullet';
@@ -1470,12 +1919,36 @@
     const cells = [];
     for (let r = SIZE - 1; r >= 0; r--) {
       for (let c = 0; c < SIZE; c++) {
-        const piece = board && board[r] && board[r][c];
+        const rawPiece = board && board[r] && board[r][c];
+        const piece = typeof rawPiece === 'number' ? (rawPiece ? { type: ({ 1: 'rock', 2: 'paper', 3: 'scissors' })[Math.abs(rawPiece)], color: rawPiece > 0 ? 'blue' : 'red' } : null) : rawPiece;
         cells.push('<span class="sq ' + ((r + c) % 2 === 0 ? 'dark' : 'light') + '">' +
           (piece ? pieceSvg(piece.type, piece.color) : '') + '</span>');
       }
     }
     return '<span class="watch-game-preview" aria-hidden="true">' + cells.join('') + '</span>';
+  }
+
+  function capturedPiecesMarkup(startBoard, board, capturedByColor = null) {
+    const start = { blue: { rock: 0, paper: 0, scissors: 0 }, red: { rock: 0, paper: 0, scissors: 0 } };
+    const present = { blue: { rock: 0, paper: 0, scissors: 0 }, red: { rock: 0, paper: 0, scissors: 0 } };
+    for (const row of (startBoard || [])) for (const raw of (row || [])) {
+      const piece = typeof raw === 'number' ? { color: raw > 0 ? 'blue' : 'red', type: ({ 1: 'rock', 2: 'paper', 3: 'scissors' })[Math.abs(raw)] } : raw;
+      if (piece && start[piece.color] && start[piece.color][piece.type] !== undefined) start[piece.color][piece.type]++;
+    }
+    for (const row of (board || [])) for (const raw of (row || [])) {
+      const piece = typeof raw === 'number' ? { color: raw > 0 ? 'blue' : 'red', type: ({ 1: 'rock', 2: 'paper', 3: 'scissors' })[Math.abs(raw)] } : raw;
+      if (piece && present[piece.color] && present[piece.color][piece.type] !== undefined) present[piece.color][piece.type]++;
+    }
+    const byType = { rock: [], paper: [], scissors: [] };
+    for (const color of ['blue', 'red']) for (const type of ['rock', 'paper', 'scissors']) {
+      const missing = Math.max(0, start[color][type] - present[color][type]);
+      for (let i = 0; i < missing; i++) byType[type].push('<span class="captured-piece" data-color="' + color + '" title="Captured ' + type + '">' + pieceSvg(type, color) + '</span>');
+    }
+    return ['rock', 'paper', 'scissors'].map((type) =>
+      '<span class="captured-type captured-type-' + type + '" title="Captured ' + type + '">' +
+        '<span class="captured-type-pieces">' + byType[type].join('') + '</span>' +
+      '</span>'
+    ).join('');
   }
 
   function activeGameButton(game) {
@@ -1493,27 +1966,38 @@
   }
 
   function renderActiveGames(data) {
-    activeGamesData = Array.isArray(data.games) ? data.games.slice() : [];
+    activeGamesData = Array.isArray(data.games) ? data.games.filter((game) => game && game.status === 'playing') : [];
     const sortGamesByRating = (games) => games
       .sort((a, b) => (gameRating(b) - gameRating(a)) || (a.createdAt - b.createdAt) || a.id.localeCompare(b.id));
     const allGames = sortGamesByRating(activeGamesData.slice());
     const games = allGames.filter((game) => watchCategory === 'all' || timeControlCategory(game) === watchCategory);
     watchListEl.innerHTML = games.map((game) => activeGameButton(game)).join('');
     watchEmptyEl.classList.toggle('hidden', games.length > 0);
-    const homeFeatured = allGames[0] || null;
-    if (homeFeatured) {
-      homeFeaturedGameEl.innerHTML = '<span class="featured-label">Ongoing game</span>' + activeGameButton(homeFeatured);
-      homeFeaturedGameEl.classList.remove('hidden');
-    } else {
-      homeFeaturedGameEl.classList.add('hidden');
-      homeFeaturedGameEl.innerHTML = '';
-    }
     if (watchFiltersEl) {
       watchFiltersEl.querySelectorAll('.watch-filter').forEach((button) => {
         button.classList.toggle('active', button.dataset.category === watchCategory);
         button.setAttribute('aria-pressed', button.dataset.category === watchCategory ? 'true' : 'false');
       });
     }
+    renderHomeActiveGames(activeGamesData);
+  }
+
+  function renderHomeActiveGames(games) {
+    if (!homeActiveGamesEl) return;
+    const available = (games || []).filter((game) => game && game.status === 'playing');
+    let featured = homeFeaturedGameId
+      ? available.find((game) => game.id === homeFeaturedGameId) : null;
+    if (!featured) {
+      featured = available.slice().sort((a, b) =>
+        (gameRating(b) - gameRating(a)) ||
+        (a.createdAt - b.createdAt) ||
+        a.id.localeCompare(b.id)
+      )[0] || null;
+      homeFeaturedGameId = featured ? featured.id : null;
+    }
+    const visible = featured ? [featured] : [];
+    homeActiveGamesEl.innerHTML = visible.map((game) => activeGameButton(game)).join('');
+    if (homeActiveGamesEmptyEl) homeActiveGamesEmptyEl.classList.toggle('hidden', visible.length > 0);
   }
 
   async function refreshActiveGames() {
@@ -1534,8 +2018,11 @@
     activeGamesTimer = null;
   }
 
-  function spectateGame(id) {
+  function spectateGame(id, perspectiveUserId) {
     if (!id) return;
+    if (perspectiveUserId !== undefined) {
+      spectatorPerspectiveUserId = perspectiveUserId == null ? null : String(perspectiveUserId);
+    }
     connectToGame(id, true, true);
   }
 
@@ -1549,43 +2036,59 @@
     myToken = null;
     myColor = null;
     state = null;
-    pending = spectating ? { type: 'spectate', gameId: id } : { type: 'join', gameId: id };
+    spectatorRematchGameId = null;
+    if (!spectating) spectatorPerspectiveUserId = null;
+    pending = spectating
+      ? { type: 'spectate', gameId: id, ...(spectatorPerspectiveUserId ? { perspectiveUserId: spectatorPerspectiveUserId } : {}) }
+      : { type: 'join', gameId: id };
     if (!spectating) {
       const token = (() => { try { return sessionStorage.getItem('rps_token_' + id); } catch (e) { return null; } })();
       if (token) pending.token = token;
       const session = sessionToken();
       if (session) pending.session = session;
     }
-    if (pushHistory) history.pushState({ rpsScreen: 'game' }, '', '?' + (spectating ? 'spectate=' : 'game=') + encodeURIComponent(id));
+    if (pushHistory) history.pushState({ rpsScreen: 'game' }, '', '/' + (spectating ? 'spectate/' : 'game/') + encodeURIComponent(id));
     showGame();
     gameStatusEl.textContent = 'Connecting…';
     connect();
   }
 
-  function openActiveGame(id, blueUserId, redUserId) {
+  function openActiveGame(id, blueUserId, redUserId, perspectiveUserId = null) {
     const session = getSession();
     const userId = session && session.user ? session.user.id : null;
     const participant = userId != null && (String(userId) === String(blueUserId) || String(userId) === String(redUserId));
     if (participant && gameId === id && myToken && state) {
-      history.pushState({ rpsScreen: 'game' }, '', '?game=' + encodeURIComponent(id));
+      history.pushState({ rpsScreen: 'game' }, '', '/game/' + encodeURIComponent(id));
       showGame();
       render();
     } else {
+      spectatorPerspectiveUserId = perspectiveUserId == null ? null : String(perspectiveUserId);
       connectToGame(id, !participant, true);
     }
   }
 
   function renderPlayersDirectory(players) {
-    playersListEl.innerHTML = players.map((player) =>
+    players.sort((a, b) => Number(b.online) - Number(a.online) || a.username.localeCompare(b.username));
+    const renderGroup = (title, group, empty) => '<section class="players-group"><h3>' + title + '</h3>' + (group.length ? group.map((player) =>
       '<button type="button" class="player-directory-row" data-player-username="' + escapeHtml(player.username) + '">' +
-      '<span class="player-directory-name">' + escapeHtml(player.username) + '</span>' +
-      '<span class="player-ratings-inline">' + ['bullet', 'blitz', 'rapid', 'classical'].map((cat) =>
+      '<span class="player-directory-name"><span class="player-status-dot ' + (player.online ? 'online' : 'offline') + '" aria-label="' + (player.online ? 'Online' : 'Offline') + '"></span>' + escapeHtml(player.username) + '</span>' +
+      '<span class="player-ratings-inline">' + ['bullet', 'blitz', 'rapid', 'classical', 'rps4200'].map((cat) =>
         '<span class="player-rating-inline" title="' + cat + '">' + timeControlIconMarkup(cat) + ' ' +
         (player.ratings && player.ratings[cat] != null ? player.ratings[cat] : '—') + '</span>'
       ).join('') + '</span>' +
       '<span class="player-record">' + player.wins + 'W ' + player.losses + 'L ' + player.draws + 'D</span></button>'
-    ).join('');
+    ).join('') : '<p class="players-group-empty">' + empty + '</p>') + '</section>';
+    playersListEl.innerHTML = renderGroup('Active', players.filter((player) => player.online), 'No active players.') +
+      renderGroup('Inactive', players.filter((player) => !player.online), 'No inactive players.');
     playersEmptyEl.classList.toggle('hidden', players.length > 0);
+  }
+
+  function renderLobbyPlayers(players) {
+    if (!lobbyPlayersEl) return;
+    lobbyPlayersEl.innerHTML = (players || []).map((player) =>
+      '<button type="button" class="lobby-player" data-player-username="' + escapeHtml(player.username) + '">' +
+      '<span class="player-status-dot online"></span>' + escapeHtml(player.username) + '</button>').join('');
+    if (lobbyPlayersEmptyEl) lobbyPlayersEmptyEl.classList.toggle('hidden', players.length > 0);
   }
 
   async function refreshPlayers(search = '') {
@@ -1596,21 +2099,67 @@
   }
 
   function showScreen(el) {
-    [homeEl, gameEl, historyEl, replayEl, explorerEl, editorEl, watchEl, playersEl, leaderboardEl].forEach((s) => s.classList.add('hidden'));
+    if (el !== gameEl) stopSpectatingSession();
+    [homeEl, gameEl, historyEl, explorerEl, editorEl, watchEl, playersEl, leaderboardEl, ratingStatsEl].forEach((s) => s.classList.add('hidden'));
+    if (el !== gameEl) {
+      liveArrows.length = 0;
+      explorerArrows.length = 0;
+      if (liveArrowsEl) renderArrows(liveArrowsEl, liveArrows, boardOrientation());
+      if (explorerArrowsEl) renderArrows(explorerArrowsEl, explorerArrows, 'blue');
+    }
     el.classList.remove('hidden');
+    currentScreenName = el.id || 'home';
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'presence', screen: currentScreenName }));
     if (el === homeEl || el === watchEl) startActiveGamesRefresh();
     else stopActiveGamesRefresh();
+    clearInterval(playersRefreshTimer);
+    playersRefreshTimer = null;
+    if (el === playersEl) {
+      refreshPlayers(playersSearchEl.value);
+      playersRefreshTimer = setInterval(() => refreshPlayers(playersSearchEl.value), 5000);
+    }
   }
 
   function showGame() {
     showScreen(gameEl);
   }
   function showHome(updateUrl = true) {
-    if (updateUrl) history.pushState({ rpsScreen: 'home' }, '', '?');
+    if (updateUrl) history.pushState({ rpsScreen: 'home' }, '', '/');
     showScreen(homeEl);
     renderPositionPreview();
     renderInGameNotice();
     refreshSessionUser();
+  }
+
+  function cancelPrivateGame() {
+    const cancelId = gameId;
+    const cancelSocket = ws;
+    if (cancelSocket && cancelSocket.readyState === WebSocket.OPEN && cancelId) {
+      cancelSocket.send(JSON.stringify({ type: 'cancelPrivate', gameId: cancelId, session: sessionToken() }));
+    }
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+    try {
+      if (cancelId) {
+        sessionStorage.removeItem('rps_token_' + cancelId);
+        sessionStorage.removeItem('rps_color_' + cancelId);
+      }
+    } catch (e) {}
+    gameId = null;
+    myToken = null;
+    myColor = null;
+    privateInviteActive = false;
+    privateGamePanelEl.classList.add('hidden');
+    privateOpponentEl.value = '';
+    state = null;
+    pending = null;
+    if (cancelSocket && cancelId) {
+      cancelSocket.close();
+      if (ws === cancelSocket) ws = null;
+    }
+    history.replaceState({ rpsScreen: 'home' }, '', '/');
+    showHome(false);
+    showToast('Private game cancelled.');
   }
 
   async function refreshSessionUser() {
@@ -1637,7 +2186,8 @@
   }
   function updateLink() {
     if (gameId) {
-      gameLinkEl.value = location.origin + '/?game=' + gameId;
+      gameLinkEl.value = location.origin + '/game/' + encodeURIComponent(gameId);
+      if (privateGameLinkEl) privateGameLinkEl.value = gameLinkEl.value;
     }
   }
 
@@ -1655,11 +2205,37 @@
     showToast._t = setTimeout(() => toast.classList.remove('show'), 3000);
   }
 
+  function notifyMail(message) {
+    playInboxSound();
+    showToast(message + ' Check your inbox.');
+  }
+
   function renderChallengeInbox() {
     if (!challengeInboxEl) return;
     challengeInboxEl.innerHTML = '';
-    challengeInboxEl.classList.toggle('hidden', incomingChallenges.length === 0);
-    for (const challenge of incomingChallenges) {
+    const total = incomingChallenges.length + analysisInvites.length;
+    if (mailCountEl) {
+      mailCountEl.textContent = String(total);
+      mailCountEl.classList.toggle('hidden', total === 0);
+    }
+    if (mailEmptyEl) mailEmptyEl.classList.toggle('hidden', total !== 0);
+    challengeInboxEl.classList.toggle('hidden', total === 0);
+    const entries = [
+      ...analysisInvites.map((invite) => ({ kind: 'analysis', item: invite })),
+      ...incomingChallenges.map((challenge) => ({ kind: 'challenge', item: challenge })),
+    ].sort((a, b) => (b.item.createdAt || 0) - (a.item.createdAt || 0));
+    for (const entry of entries) {
+      if (entry.kind === 'analysis') {
+        const invite = entry.item;
+        const item = document.createElement('div');
+        item.className = 'mail-item';
+        item.dataset.analysisInviteId = invite.id;
+        item.innerHTML = '<span><strong>' + escapeHtml(invite.from || 'A player') + '</strong> invited you to a study.</span>' +
+          '<button type="button" class="btn small primary" data-analysis-invite-action="open">Open</button>';
+        challengeInboxEl.appendChild(item);
+        continue;
+      }
+      const challenge = entry.item;
       const item = document.createElement('div');
       item.className = 'challenge-incoming';
       item.dataset.challengeId = challenge.id;
@@ -1670,16 +2246,18 @@
     }
   }
 
+  function dismissAnalysisInvite(inviteId) {
+    analysisInvites = analysisInvites.filter((invite) => invite.id !== inviteId);
+    renderChallengeInbox();
+    const msg = { type: 'analysisInviteDismiss', inviteId, session: sessionToken() };
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
+  }
+
   function openChallenge(username) {
-    challengeTarget = username;
-    challengeTargetEl.textContent = username;
-    challengeMinutesEl.value = tcMinutesEl.value;
-    challengeIncrementEl.value = tcIncrementEl.value;
-    challengeRated = ratedMode;
-    challengeRatedEl.classList.toggle('active', challengeRated);
-    challengeCasualEl.classList.toggle('active', !challengeRated);
-    challengeModalEl.classList.remove('hidden');
-    challengeMinutesEl.focus();
+    showHome();
+    privateGamePanelEl.classList.remove('hidden');
+    privateOpponentEl.value = username || '';
+    privateOpponentEl.focus();
   }
 
   function closeChallenge() {
@@ -1689,13 +2267,16 @@
 
   function sendChallenge() {
     if (!challengeTarget) return;
-    const initial = Math.max(60, Math.min(1800, Math.round(Number(challengeMinutesEl.value) * 60)));
-    const increment = Math.max(0, Math.min(60, Math.round(Number(challengeIncrementEl.value))));
+    const selected = parseTimeControl();
+    const initial = selected.initial;
+    const increment = selected.increment;
     const msg = {
       type: 'challengeCreate',
       targetUsername: challengeTarget,
       timeControl: { initial, increment },
+      variant: selectedVariant(),
       rated: challengeRated,
+      publicChat: !!(publicChatEl && publicChatEl.checked),
       session: sessionToken(),
     };
     if (!msg.session) {
@@ -1711,8 +2292,13 @@
   }
 
   function respondToChallenge(challengeId, action) {
-    incomingChallenges = incomingChallenges.filter((challenge) => challenge.id !== challengeId);
-    renderChallengeInbox();
+    if (action !== 'accept') {
+      incomingChallenges = incomingChallenges.filter((challenge) => challenge.id !== challengeId);
+      renderChallengeInbox();
+    } else {
+      const item = challengeInboxEl.querySelector('[data-challenge-id="' + CSS.escape(challengeId) + '"]');
+      if (item) item.querySelectorAll('button').forEach((button) => { button.disabled = true; });
+    }
     const msg = { type: action === 'accept' ? 'challengeAccept' : 'challengeDecline', challengeId, session: sessionToken() };
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(msg));
@@ -1743,9 +2329,14 @@
     };
   }
 
+  function selectedVariant() {
+    return variantSelectEl && variantSelectEl.value === 'rps4200' ? 'rps4200' : 'standard';
+  }
+
   function parseTimeControl() {
+    const minutes = Number(tcMinutesEl.value);
     return {
-      initial: Number(tcMinutesEl.value) * 60,
+      initial: minutes >= 31 ? 0 : minutes * 60,
       increment: Number(tcIncrementEl.value),
     };
   }
@@ -1753,39 +2344,46 @@
   function syncTimeControlUI() {
     const min = tcMinutesEl.value;
     const inc = tcIncrementEl.value;
-    tcMinutesValEl.textContent = min;
+    tcMinutesValEl.textContent = Number(min) >= 31 || Number(min) === 0 ? 'Infinite' : min;
     tcIncrementValEl.textContent = inc;
     for (const b of tcPresetsEl.querySelectorAll('.tc-preset')) {
       b.classList.toggle('active', b.dataset.min === min && b.dataset.inc === inc);
     }
     renderTimeControlSummary();
+    setRatedMode(ratedMode);
   }
 
   function renderTimeControlSummary() {
     if (!timeControlSummaryEl) return;
     const tc = parseTimeControl();
-    const category = timeControlCategory({ tcInitial: tc.initial, tcIncrement: tc.increment });
+    const variant = selectedVariant();
+    const category = variant === 'rps4200' ? 'rps4200' : (tc.initial === 0 ? 'infinite' : timeControlCategory({ tcInitial: tc.initial, tcIncrement: tc.increment }));
     const session = getSession();
     const rating = session && session.user && session.user.ratings && session.user.ratings[category]
       ? session.user.ratings[category].rating : null;
     timeControlSummarySymbolEl.dataset.timeControl = category;
-    timeControlSummarySymbolEl.dataset.icon = TIME_CONTROL_SYMBOLS[category];
+    timeControlSummarySymbolEl.dataset.icon = TIME_CONTROL_SYMBOLS[category] || '';
+    timeControlSummarySymbolEl.textContent = '';
     timeControlCategoryEl.textContent = TIME_CONTROL_LABELS[category];
+    if (timeControlRatingLabelEl) timeControlRatingLabelEl.textContent = variant === 'rps4200' ? 'Variant rating' : 'Rating';
     timeControlRatingEl.textContent = rating == null ? '—' : String(Math.round(rating));
   }
 
   function setRatedMode(rated) {
-    ratedMode = playFromPositionEl.checked ? false : rated;
-    modeRatedEl.classList.toggle('active', ratedMode);
-    modeRatedEl.disabled = playFromPositionEl.checked;
-    modeRatedEl.setAttribute('aria-disabled', String(playFromPositionEl.checked));
-    modeCasualEl.classList.toggle('active', !ratedMode);
+    const infinite = parseTimeControl().initial === 0;
+    ratedMode = !playFromPositionEl.checked && !infinite && !!rated;
+    if (ratedMode) setPlayerColorChoice('random');
+    modeRatedEl.checked = ratedMode;
+    modeRatedEl.disabled = playFromPositionEl.checked || infinite;
+    modeRatedEl.setAttribute('aria-disabled', String(modeRatedEl.disabled));
   }
 
   function extractGameId(input) {
     const s = (input || '').trim();
     if (!s) return null;
-    let m = s.match(/[?&]game=([A-Za-z0-9_-]+)/);
+    let m = s.match(/[?&](?:game|spectate)=([A-Za-z0-9_-]+)/);
+    if (m) return m[1];
+    m = s.match(/\/(?:game|spectate)\/([A-Za-z0-9_-]+)/);
     if (m) return m[1];
     m = s.match(/^([A-Za-z0-9_-]+)$/);
     return m ? m[1] : null;
@@ -1808,6 +2406,7 @@
     } else {
       navGuestEl.classList.remove('hidden');
       navUserEl.classList.add('hidden');
+      if (mailPanelEl) mailPanelEl.classList.add('hidden');
     }
     renderTimeControlSummary();
   }
@@ -1886,7 +2485,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // History & replay
+  // Player profiles and game history
   // ---------------------------------------------------------------------------
   async function loadHistory() {
     const s = getSession();
@@ -1894,17 +2493,16 @@
       openAuth('login');
       return;
     }
-    historyListEl.innerHTML = '<p class="history-empty">Loading…</p>';
+    profileHistoryEl.innerHTML = '<p class="history-empty">Loading…</p>';
     profileLogoutEl.classList.remove('hidden');
     profileHistoryEl.innerHTML = '';
     try {
       const res = await fetch('/api/games', { headers: { Authorization: 'Bearer ' + s.token } });
       if (res.status === 401) { clearSession(); renderNav(); openAuth('login'); return; }
       const data = await res.json();
-      renderHistory(data.games || []);
       loadProfile(data.games || []);
     } catch (e) {
-      historyListEl.innerHTML = '<p class="history-empty">Could not load games.</p>';
+      profileHistoryEl.innerHTML = '<p class="history-empty">Could not load games.</p>';
     }
   }
 
@@ -1926,10 +2524,9 @@
 
   async function loadPlayerProfile(username, pushHistory = true) {
     if (!username) return;
-    if (pushHistory) history.pushState({ rpsScreen: 'profile', username }, '', '?view=profile&player=' + encodeURIComponent(username));
+    if (pushHistory) history.pushState({ rpsScreen: 'profile', username }, '', '/profile/' + encodeURIComponent(username));
     showScreen(historyEl);
     profileLogoutEl.classList.add('hidden');
-    historyListEl.innerHTML = '';
     profileHistoryEl.innerHTML = '<p class="history-empty">Loading games…</p>';
     profileRatingsEl.innerHTML = '';
     try {
@@ -1948,41 +2545,132 @@
   function profileOutcome(game, active, profileUserId) {
     if (active) return { label: 'Playing', className: 'playing' };
     if (game.result === 'draw') return { label: 'Draw', className: 'draw' };
+    if (!game.result && String(game.reason || '').startsWith('imported')) return { label: 'Imported', className: 'draw' };
     const won = (game.result === 'blue' && game.blueUserId === profileUserId) ||
       (game.result === 'red' && game.redUserId === profileUserId);
     return won ? { label: 'Win', className: 'win' } : { label: 'Loss', className: 'loss' };
   }
 
   function profileGameRow(game, active, profileUserId) {
-    const row = document.createElement(active ? 'button' : 'div');
-    if (active) row.type = 'button';
+    const row = document.createElement('div');
+    row.tabIndex = 0;
+    row.setAttribute('role', 'button');
     row.className = 'history-row' + (active ? ' history-row-active' : '');
-    if (active) {
-      row.dataset.gameId = game.id;
-      row.dataset.blueUserId = game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '';
-      row.dataset.redUserId = game.players.red && game.players.red.userId != null ? game.players.red.userId : '';
-    }
-    const blue = active ? (game.players.blue ? game.players.blue.name : 'Waiting for player') : game.blueName;
-    const red = active ? (game.players.red ? game.players.red.name : 'Waiting for player') : game.redName;
+    row.dataset.gameId = game.id;
+    row.dataset.blueUserId = active ? (game.players.blue && game.players.blue.userId != null ? game.players.blue.userId : '') : (game.blueUserId || '');
+    row.dataset.redUserId = active ? (game.players.red && game.players.red.userId != null ? game.players.red.userId : '') : (game.redUserId || '');
+    const activePlayers = game.players || {};
+    const bluePlayer = active ? activePlayers.blue : { name: game.blueName, userId: game.blueUserId };
+    const redPlayer = active ? activePlayers.red : { name: game.redName, userId: game.redUserId };
+    const blue = bluePlayer ? bluePlayer.name : 'Waiting for player';
+    const red = redPlayer ? redPlayer.name : 'Waiting for player';
+    const playerMarkup = (player, name, color) => {
+      const rating = player && player.rating != null ? Math.round(player.rating) : (!active && game[color + 'RatingBefore'] != null ? Math.round(game[color + 'RatingBefore']) : null);
+      const before = !active ? game[color + 'RatingBefore'] : null;
+      const after = !active ? game[color + 'RatingAfter'] : null;
+      const delta = game.rated && before != null && after != null ? Math.round(after) - Math.round(before) : null;
+      const change = delta == null ? '' : '<small class="' + (delta >= 0 ? 'delta-pos' : 'delta-neg') + '">' + (delta >= 0 ? '+' : '') + delta + '</small>';
+      const label = player && player.userId ? '<button type="button" class="profile-game-player" data-player-username="' + escapeHtml(name) + '">' + escapeHtml(name) + '</button>' : '<span class="profile-game-player">' + escapeHtml(name) + '</span>';
+      const ratingLine = rating == null ? '' : '<span class="profile-player-rating">' + rating + change + '</span>';
+      return '<span class="profile-player-card ' + color + '">' + label + ratingLine + '</span>';
+    };
     const category = timeControlCategory(game);
     const outcome = profileOutcome(game, active, profileUserId);
     const timestamp = active ? game.createdAt : game.finishedAt;
+    const dateValue = timestamp ? new Date(timestamp) : null;
+    const dateLabel = dateValue ? dateValue.toLocaleDateString() : '—';
+    const timeLabel = dateValue ? dateValue.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+    const finalBoard = active ? game.board : finalBoardForGame(game);
     row.innerHTML =
+      '<span class="profile-game-preview">' + miniBoardMarkup(finalBoard) + '</span>' +
       '<span class="hist-outcome ' + outcome.className + '">' + outcome.label + '</span>' +
-      '<span class="history-main"><span class="hist-opp">' + (active ? escapeHtml(blue + ' vs ' + red) : escapeHtml(blue + ' vs ' + red)) + '</span>' +
-        '<span class="hist-tc">' + timeControlIconMarkup(category) + ' ' + tcLabel(game) + '</span></span>' +
+      '<span class="history-main"><span class="hist-opp">' + playerMarkup(bluePlayer, blue, 'blue') + '<span class="profile-player-versus" aria-label="versus">⚔</span>' + playerMarkup(redPlayer, red, 'red') + '</span></span>' +
+      '<span class="hist-tc">' + timeControlIconMarkup(category) + '<span>' + tcLabel(game) + '</span></span>' +
       '<span class="hist-rating">' + (game.rated ? 'Rated' : 'Casual') + '</span>' +
-      '<span class="hist-date">' + (timestamp ? new Date(timestamp).toLocaleString() : '—') + '</span>';
-    if (!active) row.addEventListener('click', () => openReplay(game.id));
+      '<span class="hist-date"><span class="hist-date-day">' + dateLabel + '</span><span class="hist-date-time">' + timeLabel + '</span></span>';
     return row;
   }
 
+  function finalBoardForGame(game) {
+    let board = game.startPosition && Array.isArray(game.startPosition.board)
+      ? engine.cloneBoard(game.startPosition.board) : engine.initialBoard();
+    for (const move of game.history || []) board = applyMove(board, move);
+    return board;
+  }
+
   function renderProfileGames(activeGames, finishedGames, profileUserId) {
+    profileGamesState = {
+      active: Array.isArray(activeGames) ? activeGames : [],
+      finished: Array.isArray(finishedGames) ? finishedGames : [],
+      userId: profileUserId,
+    };
+    applyProfileGameFilters();
+  }
+
+  function checkedProfileFilter(name) {
+    return new Set(Array.from(profileGameFiltersEl.querySelectorAll('input[name="' + name + '"]:checked'), (el) => el.value));
+  }
+
+  function profileGameFacts(game, active, profileUserId) {
+    const activePlayers = game.players || {};
+    const blue = active ? activePlayers.blue : { name: game.blueName, userId: game.blueUserId, rating: game.blueRatingBefore };
+    const red = active ? activePlayers.red : { name: game.redName, userId: game.redUserId, rating: game.redRatingBefore };
+    const blueIsProfile = blue && String(blue.userId) === String(profileUserId);
+    const redIsProfile = red && String(red.userId) === String(profileUserId);
+    const opponent = blueIsProfile ? red : redIsProfile ? blue : (red || blue);
+    const opponentRating = opponent && Number(opponent.rating);
+    const timestamp = Number(active ? game.createdAt : game.finishedAt) || 0;
+    const variant = game.variant === 'rps4200' ? 'rps4200' : 'standard';
+    const speedGame = variant === 'rps4200' ? { ...game, variant: 'standard', category: null } : game;
+    const moveCount = active && Number.isFinite(Number(game.moveCount))
+      ? Number(game.moveCount) : (Array.isArray(game.history) ? game.history.length : 0);
+    return {
+      category: timeControlCategory(speedGame),
+      variant,
+      opponentName: opponent && opponent.name ? opponent.name : '',
+      opponentRating: Number.isFinite(opponentRating) ? opponentRating : null,
+      outcome: profileOutcome(game, active, profileUserId).className,
+      timestamp,
+      moveCount,
+    };
+  }
+
+  function applyProfileGameFilters() {
+    const { active: activeGames, finished: finishedGames, userId: profileUserId } = profileGamesState;
+    const value = (id) => { const el = $(id); return el ? el.value : 'all'; };
+    const types = checkedProfileFilter('profileType');
+    const speeds = checkedProfileFilter('profileSpeed');
+    const variants = checkedProfileFilter('profileVariant');
+    const results = checkedProfileFilter('profileResult');
+    const search = (value('profileOpponentSearch') || '').toLowerCase();
+    const from = value('profileDateFrom'), to = value('profileDateTo');
+    const minRatingText = value('profileRatingMin'), maxRatingText = value('profileRatingMax');
+    const minRating = Number(minRatingText), maxRating = Number(maxRatingText);
+    const minMoves = Number(value('profileMovesMin')), maxMoves = Number(value('profileMovesMax'));
+    const games = [...activeGames.map((game) => ({ game, active: true })), ...finishedGames.map((game) => ({ game, active: false }))].filter(({ game, active }) => {
+      const facts = profileGameFacts(game, active, profileUserId);
+      if (!types.has(game.rated ? 'rated' : 'casual')) return false;
+      if (!speeds.has(facts.category)) return false;
+      if (!results.has(facts.outcome)) return false;
+      if (!variants.has(facts.variant)) return false;
+      if (search && !facts.opponentName.toLowerCase().includes(search)) return false;
+      if (from && facts.timestamp < new Date(from + 'T00:00:00').getTime()) return false;
+      if (to && facts.timestamp > new Date(to + 'T23:59:59.999').getTime()) return false;
+      if (minRatingText && (facts.opponentRating == null || facts.opponentRating < minRating)) return false;
+      if (maxRatingText && (facts.opponentRating == null || facts.opponentRating > maxRating)) return false;
+      if (value('profileMovesMin') && facts.moveCount < minMoves) return false;
+      if (value('profileMovesMax') && facts.moveCount > maxMoves) return false;
+      return true;
+    });
+    if (value('profileSort') === 'rating') games.sort((a, b) => {
+      const left = profileGameFacts(a.game, a.active, profileUserId);
+      const right = profileGameFacts(b.game, b.active, profileUserId);
+      return (right.opponentRating == null ? -Infinity : right.opponentRating) - (left.opponentRating == null ? -Infinity : left.opponentRating) || right.timestamp - left.timestamp;
+    }); else games.sort((a, b) => profileGameFacts(b.game, b.active, profileUserId).timestamp - profileGameFacts(a.game, a.active, profileUserId).timestamp);
     profileHistoryEl.innerHTML = '';
-    for (const game of activeGames) profileHistoryEl.appendChild(profileGameRow(game, true, profileUserId));
-    for (const game of finishedGames) profileHistoryEl.appendChild(profileGameRow(game, false, profileUserId));
-    if (!activeGames.length && !finishedGames.length) {
-      profileHistoryEl.innerHTML = '<p class="history-empty">No finished games yet.</p>';
+    for (const item of games) profileHistoryEl.appendChild(profileGameRow(item.game, item.active, profileUserId));
+    if (!games.length) {
+      profileHistoryEl.innerHTML = '<p class="history-empty">No games match these filters.</p>';
     }
     const watch = profilePanelEl.querySelector('#profileWatch');
     if (watch) {
@@ -1999,10 +2687,8 @@
   function renderProfile(user) {
     if (!user) { profilePanelEl.innerHTML = ''; profileRatingsEl.innerHTML = ''; return; }
     const cats = [
-      ['bullet', 'Bullet', '< 3 min'],
-      ['blitz', 'Blitz', '3–8 min'],
-      ['rapid', 'Rapid', '8–25 min'],
-      ['classical', 'Classical', '25+ min'],
+      ['bullet', 'Bullet'], ['blitz', 'Blitz'], ['rapid', 'Rapid'], ['classical', 'Classical'],
+      ['rps4200', 'RPS4200'],
     ];
     const card = document.createElement('div');
     card.className = 'profile-card';
@@ -2019,88 +2705,124 @@
     actions.innerHTML =
       '<button type="button" id="profileWatch" class="btn primary hidden">Watch</button>' +
       '<button type="button" id="profileChallenge" class="btn" data-username="' + escapeHtml(user.username) + '">Challenge</button>';
+    if (profileLogoutEl) actions.appendChild(profileLogoutEl);
     card.appendChild(actions);
 
     const grid = document.createElement('div');
     grid.className = 'profile-ratings';
     const topCategories = new Set(user.topCategories || []);
-    for (const [key, label, range] of cats) {
+    for (const [key, label] of cats) {
       const r = user.ratings && user.ratings[key];
       const rating = r && Number.isFinite(Number(r.rating)) ? Math.round(Number(r.rating)) : '—';
-      const rd = r && Number.isFinite(Number(r.rd)) ? Math.round(Number(r.rd)) : '—';
       const cell = document.createElement('div');
       cell.className = 'profile-rating';
       cell.dataset.category = key;
+      cell.dataset.profileUsername = user.username;
       cell.innerHTML =
         '<span class="profile-rating-label">' + timeControlIconMarkup(key) + label +
           (topCategories.has(key) ? '<span class="profile-crown" data-category="' + key + '" title="Top-rated in ' + label + '" aria-label="Top-rated in ' + label + '">♛</span>' : '') + '</span>' +
         '<span class="profile-rating-value">' + rating + '</span>' +
-        '<span class="profile-rating-rd">±' + rd + '</span>' +
-        '<span class="profile-rating-range">' + range + '</span>';
+        '<span class="profile-rating-rank">#' + ((user.ratingRanks && user.ratingRanks[key]) || '—') + '</span>';
       grid.appendChild(cell);
     }
     profilePanelEl.innerHTML = '';
     profilePanelEl.appendChild(card);
-    profileRatingsEl.innerHTML = '<h2>Ratings</h2>';
+    profileRatingsEl.innerHTML = '';
     profileRatingsEl.appendChild(grid);
+  }
+
+  let ratingStatsReturnUser = null;
+  function ratingChartMarkup(ratings, playerRating) {
+    if (!ratings.length) return '<p class="muted">No rating distribution data.</p>';
+    const min = Math.floor(Math.min(...ratings) / 25) * 25 - 25;
+    const max = Math.ceil(Math.max(...ratings) / 25) * 25 + 25;
+    const bins = []; for (let rating = min; rating <= max; rating += 25) bins.push({ rating, count: 0 });
+    ratings.forEach((rating) => bins[Math.max(0, Math.min(bins.length - 1, Math.round((rating - min) / 25)))].count++);
+    const peak = Math.max(...bins.map((bin) => bin.count), 1);
+    const point = (bin, i) => `${(i / (bins.length - 1)) * 720},${230 - (bin.count / peak) * 190}`;
+    const points = bins.map(point).join(' ');
+    const playerIndex = Math.max(0, Math.min(bins.length - 1, Math.round((playerRating - min) / 25)));
+    const px = (playerIndex / (bins.length - 1)) * 720;
+    const py = 230 - (bins[playerIndex].count / peak) * 190;
+    return `<svg viewBox="0 0 720 270" role="img" aria-label="Rating distribution"><line x1="0" y1="230" x2="720" y2="230"/><polygon points="0,230 ${points} 720,230"/><polyline points="${points}"/><line class="rating-player-line" x1="${px}" y1="18" x2="${px}" y2="230"/><circle class="rating-player-point" cx="${px}" cy="${py}" r="6"/><text class="rating-player-label" x="${px}" y="14" text-anchor="middle">${playerRating}</text></svg>`;
+  }
+
+  async function openRatingStats(username, category, pushHistory = true) {
+    ratingStatsReturnUser = username;
+    if (pushHistory) history.pushState({ rpsScreen: 'ratingStats', username, category }, '', '/rating-stats/' + encodeURIComponent(username) + '?category=' + encodeURIComponent(category));
+    showScreen(ratingStatsEl);
+    ratingStatsContentEl.innerHTML = '<p class="history-empty">Loading rating statistics…</p>';
+    try {
+      const [profileResponse, distributionResponse] = await Promise.all([
+        fetch('/api/players/' + encodeURIComponent(username), { cache: 'no-store' }),
+        fetch('/api/rating-distribution/' + category, { cache: 'no-store' }),
+      ]);
+      if (!profileResponse.ok || !distributionResponse.ok) throw new Error('stats unavailable');
+      const user = (await profileResponse.json()).user;
+      const ratings = (await distributionResponse.json()).ratings || [];
+      const rating = Math.round(Number(user.ratings[category].rating));
+      const rd = Math.round(Number(user.ratings[category].rd));
+      const rank = user.ratingRanks && user.ratingRanks[category] ? user.ratingRanks[category] : '—';
+      const label = category[0].toUpperCase() + category.slice(1);
+      ratingStatsContentEl.innerHTML = '<h2>' + escapeHtml(user.username) + ' — ' + label + '</h2>' +
+        '<p class="rating-stat-description">' + label + (category === 'bullet' ? ' is > 3 min' : '') + '</p>' +
+        '<div class="rating-stat-summary"><span>Rating <strong>' + rating + '</strong></span><span>RD <strong>' + rd + '</strong></span><span>Rank <strong>#' + rank + '</strong></span></div>' +
+        '<div class="rating-stat-chart">' + ratingChartMarkup(ratings, rating) + '</div>';
+    } catch (e) { ratingStatsContentEl.innerHTML = '<p class="history-empty">Could not load rating statistics.</p>'; }
   }
 
   async function refreshLeaderboards() {
     try {
-      const response = await fetch('/api/leaderboard', { cache: 'no-store' });
+      const session = getSession();
+      const headers = session && session.token ? { Authorization: 'Bearer ' + session.token } : {};
+      const response = await fetch('/api/leaderboard', { headers, cache: 'no-store' });
       if (!response.ok) return;
       const data = await response.json();
       for (const [cat, rows] of Object.entries(data.leaderboards || {})) {
         const panel = leaderboardEl.querySelector('[data-category="' + cat + '"] tbody');
         if (!panel) continue;
-        panel.innerHTML = rows.map((row, i) => '<tr><td>' + (i + 1) + '</td><td><button type="button" class="leaderboard-player" data-player-username="' + escapeHtml(row.username) + '">' + escapeHtml(row.username) + '</button></td><td>' + row.rating + '</td></tr>').join('');
+        panel.innerHTML = rows.map((row, i) => '<tr' + (data.viewer && data.viewer.id === row.id ? ' class="leaderboard-you-row"' : '') + '><td>' + (i + 1) + '</td><td><button type="button" class="leaderboard-player" data-player-username="' + escapeHtml(row.username) + '">' + escapeHtml(row.username) + (data.viewer && data.viewer.id === row.id ? ' (You)' : '') + '</button></td><td>' + row.rating + '</td></tr>').join('');
+        const rank = data.ranks && data.ranks[cat];
+        const viewerIsListed = !!(data.viewer && rows.some((row) => row.id === data.viewer.id));
+        if (rank && data.viewer && !viewerIsListed) {
+          panel.insertAdjacentHTML('beforeend', '<tr class="leaderboard-you-row"><td>' + rank + '</td><td><button type="button" class="leaderboard-player" data-player-username="' + escapeHtml(data.viewer.username) + '">' + escapeHtml(data.viewer.username) + ' (You)</button></td><td>' + (data.viewer.ratings[cat] || '—') + '</td></tr>');
+        }
       }
+      renderRatingDistributions();
     } catch (e) { showToast('Could not load leaderboards.'); }
   }
 
-  function tcLabel(g) {
-    const m = Math.floor(g.tcInitial / 60);
-    const s = g.tcInitial % 60;
-    const base = m > 0 ? m + '+' + g.tcIncrement : s + '+' + g.tcIncrement;
-    return base;
+  async function renderRatingDistributions() {
+    const categories = ['bullet', 'blitz', 'rapid', 'classical', 'rps4200'];
+    await Promise.all(categories.map(async (category) => {
+      const target = leaderboardEl.querySelector('[data-distribution="' + category + '"]');
+      if (!target) return;
+      try {
+        const response = await fetch('/api/rating-distribution/' + category, { cache: 'no-store' });
+        const ratings = response.ok ? (await response.json()).ratings || [] : [];
+        if (!ratings.length) { target.innerHTML = '<span class="muted">No rated players yet.</span>'; return; }
+        const min = Math.floor(Math.min(...ratings) / 100) * 100 - 100;
+        const max = Math.ceil(Math.max(...ratings) / 100) * 100 + 100;
+        const bins = []; for (let rating = min; rating <= max; rating += 25) bins.push({ rating, count: 0 });
+        ratings.forEach((rating) => { const index = Math.max(0, Math.min(bins.length - 1, Math.round((rating - min) / 25))); bins[index].count++; });
+        const peak = Math.max(...bins.map((bin) => bin.count), 1);
+        const points = bins.map((bin, i) => `${(i / (bins.length - 1)) * 360},${112 - (bin.count / peak) * 94}`).join(' ');
+        const area = `0,112 ${points} 360,112`;
+        const labels = bins.filter((bin) => bin.rating % 200 === 0).map((bin) => `<text x="${((bin.rating - min) / (max - min)) * 360}" y="132" text-anchor="middle">${bin.rating}</text>`).join('');
+        target.innerHTML = `<svg viewBox="0 0 360 140" role="img" aria-label="${category} rating distribution"><line x1="0" y1="112" x2="360" y2="112"/><polygon points="${area}"/><polyline points="${points}"/>${labels}</svg><small>${ratings.length.toLocaleString()} players</small>`;
+      } catch (e) { target.textContent = 'Distribution unavailable.'; }
+    }));
   }
 
-  function renderHistory(games) {
-    historyListEl.innerHTML = '';
-    if (!games.length) {
-      historyListEl.innerHTML = '<p class="history-empty">No finished games yet. Play a rated game and it will show up here.</p>';
-      return;
+  function tcLabel(g) {
+    let base;
+    if (Number(g.tcInitial) === 0 || (g.timeControl && Number(g.timeControl.initial) === 0)) base = 'Infinite';
+    else {
+      const m = Math.floor(g.tcInitial / 60);
+      const s = g.tcInitial % 60;
+      base = m > 0 ? m + '+' + g.tcIncrement : s + '+' + g.tcIncrement;
     }
-
-    const s = getSession();
-    const meId = s && s.user ? s.user.id : null;
-
-    for (const g of games) {
-      const myColor = g.blueUserId === meId ? 'blue' : 'red';
-      const oppName = myColor === 'blue' ? g.redName : g.blueName;
-      const myBefore = myColor === 'blue' ? g.blueRatingBefore : g.redRatingBefore;
-      const myAfter = myColor === 'blue' ? g.blueRatingAfter : g.redRatingAfter;
-
-      let outcome, outcomeClass;
-      if (g.result === 'draw') { outcome = 'Draw'; outcomeClass = 'draw'; }
-      else if (g.result === myColor) { outcome = 'Win'; outcomeClass = 'win'; }
-      else { outcome = 'Loss'; outcomeClass = 'loss'; }
-
-      const delta = g.rated && myAfter != null && myBefore != null ? Math.round(myAfter - myBefore) : null;
-      const deltaStr = delta == null ? '' : delta > 0 ? '+' + delta : String(delta);
-      const deltaClass = delta == null ? '' : delta > 0 ? 'delta-pos' : 'delta-neg';
-
-      const row = document.createElement('div');
-      row.className = 'history-row';
-      row.innerHTML =
-        '<span class="hist-outcome ' + outcomeClass + '">' + outcome + '</span>' +
-        '<span class="hist-opp">vs ' + escapeHtml(oppName) + '</span>' +
-        '<span class="hist-tc">' + tcLabel(g) + '</span>' +
-        '<span class="hist-rating">' + (g.rated ? (myAfter != null ? myAfter : '') + (deltaStr ? ' <small class="' + deltaClass + '">' + deltaStr + '</small>' : '') : 'casual') + '</span>' +
-        '<span class="hist-date">' + new Date(g.finishedAt).toLocaleString() + '</span>';
-      row.addEventListener('click', () => openReplay(g.id));
-      historyListEl.appendChild(row);
-    }
+    return g.variant === 'rps4200' ? 'RPS4200 · ' + base : base;
   }
 
   function escapeHtml(s) {
@@ -2139,16 +2861,24 @@
     gameChatLogEl.scrollTop = gameChatLogEl.scrollHeight;
   }
 
-  function populateGameChat(messages) {
+  function activateGameChat(nextGameId) {
     gameChatLogEl.innerHTML = '';
-    for (const m of messages || []) appendGameChat(m);
+    gameChatLogEl.dataset.gameId = nextGameId || '';
+  }
+
+  function populateGameChat(historyGameId, messages) {
+    if (historyGameId !== gameId) return;
+    activateGameChat(historyGameId);
+    for (const m of messages || []) {
+      if (m && m.gameId === historyGameId) appendGameChat(m);
+    }
   }
 
   function sendGameChat() {
     const text = gameChatInputEl.value.trim();
     if (!text) return;
     gameChatInputEl.value = '';
-    const msg = { type: 'gameChat', text };
+    const msg = { type: 'gameChat', gameId, text };
     const t = sessionToken();
     if (t) msg.session = t;
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -2176,8 +2906,14 @@
     return b;
   }
 
-  function buildBoards(history) {
-    const boards = [engine.initialBoard()];
+  function defaultBoardForVariant(variant) {
+    return variant === 'rps4200'
+      ? engine.initialBoardForVariant('rps4200')
+      : engine.initialBoard();
+  }
+
+  function buildBoards(history, startBoard = null) {
+    const boards = [startBoard ? engine.cloneBoard(startBoard) : engine.initialBoard()];
     let cur = boards[0];
     for (const m of history) {
       cur = applyMove(cur, m);
@@ -2186,58 +2922,24 @@
     return boards;
   }
 
-  async function openReplay(id) {
-    try {
-      const res = await fetch('/api/games/' + id);
-      if (!res.ok) { showToast('Game not found.'); return; }
-      const data = await res.json();
-      const g = data.game;
-      replay = {
-        game: g,
-        boards: buildBoards(g.history),
-        step: g.history.length,
-      };
-      replayTitleEl.textContent = g.blueName + ' vs ' + g.redName;
-      showScreen(replayEl);
-      renderReplay();
-    } catch (e) {
-      showToast('Could not load game.');
-    }
-  }
-
-  function renderReplay() {
-    if (!replay) return;
-    const g = replay.game;
-    const { boards, step } = replay;
-    const history = g.history;
-
-    drawBoard(replayBoardEl, boards[step], 'blue', step > 0 ? history[step - 1] : null, null, null);
-    renderMovesList(replayMovesEl, history, step - 1);
-
-    // Result banner
-    let result = 'Game';
-    if (step === history.length) {
-      if (g.result === 'draw') result = 'Draw';
-      else result = (g.result === 'blue' ? 'Blue' : 'Red') + ' wins';
-      if (g.reason === 'resign') result += ' by resignation';
-      else if (g.reason === 'timeout') result += ' on time';
-      else if (g.reason === 'noMoves') result += ' — no legal moves';
-      else if (g.reason === 'threefold') result = 'Draw — threefold repetition';
-      else if (g.reason === '100ply') result = 'Draw — 50-move rule';
-    }
-    replayResultEl.textContent = step === history.length ? result : 'Move ' + step + ' of ' + history.length;
-    replayResultEl.className = 'gamestatus ' + (step === history.length ? 'over' : '');
-
-    replayPrevEl.disabled = step <= 0;
-    replayNextEl.disabled = step >= history.length;
-    updateMoveNavigation(replayMoveNavEl, step, history.length);
-  }
-
   // ---------------------------------------------------------------------------
   // Opening explorer
   // ---------------------------------------------------------------------------
   function moveStringFor(m) {
     return engine.FILES[m.fromC] + (m.fromR + 1) + (m.capture ? 'x' : '-') + engine.FILES[m.toC] + (m.toR + 1);
+  }
+
+  function fenForBoard(board, turn) {
+    return board.slice().reverse().map((row) => {
+      let out = ''; let empty = 0;
+      for (const piece of row) {
+        if (!piece) { empty++; continue; }
+        if (empty) { out += empty; empty = 0; }
+        const letter = piece.type === 'rock' ? 'R' : piece.type === 'paper' ? 'P' : 'S';
+        out += piece.color === 'blue' ? letter : letter.toLowerCase();
+      }
+      return out + (empty ? empty : '');
+    }).join('/') + ' ' + (turn === 'red' ? 'r' : 'b');
   }
 
   function parseMoveString(s) {
@@ -2252,10 +2954,96 @@
     };
   }
 
+  function parseAnalysisFen(text) {
+    const fields = String(text || '').trim().split(/\s+/);
+    if (fields.length !== 2 || !/^[br]$/.test(fields[1])) return null;
+    const ranks = fields[0].split('/');
+    if (ranks.length !== SIZE) return null;
+    const board = Array.from({ length: SIZE }, () => new Array(SIZE).fill(null));
+    for (let fenRank = 0; fenRank < SIZE; fenRank++) {
+      let column = 0;
+      for (const ch of ranks[fenRank]) {
+        if (/^[1-9]$/.test(ch)) column += Number(ch);
+        else if (/^[RPSrps]$/.test(ch)) {
+          if (column >= SIZE) return null;
+          const lower = ch.toLowerCase();
+          board[SIZE - 1 - fenRank][column++] = {
+            color: ch === ch.toUpperCase() ? 'blue' : 'red',
+            type: lower === 'r' ? 'rock' : lower === 'p' ? 'paper' : 'scissors',
+          };
+        } else return null;
+      }
+      if (column !== SIZE) return null;
+    }
+    return { board, turn: fields[1] === 'r' ? 'red' : 'blue' };
+  }
+
+  function parseAnalysisPgn(text, baseBoard, baseTurn) {
+    const source = String(text || '').replace(/\{[^}]*\}/g, ' ');
+    const tokens = source.split(/(\(|\)|\s+)/).filter((token) => token && !/^\s+$/.test(token));
+    const root = { children: [] };
+    let index = 0;
+    const isIgnorable = (token) => /^\d+\.(?:\.\.)?$/.test(token) || /^(?:1-0|0-1|1\/2-1\/2|\*)$/.test(token);
+
+    // Parse a line recursively. Each node stores the position before its move,
+    // allowing a parenthesized variation to be validated from the exact branch
+    // point rather than from the end of the main line.
+    function parseLine(startBoard, startTurn, parent, nested) {
+      let board = engine.cloneBoard(startBoard);
+      let turn = startTurn;
+      let current = null;
+      while (index < tokens.length) {
+        const token = tokens[index++];
+        if (token === ')') {
+          if (!nested) return null;
+          return true;
+        }
+        if (token === '(') {
+          const variationParent = current ? current.parent : parent;
+          const variationBoard = current ? current.beforeBoard : board;
+          const variationTurn = current ? current.beforeTurn : turn;
+          if (!parseLine(variationBoard, variationTurn, variationParent, true)) return null;
+          continue;
+        }
+        if (isIgnorable(token)) continue;
+        const move = parseMoveString(token);
+        if (!move) return null;
+        const legal = engine.legalMovesFrom(board, turn, move.fromC, move.fromR)
+          .find((candidate) => candidate.toC === move.toC && candidate.toR === move.toR && candidate.capture === move.capture);
+        if (!legal) return null;
+        const beforeBoard = engine.cloneBoard(board);
+        const movingPiece = board[move.fromR][move.fromC];
+        board[move.fromR][move.fromC] = null;
+        board[move.toR][move.toC] = movingPiece;
+        const node = { move, parent, beforeBoard, beforeTurn: turn, children: [] };
+        (current ? current.children : parent.children).push(node);
+        current = node;
+        parent = node;
+        turn = turn === 'blue' ? 'red' : 'blue';
+      }
+      return !nested;
+    }
+
+    if (!parseLine(baseBoard || engine.initialBoard(), baseTurn || 'blue', root, false)) return null;
+    const mainMoves = [];
+    let node = root.children[0];
+    while (node) { mainMoves.push(node.move); node = node.children[0]; }
+    return { root, mainMoves };
+  }
+
+  function mergeParsedAnalysisTree(defParent, actualParent) {
+    for (let i = 0; i < defParent.children.length; i++) {
+      const defNode = defParent.children[i];
+      let actualNode = actualParent.children.find((candidate) => moveStringFor(candidate.move) === moveStringFor(defNode.move));
+      if (!actualNode) actualNode = createAnalysisNode(defNode.move, actualParent);
+      mergeParsedAnalysisTree(defNode, actualNode);
+    }
+  }
+
   async function loadExplorer() {
     // Compute the current position locally so we can support both the standard
     // start position and a custom board from the board editor.
-    const start = explorer.baseBoard ? engine.cloneBoard(explorer.baseBoard) : engine.initialBoard();
+    const start = explorer.baseBoard ? engine.cloneBoard(explorer.baseBoard) : defaultBoardForVariant(explorer.variant);
     const board = start;
     let turn = explorer.baseTurn || 'blue';
     const steps = explorer.path.slice(0, explorer.step);
@@ -2288,19 +3076,83 @@
     }
   }
 
-  function openAnalysis(baseBoard, turn, pushHistory = true) {
-    const gameHistory = arguments.length > 3 && Array.isArray(arguments[3]) ? arguments[3].slice() : [];
+  function createAnalysisNode(move, parent) {
+    const node = { id: String(explorer.nextNodeId++), move, parent, children: [], selectedChild: null };
+    explorer.nodes.set(node.id, node);
+    if (parent) parent.children.push(node);
+    return node;
+  }
+
+  function analysisRouteTo(node) {
+    const nodes = [];
+    while (node && node.parent) { nodes.push(node); node = node.parent; }
+    return nodes.reverse();
+  }
+
+  function selectAnalysisNode(node) {
+    explorer.node = node || explorer.root;
+    const route = analysisRouteTo(explorer.node);
+    // Remember the route for forward navigation. Main-line ownership is
+    // represented only by children[0], so viewing a variation never promotes it.
+    for (const item of route) item.parent.selectedChild = item;
+    explorer.history = route.map((item) => item.move);
+    explorer.path = explorer.history.map(moveStringFor);
+    explorer.step = route.length;
+  }
+
+  function analysisCanEdit() {
+    return !analysisSyncUsers || !analysisOwnerOnly || analysisRoomOwner;
+  }
+
+  function updateAnalysisCollaborationControls() {
+    if (analysisSyncUsersEl) {
+      analysisSyncUsersEl.classList.toggle('active', analysisSyncUsers);
+      analysisSyncUsersEl.setAttribute('aria-pressed', String(analysisSyncUsers));
+    }
+    if (analysisOwnerOnlyEl) {
+      analysisOwnerOnlyEl.classList.toggle('active', analysisOwnerOnly);
+      analysisOwnerOnlyEl.setAttribute('aria-pressed', String(analysisOwnerOnly));
+    }
+  }
+
+  function broadcastAnalysisState() {
+    if (applyingRemoteAnalysis) return;
+    if (suppressNextAnalysisBroadcast) { suppressNextAnalysisBroadcast = false; return; }
+    if (!analysisSyncUsers || !analysisRoomId || !ws || ws.readyState !== WebSocket.OPEN) return;
+    ws.send(JSON.stringify({ type: 'analysisState', analysisId: analysisRoomId, variant: explorer.variant, state: {
+      baseBoard: explorer.baseBoard ? explorer.baseBoard.map((row) => row.slice()) : null,
+      baseTurn: explorer.baseTurn,
+      moves: (explorer.path || []).slice(0, explorer.step),
+    }}));
+  }
+
+  function openAnalysis(baseBoard, turn, pushHistory = true, gameHistory = [], gameContext = null, roomId = null, remote = false) {
+    gameHistory = Array.isArray(gameHistory) ? gameHistory.slice() : [];
     explorer.baseBoard = baseBoard || null;
     explorer.baseTurn = turn || 'blue';
-    explorer.history = gameHistory;
-    explorer.path = gameHistory.map(moveStringFor);
-    explorer.step = gameHistory.length;
+    explorer.variant = gameContext && gameContext.variant === 'rps4200' ? 'rps4200' : 'standard';
+    explorer.nodes = new Map();
+    explorer.nextNodeId = 1;
+    explorer.root = { id: 'root', move: null, parent: null, children: [], selectedChild: null };
+    explorer.nodes.set('root', explorer.root);
+    let node = explorer.root;
+    for (const move of gameHistory) {
+      node = createAnalysisNode(move, node);
+      node.parent.selectedChild = node;
+    }
+    selectAnalysisNode(node);
+    explorer.gameContext = gameContext;
+    analysisRoomId = roomId || analysisRoomId || Math.random().toString(36).slice(2, 14);
+    analysisRoomOwner = !remote;
+    if (!remote) { analysisSyncUsers = false; analysisOwnerOnly = false; }
+    updateAnalysisCollaborationControls();
+    if (explorer.gameContext) explorer.gameContext.mainLeafId = node.id;
     explorerArrows.length = 0;
-    if (pushHistory) history.pushState({ rpsScreen: 'analysis' }, '', '?view=analysis');
+    if (pushHistory) history.pushState({ rpsScreen: 'analysis' }, '', '/analysis/' + encodeURIComponent(analysisRoomId));
     showScreen(explorerEl);
     // Render the supplied game history immediately; the opening request then
     // enriches the same position with statistics without blanking the view.
-    const start = baseBoard ? engine.cloneBoard(baseBoard) : engine.initialBoard();
+    const start = baseBoard ? engine.cloneBoard(baseBoard) : defaultBoardForVariant(explorer.variant);
     let board = start;
     let currentTurn = explorer.baseTurn;
     for (const move of gameHistory) {
@@ -2309,11 +3161,46 @@
     }
     explorer.position = { key: engine.boardToString(board) + ':' + currentTurn[0], board, turn: currentTurn };
     renderExplorer();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'analysisJoin', analysisId: analysisRoomId }));
     loadExplorer();
   }
 
+  function openAnalysisRoute(params, pushHistory = false) {
+    let board = null;
+    try { board = params.get('board') ? engine.stringToBoard(params.get('board')) : null; } catch (e) { board = null; }
+    const turn = params.get('turn') === 'red' ? 'red' : 'blue';
+    const moves = (params.get('moves') || '').split(',').filter(Boolean).map(parseMoveString).filter(Boolean);
+    const variant = params.get('variant') === 'rps4200' ? 'rps4200' : 'standard';
+    openAnalysis(board, turn, pushHistory, moves, variant === 'rps4200' ? { variant } : null, params.get('analysis') || null, !!params.get('analysis'));
+  }
+
+  function loadAnalysisFenInput() {
+    const parsed = parseAnalysisFen(analysisFenEl && analysisFenEl.value);
+    if (!parsed) { showToast('Invalid FEN'); return; }
+    openAnalysis(parsed.board, parsed.turn, true, []);
+  }
+
+  function loadAnalysisPgnInput() {
+    const baseBoard = explorer.baseBoard || defaultBoardForVariant(explorer.variant);
+    const baseTurn = explorer.baseTurn || 'blue';
+    const parsed = parseAnalysisPgn(analysisPgnEl && analysisPgnEl.value, baseBoard, baseTurn);
+    if (!parsed) { showToast('Invalid PGN'); return; }
+    openAnalysis(baseBoard, baseTurn, true, parsed.mainMoves);
+    mergeParsedAnalysisTree(parsed.root, explorer.root);
+    renderExplorer();
+  }
+
+  if (analysisFenEl) {
+    analysisFenEl.addEventListener('change', loadAnalysisFenInput);
+    analysisFenEl.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadAnalysisFenInput(); });
+  }
+  if (analysisPgnEl) {
+    analysisPgnEl.addEventListener('change', loadAnalysisPgnInput);
+    analysisPgnEl.addEventListener('keydown', (event) => { if (event.key === 'Enter') loadAnalysisPgnInput(); });
+  }
+
   function openEditor(pushHistory = true) {
-    if (pushHistory) history.pushState({ rpsScreen: 'editor' }, '', '?view=editor');
+    if (pushHistory) history.pushState({ rpsScreen: 'editor' }, '', '/editor');
     showScreen(editorEl);
     renderEditor();
   }
@@ -2322,6 +3209,8 @@
     const pos = explorer.position;
     if (!pos) return;
 
+    if (explorer.selected && (!pos.board[explorer.selected.r] || !pos.board[explorer.selected.r][explorer.selected.c] ||
+        pos.board[explorer.selected.r][explorer.selected.c].color !== pos.turn)) explorer.selected = null;
     const selected = explorer.selected;
     let legalTargets = [];
     if (selected) {
@@ -2332,6 +3221,8 @@
       ? (explorer.history && explorer.history[explorer.step - 1]) || parseMoveString(explorer.path[explorer.step - 1])
       : null;
     drawBoard(explorerBoardEl, pos.board, 'blue', lastMove, selected, legalTargets);
+    const analysisCapturedEl = $('analysisCapturedPieces');
+    if (analysisCapturedEl) analysisCapturedEl.innerHTML = capturedPiecesMarkup(explorer.baseBoard || defaultBoardForVariant(explorer.variant), pos.board);
     if (lastMove) {
       const source = explorerBoardEl.querySelector('.sq[data-c="' + lastMove.fromC + '"][data-r="' + lastMove.fromR + '"]');
       const destination = explorerBoardEl.querySelector('.sq[data-c="' + lastMove.toC + '"][data-r="' + lastMove.toR + '"]');
@@ -2340,20 +3231,192 @@
     }
     renderArrows(explorerArrowsEl, explorerArrows, 'blue');
 
-    updateMoveNavigation(explorerMoveNavEl, explorer.step, explorer.path.length);
+    updateAnalysisNavigation();
 
     renderAnalysisHistory();
+    renderAnalysisClocks();
     renderExplorerMoves();
+    const fen = fenForBoard(pos.board, pos.turn);
+    const pgn = renderAnalysisPgn();
+    if (analysisFenEl) analysisFenEl.value = fen;
+    if (analysisPgnEl) analysisPgnEl.value = pgn || '...';
+    if (analysisInviteLinkEl) {
+      const analysisPath = '/analysis/' + encodeURIComponent(analysisRoomId || '');
+      analysisInviteLinkEl.value = location.origin + analysisPath + '?board=' + encodeURIComponent(engine.boardToString((explorer.baseBoard || defaultBoardForVariant(explorer.variant)))) + '&turn=' + encodeURIComponent(explorer.baseTurn) + '&variant=' + encodeURIComponent(explorer.variant) + '&moves=' + encodeURIComponent((explorer.path || []).join(','));
+    }
+    broadcastAnalysisState();
+  }
+
+  function renderAnalysisPgn() {
+    if (!explorer.root) return '...';
+    const movePrefix = (ply) => {
+      const absolute = ply + (explorer.baseTurn === 'red' ? 1 : 0);
+      return absolute % 2 === 0 ? (Math.floor(absolute / 2) + 1) + '. ' : (Math.floor(absolute / 2) + 1) + '... ';
+    };
+    const line = (first, ply) => {
+      const out = [];
+      let node = first;
+      let currentPly = ply;
+      let firstNode = true;
+      while (node) {
+        out.push(movePrefix(currentPly) + moveStringFor(node.move));
+        const variations = node.parent && (!firstNode || node.parent.children[0] === node)
+          ? node.parent.children.slice(1) : [];
+        for (const variation of variations) {
+          out.push('(' + line(variation, currentPly).join(' ') + ')');
+        }
+        node = node.children[0] || null;
+        currentPly += 1;
+        firstNode = false;
+      }
+      return out;
+    };
+    return explorer.root.children.length ? line(explorer.root.children[0], 0).join(' ') : '...';
   }
 
   function renderAnalysisHistory() {
-    const history = explorer.history || [];
     explorerHistoryEl.innerHTML = '';
     explorerHistoryLabelEl.classList.remove('hidden');
     explorerHistoryEl.classList.remove('hidden');
-    if (!history.length) return;
-    renderMovesList(explorerHistoryEl, history, explorer.step - 1);
-    explorerHistoryEl.querySelectorAll('.move[data-step]').forEach((el) => { el.dataset.analysisStep = el.dataset.step; });
+    const startLine = document.createElement('div');
+    startLine.className = 'analysis-line analysis-root-line';
+    const startRow = document.createElement('div');
+    startRow.className = 'analysis-move-row analysis-start';
+    const startNumber = document.createElement('span');
+    startNumber.className = 'num';
+    startNumber.textContent = '0.';
+    startRow.appendChild(startNumber);
+    const start = document.createElement('button');
+    start.type = 'button';
+    start.className = 'move analysis-tree-move' + (explorer.node === explorer.root ? ' current' : '');
+    start.dataset.analysisNode = 'root';
+    start.textContent = '...';
+    startRow.appendChild(start);
+    startRow.appendChild(document.createElement('span'));
+    startLine.appendChild(startRow);
+    explorerHistoryEl.appendChild(startLine);
+    if (!explorer.root || !explorer.root.children.length) return;
+
+    const plyMeta = (node) => {
+      const ply = analysisRouteTo(node).length - 1;
+      const absolutePly = ply + (explorer.baseTurn === 'red' ? 1 : 0);
+      return {
+        ply,
+        color: absolutePly % 2 === 0 ? 'blue' : 'red',
+        moveNumber: Math.floor(absolutePly / 2) + 1
+      };
+    };
+
+    const moveButton = (node, meta) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'move analysis-tree-move' + (node === explorer.node ? ' current' : '');
+      button.dataset.analysisNode = node.id;
+      button.dataset.analysisPly = String(meta.ply);
+      button.dataset.analysisColor = meta.color;
+      button.innerHTML = escapeHtml(moveText(node.move)) + analysisMoveClockMarkup(node.move);
+      return button;
+    };
+
+    const renderLine = (first, nested, suppressFirstSiblings = false) => {
+      const line = document.createElement('div');
+      line.className = 'analysis-line' + (nested ? ' analysis-branch' : '');
+      let node = first;
+      let row = null;
+      let rowNumber = null;
+      let firstNode = true;
+
+      while (node) {
+        const meta = plyMeta(node);
+        if (!row || rowNumber !== meta.moveNumber || row.querySelector('[data-analysis-color="' + meta.color + '"]')) {
+          row = document.createElement('div');
+          row.className = 'analysis-move-row';
+          row.dataset.moveNumber = String(meta.moveNumber);
+          const num = document.createElement('span');
+          num.className = 'num';
+          num.textContent = meta.moveNumber + '.';
+          row.appendChild(num);
+          const blue = document.createElement('span');
+          blue.className = 'analysis-move-slot analysis-blue-slot';
+          const red = document.createElement('span');
+          red.className = 'analysis-move-slot analysis-red-slot';
+          row.appendChild(blue);
+          row.appendChild(red);
+          line.appendChild(row);
+          rowNumber = meta.moveNumber;
+        }
+        row.querySelector('.analysis-' + meta.color + '-slot').replaceWith(moveButton(node, meta));
+
+        // Render sibling variations directly after the main choice at their
+        // branch point. A nested line suppresses only its own sibling set.
+        const isMainChoice = node.parent && node.parent.children[0] === node;
+        if (isMainChoice && !(firstNode && suppressFirstSiblings)) {
+          for (const variation of node.parent.children.slice(1)) {
+            line.appendChild(renderLine(variation, true, true));
+          }
+          if (node.parent.children.length > 1) {
+            row = null;
+            rowNumber = null;
+          }
+        }
+
+        firstNode = false;
+        node = node.children[0] || null;
+      }
+      return line;
+    };
+
+    explorerHistoryEl.appendChild(renderLine(explorer.root.children[0], false));
+  }
+
+  function updateAnalysisNavigation() {
+    if (!explorerMoveNavEl || !explorer.node) return;
+    const hasNext = !!(explorer.node.selectedChild || explorer.node.children[0]);
+    for (const button of explorerMoveNavEl.querySelectorAll('[data-move-action]')) {
+      const action = button.dataset.moveAction;
+      button.disabled = (action === 'first' || action === 'prev') ? explorer.node === explorer.root : !hasNext;
+    }
+  }
+
+  function analysisMoveClockMarkup(move) {
+    if (!move || move.clockAfterMs == null) return '';
+    const infinite = explorer.gameContext && explorer.gameContext.timeControl &&
+      Number(explorer.gameContext.timeControl.initial) === 0;
+    const seconds = Math.max(0, Math.floor(Number(move.clockAfterMs) / 1000));
+    const text = infinite ? '∞' : Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0');
+    return '<small class="move-clock">' + text + '</small>';
+  }
+
+  function renderAnalysisClocks() {
+    const context = explorer.gameContext;
+    const visible = !!(context && context.timeControl);
+    for (const el of [analysisTopPlayerEl, analysisBottomPlayerEl]) el.classList.toggle('hidden', !visible);
+    if (!visible) return;
+    analysisTopNameEl.textContent = context.redName || 'Red';
+    analysisBottomNameEl.textContent = context.blueName || 'Blue';
+    const infinite = Number(context.timeControl && context.timeControl.initial) === 0;
+    let blueMs = infinite ? 0 : Number(context.timeControl.initial) * 1000;
+    let redMs = blueMs;
+    for (let i = 0; i < explorer.history.length; i++) {
+      const move = explorer.history[i];
+      const color = move.color || ((explorer.baseTurn === 'blue') === (i % 2 === 0) ? 'blue' : 'red');
+      if (move.clockAfterMs != null) {
+        if (color === 'blue') blueMs = move.clockAfterMs;
+        else redMs = move.clockAfterMs;
+      }
+    }
+    if (explorer.node && explorer.node.id === context.mainLeafId && context.finalClocks) {
+      blueMs = context.finalClocks.blueMs;
+      redMs = context.finalClocks.redMs;
+    }
+    const clockText = (ms) => {
+      if (infinite) return '∞';
+      const seconds = Math.max(0, Math.floor(Number(ms || 0) / 1000));
+      const minutes = Math.floor(seconds / 60);
+      return minutes + ':' + String(seconds % 60).padStart(2, '0');
+    };
+    analysisTopClockEl.textContent = clockText(redMs);
+    analysisBottomClockEl.textContent = clockText(blueMs);
   }
 
   function renderExplorerMoves() {
@@ -2408,14 +3471,17 @@
       const statEl = document.createElement('span');
       statEl.className = 'stat';
       if (row.games > 0) {
-        const winPct = Math.round((row.wins / row.games) * 100);
-        const drawPct = Math.round((row.draws / row.games) * 100);
-        const lossPct = Math.max(0, 100 - winPct - drawPct);
+        const total = Math.max(row.games, row.wins + row.draws + row.losses);
+        const winPct = (row.wins / total) * 100;
+        const drawPct = (row.draws / total) * 100;
+        const lossPct = (row.losses / total) * 100;
+        const unknownPct = Math.max(0, 100 - winPct - drawPct - lossPct);
         statEl.innerHTML =
-          '<span class="stat-bar">' +
+          '<span class="stat-bar" title="' + row.games + ' games: ' + row.wins + ' wins, ' + row.draws + ' draws, ' + row.losses + ' losses' + (unknownPct > 0 ? ', unfinished or unclassified' : '') + '">' +
             '<span class="seg win" style="flex:' + winPct + ' 1 0"></span>' +
             '<span class="seg draw" style="flex:' + drawPct + ' 1 0"></span>' +
             '<span class="seg loss" style="flex:' + lossPct + ' 1 0"></span>' +
+            '<span class="seg unknown" style="flex:' + unknownPct + ' 1 0"></span>' +
           '</span>' +
           '<span class="stat-text">' + row.games + '</span>';
       } else {
@@ -2428,11 +3494,42 @@
   }
 
   function descendExplorer(moveStr) {
-    explorer.path = explorer.path.slice(0, explorer.step);
-    explorer.path.push(moveStr);
-    explorer.history = explorer.path.map(parseMoveString).filter(Boolean);
-    explorer.step = explorer.path.length;
+    if (!explorer.node || !analysisCanEdit()) return;
+    let child = explorer.node.children.find((candidate) => moveStringFor(candidate.move) === moveStr);
+    if (!child) child = createAnalysisNode(parseMoveString(moveStr), explorer.node);
+    explorer.node.selectedChild = child;
+    selectAnalysisNode(child);
     playSound(moveStr.includes('x') ? 'Capture' : 'Move');
+    loadExplorer();
+  }
+
+  function navigateVariation(delta) {
+    if (!explorer.node || !explorer.node.parent) return;
+    const siblings = explorer.node.parent.children;
+    if (siblings.length < 2) return;
+    const current = siblings.indexOf(explorer.node);
+    const next = siblings[(current + delta + siblings.length) % siblings.length];
+    explorer.node.parent.selectedChild = next;
+    selectAnalysisNode(next);
+    loadExplorer();
+  }
+
+  function analysisNextNode() {
+    return explorer.node && (explorer.node.selectedChild || explorer.node.children[0]);
+  }
+
+  function stepAnalysis(direction, toEnd = false) {
+    if (!explorer.node) return;
+    if (direction < 0) {
+      selectAnalysisNode(toEnd ? explorer.root : (explorer.node.parent || explorer.node));
+    } else {
+      let next = analysisNextNode();
+      if (!next) return;
+      selectAnalysisNode(next);
+      if (toEnd) {
+        while ((next = analysisNextNode())) selectAnalysisNode(next);
+      }
+    }
     loadExplorer();
   }
 
@@ -2490,6 +3587,7 @@
     renderEditorPalette(editorPaletteTopEl, 'red');
     renderEditorPalette(editorPaletteBottomEl, 'blue');
     editorTurnEl.value = editor.turn;
+    if (editorFenEl) editorFenEl.value = fenForBoard(editor.board, editor.turn);
     editorBoardEl.dataset.orientation = editor.orientation;
     updateEditorCursor();
   }
@@ -2517,10 +3615,14 @@
   // ---------------------------------------------------------------------------
   // Lobby (open seeks)
   // ---------------------------------------------------------------------------
-  function tcShort(tc) {
+  function tcShort(tc, variant) {
+    const prefix = variant === 'rps4200' ? 'RPS4200 · ' : '';
+    if (Number(tc && tc.initial) === 0) {
+      return prefix + '<span class="infinite-symbol" aria-label="Infinite">∞</span>';
+    }
     const m = Math.floor(tc.initial / 60);
     const s = tc.initial % 60;
-    return (m > 0 ? m : s) + '+' + tc.increment;
+    return prefix + (m > 0 ? m : s) + '+' + tc.increment;
   }
 
   function clearSeek() {
@@ -2565,7 +3667,7 @@
         '<span class="lpool-name">' + escapeHtml(s.username || 'Guest') + '</span>' +
         '<span class="lpool-rating">' + (s.rating != null ? s.rating : '—') + '</span>' +
         '<span class="lpool-mode' + (s.casual ? ' casual' : '') + '">' + (s.casual ? 'Casual' : 'Rated') + '</span>' +
-        '<span class="clock">' + tcShort(s.timeControl) + '</span>';
+        '<span class="clock">' + tcShort(s.timeControl, s.variant) + '</span>';
       lobbyListEl.appendChild(card);
     }
   }
@@ -2593,7 +3695,7 @@
     queued = true;
     queueBtnLabel.textContent = 'Cancel seek';
 
-    const msg = { type: 'queue', timeControl, rated: !casual, ...positionPayload() };
+    const msg = { type: 'queue', timeControl, variant: selectedVariant(), rated: !casual, publicChat: !!(publicChatEl && publicChatEl.checked), color: playerColorChoice, ...positionPayload() };
     const t = sessionToken();
     if (t) msg.session = t;
 
@@ -2607,6 +3709,13 @@
 
   tcMinutesEl.addEventListener('input', syncTimeControlUI);
   tcIncrementEl.addEventListener('input', syncTimeControlUI);
+  if (variantSelectEl) variantSelectEl.addEventListener('change', () => {
+    if (playFromPositionEl.checked) {
+      playPosition = { board: engine.initialBoardForVariant(selectedVariant()), turn: 'blue' };
+      renderPositionPreview();
+    }
+    renderTimeControlSummary();
+  });
   tcPresetsEl.addEventListener('click', (e) => {
     const b = e.target.closest('.tc-preset');
     if (!b) return;
@@ -2614,11 +3723,19 @@
     tcIncrementEl.value = b.dataset.inc;
     syncTimeControlUI();
   });
-  modeRatedEl.addEventListener('click', () => setRatedMode(true));
-  modeCasualEl.addEventListener('click', () => setRatedMode(false));
+  modeRatedEl.addEventListener('change', () => setRatedMode(modeRatedEl.checked));
+  function setPlayerColorChoice(color) {
+    playerColorChoice = ['blue', 'red'].includes(color) ? color : 'random';
+    if (!colorChoiceEl) return;
+    colorChoiceEl.querySelectorAll('[data-color-choice]').forEach((button) => button.classList.toggle('active', button.dataset.colorChoice === playerColorChoice));
+  }
+  if (colorChoiceEl) colorChoiceEl.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-color-choice]');
+    if (button && !ratedMode) setPlayerColorChoice(button.dataset.colorChoice);
+  });
   playFromPositionEl.addEventListener('change', () => {
     if (playFromPositionEl.checked && !playPosition) {
-      playPosition = { board: engine.initialBoard(), turn: 'blue' };
+      playPosition = { board: engine.initialBoardForVariant(selectedVariant()), turn: 'blue' };
     }
     if (!playFromPositionEl.checked) playPosition = null;
     renderPositionPreview();
@@ -2627,19 +3744,49 @@
 
   createBtn.addEventListener('click', () => {
     homeErrorEl.classList.add('hidden');
-    pending = { type: 'create', timeControl: parseTimeControl(), rated: ratedMode, ...positionPayload() };
+    privateInviteActive = true;
+    pending = { type: 'create', timeControl: parseTimeControl(), variant: selectedVariant(), rated: ratedMode, publicChat: !!(publicChatEl && publicChatEl.checked), color: playerColorChoice, ...positionPayload() };
     const t = sessionToken();
     if (t) pending.session = t;
     connect();
   });
 
-  aiBtn.addEventListener('click', () => {
+  privateChallengeBtn.addEventListener('click', () => {
+    const username = privateOpponentEl.value.trim();
+    if (!username) { privateOpponentEl.focus(); return; }
+    challengeTarget = username;
+    challengeRated = ratedMode;
+    sendChallenge();
+  });
+  privateOpponentEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') privateChallengeBtn.click(); });
+  privateCopyLinkBtn.addEventListener('click', () => {
+    const text = privateGameLinkEl.value;
+    if (navigator.clipboard) navigator.clipboard.writeText(text).then(() => showToast('Link copied'));
+  });
+  privateCancelBtn.addEventListener('click', () => {
+    cancelPrivateGame();
+  });
+
+  if (aiBtn) aiBtn.addEventListener('click', () => {
     homeErrorEl.classList.add('hidden');
-    pending = { type: 'createAI', timeControl: parseTimeControl() };
+    pending = { type: 'createAI', timeControl: parseTimeControl(), variant: selectedVariant(), publicChat: !!(publicChatEl && publicChatEl.checked) };
     const t = sessionToken();
     if (t) pending.session = t;
     // Keep an existing game connection when returning to the lobby so the
     // server can reject a duplicate AI-game request on the same socket.
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(pending));
+      pending = null;
+    } else {
+      connect();
+    }
+  });
+
+  teacherBtn.addEventListener('click', () => {
+    homeErrorEl.classList.add('hidden');
+    pending = { type: 'createAI', aiType: 'teacher', timeControl: parseTimeControl(), variant: selectedVariant(), publicChat: !!(publicChatEl && publicChatEl.checked) };
+    const t = sessionToken();
+    if (t) pending.session = t;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(pending));
       pending = null;
@@ -2720,6 +3867,18 @@
     renderActions();
   });
 
+  takebackBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'takeback' }));
+  });
+
+  acceptTakebackBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'acceptTakeback' }));
+  });
+
+  declineTakebackBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'declineTakeback' }));
+  });
+
   actionConfirmYesEl.addEventListener('click', () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
       if (confirmAction === 'resign') ws.send(JSON.stringify({ type: 'resign' }));
@@ -2753,18 +3912,20 @@
   });
 
   cancelPrivateGameBtn.addEventListener('click', () => {
-    if (ws && ws.readyState === WebSocket.OPEN && gameId) {
-      ws.send(JSON.stringify({ type: 'cancelPrivate', gameId }));
-    }
+    cancelPrivateGame();
   });
 
   retryAiBtn.addEventListener('click', () => {
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'retryAI' }));
   });
 
+  if (spectateRematchBtn) spectateRematchBtn.addEventListener('click', () => {
+    if (spectatorRematchGameId) spectateGame(spectatorRematchGameId);
+  });
+
   rematchBtn.addEventListener('click', () => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'rematch' }));
+      ws.send(JSON.stringify({ type: state && state.rematchOffer === myColor ? 'rematchCancel' : 'rematch' }));
     }
   });
 
@@ -2789,9 +3950,16 @@
   });
 
   finishedAnalysisBtn.addEventListener('click', () => {
-    if (!state || state.status !== 'finished') return;
+    if (!state || (state.status !== 'finished' && state.status !== 'aborted')) return;
     const start = state.startPosition || { board: engine.initialBoard(), turn: 'blue' };
-    openAnalysis(start.board, start.turn, true, state.history || []);
+    openAnalysis(start.board, start.turn, true, state.history || [], {
+      timeControl: state.timeControl,
+      finalClocks: state.clocks,
+      variant: state.variant,
+      mainLength: (state.history || []).length,
+      blueName: state.players && state.players.blue ? state.players.blue.name : 'Blue',
+      redName: state.players && state.players.red ? state.players.red.name : 'Red',
+    });
   });
 
   copyLinkBtn.addEventListener('click', () => {
@@ -2814,15 +3982,30 @@
   loginBtn.addEventListener('click', () => openAuth('login'));
   signupBtn.addEventListener('click', () => openAuth('register'));
   profileBtn.addEventListener('click', () => {
-    history.pushState({ rpsScreen: 'profile' }, '', '?view=profile');
+    history.pushState({ rpsScreen: 'profile' }, '', '/profile');
     showScreen(historyEl);
     loadHistory();
   });
   settingsBtn.addEventListener('click', openSettings);
+  mailBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const open = mailPanelEl.classList.toggle('hidden') === false;
+    mailBtn.setAttribute('aria-expanded', String(open));
+  });
+  document.addEventListener('click', (e) => {
+    if (!mailPanelEl || mailPanelEl.classList.contains('hidden') || mailPanelEl.contains(e.target) || e.target === mailBtn) return;
+    mailPanelEl.classList.add('hidden');
+    mailBtn.setAttribute('aria-expanded', 'false');
+  });
   profileLogoutEl.addEventListener('click', logout);
   authCloseEl.addEventListener('click', closeAuth);
   settingsCloseEl.addEventListener('click', closeSettings);
   soundVolumeEl.addEventListener('input', () => setSoundVolume(soundVolumeEl.value));
+  [[lightModeEl, 'light'], [blindfoldModeEl, 'blindfold'], [pieceAnimationsEl, 'animations'], [flipBoardOnRedEl, 'flipOnRed'], [autoSpectateRematchEl, 'autoSpectateRematch']].forEach(([input, key]) => {
+    if (!input) return;
+    input.addEventListener('change', () => { preferences[key] = input.checked; savePreferences(); applyPreferences(); render(); });
+  });
+  if (gameFlipBoardEl) gameFlipBoardEl.addEventListener('change', render);
   tabLoginEl.addEventListener('click', () => openAuth('login'));
   tabRegisterEl.addEventListener('click', () => openAuth('register'));
   authFormEl.addEventListener('submit', submitAuth);
@@ -2832,40 +4015,43 @@
   settingsModalEl.addEventListener('click', (e) => {
     if (e.target.dataset && e.target.dataset.closeSettings !== undefined) closeSettings();
   });
+  [boardThemeEl, pieceStyleEl].forEach((input, index) => {
+    if (!input) return;
+    input.addEventListener('change', () => {
+      preferences[index === 0 ? 'boardTheme' : 'pieceStyle'] = input.value;
+      savePreferences();
+      applyPreferences();
+      render();
+      if (input === pieceStyleEl) {
+        if (typeof renderEditor === 'function') renderEditor();
+        if (typeof renderPositionPreview === 'function') renderPositionPreview();
+        if (typeof renderExplorer === 'function' && explorer && explorer.position) renderExplorer();
+      }
+    });
+  });
 
-  // History / replay events
-  historyBackEl.addEventListener('click', () => showHome());
-  replayBackEl.addEventListener('click', () => {
-    history.pushState({ rpsScreen: 'profile' }, '', '?view=profile');
-    showScreen(historyEl);
-    loadHistory();
-  });
-  replayPrevEl.addEventListener('click', () => {
-    if (replay && replay.step > 0) { replay.step--; renderReplay(); }
-  });
-  replayNextEl.addEventListener('click', () => {
-    if (replay && replay.step < replay.game.history.length) { replay.step++; renderReplay(); }
-  });
+  // History events
+  if (historyBackEl) historyBackEl.addEventListener('click', () => showHome());
   bindMoveNavigation(gameMoveNavEl,
     () => state ? { position: viewPos(), length: state.history.length } : null,
     (position) => setViewPos(position));
-  bindMoveNavigation(replayMoveNavEl,
-    () => replay ? { position: replay.step, length: replay.game.history.length } : null,
-    (position) => { if (replay) { replay.step = position; renderReplay(); } });
-  bindMoveNavigation(explorerMoveNavEl,
-    () => ({ position: explorer.step, length: explorer.path.length }),
-    (position) => { explorer.step = position; loadExplorer(); });
+  explorerMoveNavEl.addEventListener('click', (e) => {
+    const settingsButton = e.target.closest('[data-settings-target]');
+    if (settingsButton) {
+      const panel = document.getElementById(settingsButton.dataset.settingsTarget);
+      if (panel) panel.classList.toggle('hidden');
+      return;
+    }
+    const button = e.target.closest('[data-move-action]');
+    if (!button) return;
+    const action = button.dataset.moveAction;
+    stepAnalysis(action === 'first' || action === 'prev' ? -1 : 1, action === 'first' || action === 'last');
+  });
   document.querySelectorAll('[data-coordinates-board]').forEach((input) => {
     input.addEventListener('change', () => {
       const board = document.getElementById(input.dataset.coordinatesBoard);
       if (board) board.classList.toggle('hide-coordinates', !input.checked);
     });
-  });
-  replayMovesEl.addEventListener('click', (e) => {
-    const s = e.target.closest('.move[data-step]');
-    if (!s || !replay) return;
-    replay.step = +s.dataset.step + 1;
-    renderReplay();
   });
 
   // In-game move list: click to jump, wheel to step through moves.
@@ -2879,60 +4065,141 @@
     e.preventDefault();
     setViewPos(viewPos() + (e.deltaY > 0 ? 1 : -1));
   }, { passive: false });
+  boardEl.addEventListener('wheel', (e) => {
+    if (!state || state.status === 'waiting') return;
+    e.preventDefault();
+    setViewPos(viewPos() + (e.deltaY > 0 ? 1 : -1));
+  }, { passive: false });
 
   // Left/right arrow keys navigate moves in-game and in analysis.
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.closest && e.target.closest('input, textarea, select')) return;
     if (e.altKey || e.ctrlKey || e.metaKey) return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (!explorerEl.classList.contains('hidden')) { e.preventDefault(); navigateVariation(e.key === 'ArrowDown' ? 1 : -1); }
+      return;
+    }
     if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
 
     const explorerVisible = !explorerEl.classList.contains('hidden');
     const gameVisible = !gameEl.classList.contains('hidden');
-    const replayVisible = !replayEl.classList.contains('hidden');
 
     if (gameVisible && state && state.history.length) {
       e.preventDefault();
       setViewPos(viewPos() + (e.key === 'ArrowRight' ? 1 : -1));
     } else if (explorerVisible) {
       e.preventDefault();
-      if (e.key === 'ArrowRight' && explorer.step < explorer.path.length) {
-        explorer.step++;
-        loadExplorer();
-      } else if (e.key === 'ArrowLeft' && explorer.step > 0) {
-        explorer.step--;
-        loadExplorer();
-      }
-    } else if (replayVisible && replay) {
-      e.preventDefault();
-      const max = replay.game.history.length;
-      const next = replay.step + (e.key === 'ArrowRight' ? 1 : -1);
-      replay.step = Math.max(0, Math.min(max, next));
-      renderReplay();
+      stepAnalysis(e.key === 'ArrowRight' ? 1 : -1);
     }
   });
 
   // Analysis (opening explorer) + board editor events
   analysisBtn.addEventListener('click', () => openAnalysis(null, 'blue'));
+  analysisInviteEl.addEventListener('click', () => {
+    analysisInvitePanelEl.classList.toggle('hidden');
+    if (analysisInvitePanelEl.classList.contains('hidden')) return;
+    if (analysisInviteLinkEl) analysisInviteLinkEl.select();
+  });
+  analysisSaveEl.addEventListener('click', () => {
+    if (!sessionToken()) { showToast('Log in to save analysis.'); return; }
+    analysisSavePanelEl.classList.toggle('hidden');
+    if (!analysisSavePanelEl.classList.contains('hidden')) analysisSaveNameEl.focus();
+  });
+  analysisSaveConfirmEl.addEventListener('click', async () => {
+    const name = analysisSaveNameEl.value.trim();
+    if (!name) return;
+    const session = sessionToken();
+    const response = await fetch('/api/analysis-saves', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session }, body: JSON.stringify({
+      name, baseBoard: explorer.baseBoard || defaultBoardForVariant(explorer.variant), baseTurn: explorer.baseTurn, moves: (explorer.path || []).slice(0, explorer.step),
+    }) });
+    if (!response.ok) { showToast('Could not save analysis.'); return; }
+    analysisSaveNameEl.value = ''; analysisSavePanelEl.classList.add('hidden'); showToast('Analysis saved.');
+  });
+  analysisSavedEl.addEventListener('click', async () => {
+    const panel = analysisSavedPanelEl;
+    panel.classList.toggle('hidden');
+    if (panel.classList.contains('hidden')) return;
+    const session = sessionToken();
+    if (!session) { panel.innerHTML = '<span class="muted">Log in to see saved analysis.</span>'; return; }
+    const response = await fetch('/api/analysis-saves', { headers: { Authorization: 'Bearer ' + session } });
+    if (!response.ok) { panel.textContent = 'Could not load saved analysis.'; return; }
+    const data = await response.json();
+    panel.innerHTML = (data.analyses || []).map((item) => '<button class="btn small saved-analysis" data-analysis-save-id="' + item.id + '">' + escapeHtml(item.name) + '</button>').join('') || '<span class="muted">No saved analysis.</span>';
+    panel.querySelectorAll('[data-analysis-save-id]').forEach((button, index) => button.addEventListener('click', () => {
+      const item = data.analyses[index];
+      openAnalysis(item.baseBoard, item.baseTurn, true, (item.moves || []).map(parseMoveString).filter(Boolean));
+    }));
+  });
+  analysisSavedPanelEl.addEventListener('contextmenu', (e) => {
+    const button = e.target.closest('[data-analysis-save-id]');
+    if (!button || !analysisContextMenuEl) return;
+    e.preventDefault();
+    const session = sessionToken();
+    if (!session) return;
+    analysisSavedContextItem = { id: button.dataset.analysisSaveId, button };
+    analysisContextMenuEl.innerHTML = '<button type="button" data-analysis-context-action="load" role="menuitem"><span aria-hidden="true">✓</span> Load</button><button type="button" data-analysis-context-action="saved-delete" role="menuitem"><span aria-hidden="true">🗑</span> Delete</button>';
+    analysisContextMenuEl.style.left = Math.max(4, e.clientX) + 'px';
+    analysisContextMenuEl.style.top = Math.max(4, e.clientY) + 'px';
+    analysisContextMenuEl.classList.remove('hidden');
+  });
+  analysisCopyInviteEl.addEventListener('click', () => {
+    const value = analysisInviteLinkEl.value;
+    if (navigator.clipboard) navigator.clipboard.writeText(value).then(() => showToast('Analysis link copied')).catch(() => copyInviteFallback(value));
+    else copyInviteFallback(value);
+  });
+  function copyInviteFallback(value) {
+    analysisInviteLinkEl.focus();
+    analysisInviteLinkEl.select();
+    try { document.execCommand('copy'); showToast('Analysis link copied'); }
+    catch (e) { showToast('Copy failed — select the link manually'); }
+  }
+  analysisSendInviteEl.addEventListener('click', () => {
+    const username = analysisInviteUserEl.value.trim();
+    if (!username) { showToast('Enter a username first.'); return; }
+    if (!sessionToken()) { showToast('Log in to send an analysis invite.'); return; }
+    if (!analysisInviteLinkEl.value) { showToast('The analysis link is not ready yet.'); return; }
+    if (!ws || ws.readyState !== WebSocket.OPEN) { showToast('Connecting — please try again in a moment.'); return; }
+    ws.send(JSON.stringify({ type: 'analysisInvite', targetUsername: username, link: analysisInviteLinkEl.value, session: sessionToken() }));
+  });
+  analysisSyncUsersEl.addEventListener('click', () => {
+    analysisSyncUsers = !analysisSyncUsers;
+    updateAnalysisCollaborationControls();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'analysisSettings', analysisId: analysisRoomId, syncUsers: analysisSyncUsers, ownerMovesOnly: analysisOwnerOnly }));
+    broadcastAnalysisState();
+  });
+  analysisOwnerOnlyEl.addEventListener('click', () => {
+    if (!analysisRoomOwner) return;
+    analysisOwnerOnly = !analysisOwnerOnly;
+    updateAnalysisCollaborationControls();
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'analysisSettings', analysisId: analysisRoomId, syncUsers: analysisSyncUsers, ownerMovesOnly: analysisOwnerOnly }));
+  });
   editorBtn.addEventListener('click', () => openEditor());
   watchBtn.addEventListener('click', () => {
-    history.pushState({ rpsScreen: 'watch' }, '', '?view=watch');
+    history.pushState({ rpsScreen: 'watch' }, '', '/watch');
     showScreen(watchEl);
     refreshActiveGames();
   });
   leaderboardBtn.addEventListener('click', () => {
-    history.pushState({ rpsScreen: 'leaderboard' }, '', '?view=leaderboard');
+    history.pushState({ rpsScreen: 'leaderboard' }, '', '/leaderboard');
     showScreen(leaderboardEl);
     refreshLeaderboards();
   });
   playersBtn.addEventListener('click', () => {
-    history.pushState({ rpsScreen: 'players' }, '', '?view=players');
+    history.pushState({ rpsScreen: 'players' }, '', '/players');
     showScreen(playersEl);
     refreshPlayers(playersSearchEl.value);
   });
+  const openGamePlayerProfile = (color) => {
+    if (!state || !state.players[color]) return;
+    const player = state.players[color];
+    if (!player.guest && !player.ai && player.name) loadPlayerProfile(player.name);
+  };
+  playerNameEl.addEventListener('click', () => {
+    if (state && state.spectating) openGamePlayerProfile(myColor || 'blue');
+  });
   opponentNameEl.addEventListener('click', () => {
-    if (!state || !myColor) return;
-    const opponent = state.players[myColor === 'blue' ? 'red' : 'blue'];
-    if (opponent && !opponent.guest && opponent.name) loadPlayerProfile(opponent.name);
+    if (!state) return;
+    openGamePlayerProfile(myColor === 'blue' ? 'red' : 'blue');
   });
   playBtn.addEventListener('click', () => {
     showHome();
@@ -2940,7 +4207,7 @@
 
   returnToGameEl.addEventListener('click', () => {
     if (!gameId) return;
-    history.pushState({ rpsScreen: 'game' }, '', '?game=' + encodeURIComponent(gameId));
+    history.pushState({ rpsScreen: 'game' }, '', '/game/' + encodeURIComponent(gameId));
     if (state && myToken) {
       showGame();
       render();
@@ -2958,24 +4225,49 @@
   watchBackEl.addEventListener('click', () => showHome());
   playersBackEl.addEventListener('click', () => showHome());
   leaderboardBackEl.addEventListener('click', () => showHome());
+  ratingStatsBackEl.addEventListener('click', () => loadPlayerProfile(ratingStatsReturnUser || '', true));
   watchFiltersEl.addEventListener('click', (e) => {
     const button = e.target.closest('.watch-filter');
     if (!button || !TIME_CONTROL_LABELS[button.dataset.category] && button.dataset.category !== 'all') return;
     watchCategory = button.dataset.category;
     renderActiveGames({ games: activeGamesData });
   });
-  [watchListEl, homeFeaturedGameEl].forEach((root) => root.addEventListener('click', (e) => {
+  [watchListEl].forEach((root) => root.addEventListener('click', (e) => {
     const button = e.target.closest('[data-game-id]');
     if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId);
   }));
-  profileHistoryEl.addEventListener('click', (e) => {
-    const button = e.target.closest('.history-row-active[data-game-id]');
+  if (homeActiveGamesEl) homeActiveGamesEl.addEventListener('click', (e) => {
+    const button = e.target.closest('[data-game-id]');
     if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId);
   });
+  profileHistoryEl.addEventListener('click', (e) => {
+    const player = e.target.closest('[data-player-username]');
+    if (player) { e.stopPropagation(); loadPlayerProfile(player.dataset.playerUsername); return; }
+    const button = e.target.closest('.history-row[data-game-id]');
+    if (button) openActiveGame(button.dataset.gameId, button.dataset.blueUserId, button.dataset.redUserId, profileGamesState.userId);
+  });
+  profileHistoryEl.addEventListener('keydown', (e) => {
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('.history-row[data-game-id]')) {
+      e.preventDefault();
+      openActiveGame(e.target.dataset.gameId, e.target.dataset.blueUserId, e.target.dataset.redUserId, profileGamesState.userId);
+    }
+  });
+  if (profileGameFiltersEl) {
+    profileGameFiltersEl.addEventListener('input', applyProfileGameFilters);
+    profileGameFiltersEl.addEventListener('change', applyProfileGameFilters);
+    const clear = $('profileFiltersClear');
+    if (clear) clear.addEventListener('click', () => {
+      profileGameFiltersEl.querySelectorAll('input[type="checkbox"]').forEach((el) => { el.checked = true; });
+      profileGameFiltersEl.querySelectorAll('input:not([type="checkbox"])').forEach((el) => { el.value = ''; });
+      const sort = $('profileSort');
+      if (sort) sort.value = 'time';
+      applyProfileGameFilters();
+    });
+  }
   profilePanelEl.addEventListener('click', (e) => {
     const watch = e.target.closest('#profileWatch');
     if (watch && watch.dataset.gameId) {
-      openActiveGame(watch.dataset.gameId, watch.dataset.blueUserId, watch.dataset.redUserId);
+      openActiveGame(watch.dataset.gameId, watch.dataset.blueUserId, watch.dataset.redUserId, profileGamesState.userId);
       return;
     }
     const challenge = e.target.closest('#profileChallenge');
@@ -2983,7 +4275,21 @@
       openChallenge(challenge.dataset.username);
     }
   });
+  profileRatingsEl.addEventListener('click', (e) => {
+    const card = e.target.closest('.profile-rating[data-category]');
+    if (card && card.dataset.profileUsername) openRatingStats(card.dataset.profileUsername, card.dataset.category);
+  });
   challengeInboxEl.addEventListener('click', (e) => {
+    const analysisAction = e.target.closest('[data-analysis-invite-action]');
+    const analysisItem = e.target.closest('[data-analysis-invite-id]');
+    if (analysisAction && analysisItem) {
+      const invite = analysisInvites.find((item) => item.id === analysisItem.dataset.analysisInviteId);
+      if (invite && invite.link) {
+        dismissAnalysisInvite(invite.id);
+        window.location.href = invite.link;
+      }
+      return;
+    }
     const action = e.target.closest('[data-challenge-action]');
     const item = e.target.closest('.challenge-incoming');
     if (action && item) respondToChallenge(item.dataset.challengeId, action.dataset.challengeAction);
@@ -3007,6 +4313,10 @@
     const row = e.target.closest('[data-player-username]');
     if (row) loadPlayerProfile(row.dataset.playerUsername);
   });
+  if (lobbyPlayersEl) lobbyPlayersEl.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-player-username]');
+    if (row) loadPlayerProfile(row.dataset.playerUsername);
+  });
   leaderboardEl.addEventListener('click', (e) => {
     const row = e.target.closest('[data-player-username]');
     if (row) loadPlayerProfile(row.dataset.playerUsername);
@@ -3021,21 +4331,86 @@
     descendExplorer(li.dataset.move);
   });
   explorerHistoryEl.addEventListener('click', (e) => {
-    const move = e.target.closest('.move[data-step]');
-    if (!move || !explorer.history) return;
-    explorer.step = +move.dataset.step + 1;
+    if (!analysisCanEdit() && e.target.closest('[data-analysis-node]')) return;
+    const move = e.target.closest('[data-analysis-node]');
+    if (!move) return;
+    const node = explorer.nodes.get(move.dataset.analysisNode);
+    if (!node) return;
+    selectAnalysisNode(node);
     loadExplorer();
+  });
+  let analysisContextNode = null;
+  function forgetAnalysisNode(item) {
+    for (const child of item.children) forgetAnalysisNode(child);
+    explorer.nodes.delete(item.id);
+  }
+  function deleteAnalysisNode(node) {
+    if (!node || !node.parent) return;
+    const parent = node.parent;
+    let selectedIsDeleted = false;
+    for (let item = explorer.node; item; item = item.parent) {
+      if (item === node) { selectedIsDeleted = true; break; }
+    }
+    parent.children = parent.children.filter((child) => child !== node);
+    if (parent.selectedChild === node) parent.selectedChild = parent.children[0] || null;
+    forgetAnalysisNode(node);
+    selectAnalysisNode(selectedIsDeleted ? parent : explorer.node);
+    loadExplorer();
+  }
+  function makeAnalysisMain(node) {
+    if (!node || !node.parent) return;
+    // Promote the complete route. Right-clicking a later move in a sideline
+    // therefore promotes that sideline at its actual divergence point.
+    for (const item of analysisRouteTo(node)) {
+      const parent = item.parent;
+      const index = parent.children.indexOf(item);
+      if (index > 0) {
+        parent.children.splice(index, 1);
+        parent.children.unshift(item);
+      }
+      parent.selectedChild = item;
+    }
+    selectAnalysisNode(node);
+    loadExplorer();
+  }
+  explorerHistoryEl.addEventListener('contextmenu', (e) => {
+    const move = e.target.closest('[data-analysis-node]');
+    const node = move && explorer.nodes.get(move.dataset.analysisNode);
+    if (!node || !node.parent || !analysisContextMenuEl) return;
+    e.preventDefault();
+    analysisSavedContextItem = null;
+    analysisContextMenuEl.innerHTML = '<button type="button" data-analysis-context-action="main" role="menuitem"><span aria-hidden="true">✓</span> Make main line</button><button type="button" data-analysis-context-action="delete" role="menuitem"><span aria-hidden="true">🗑</span> Delete from here</button>';
+    analysisContextNode = node;
+    analysisContextMenuEl.style.left = Math.max(4, e.clientX) + 'px';
+    analysisContextMenuEl.style.top = Math.max(4, e.clientY) + 'px';
+    analysisContextMenuEl.classList.remove('hidden');
+  });
+  if (analysisContextMenuEl) analysisContextMenuEl.addEventListener('click', (e) => {
+    const action = e.target.closest('[data-analysis-context-action]');
+    if (action && analysisSavedContextItem && (action.dataset.analysisContextAction === 'load' || action.dataset.analysisContextAction === 'saved-delete')) {
+      const item = analysisSavedContextItem;
+      if (action.dataset.analysisContextAction === 'load') item.button.click();
+      else fetch('/api/analysis-saves/' + encodeURIComponent(item.id), { method: 'DELETE', headers: { Authorization: 'Bearer ' + sessionToken() } }).then((response) => {
+        if (response.ok) { item.button.remove(); showToast('Analysis deleted.'); }
+        else showToast('Could not delete analysis.');
+      });
+      analysisSavedContextItem = null;
+      analysisContextMenuEl.classList.add('hidden');
+      return;
+    }
+    if (!action || !analysisContextNode) return;
+    if (action.dataset.analysisContextAction === 'main') makeAnalysisMain(analysisContextNode);
+    else deleteAnalysisNode(analysisContextNode);
+    analysisContextNode = null;
+    analysisContextMenuEl.classList.add('hidden');
+  });
+  document.addEventListener('click', (e) => {
+    if (analysisContextMenuEl && !analysisContextMenuEl.contains(e.target)) analysisContextMenuEl.classList.add('hidden');
   });
   explorerBoardEl.addEventListener('wheel', (e) => {
     if (!explorer.position) return;
     e.preventDefault();
-    if (e.deltaY > 0 && explorer.step < explorer.path.length) {
-      explorer.step++;
-      loadExplorer();
-    } else if (e.deltaY < 0 && explorer.step > 0) {
-      explorer.step--;
-      loadExplorer();
-    }
+    stepAnalysis(e.deltaY > 0 ? 1 : -1);
   }, { passive: false });
 
   // Board editor events
@@ -3046,7 +4421,18 @@
     else editor.tool = { kind };
     renderEditor();
   }
-  editorTurnEl.addEventListener('change', () => { editor.turn = editorTurnEl.value; });
+  editorTurnEl.addEventListener('change', () => { editor.turn = editorTurnEl.value; renderEditor(); });
+  if (editorFenEl) {
+    const applyEditorFen = () => {
+      const parsed = parseAnalysisFen(editorFenEl.value);
+      if (!parsed) { showToast('Invalid FEN'); renderEditor(); return; }
+      editor.board = parsed.board;
+      editor.turn = parsed.turn;
+      renderEditor();
+    };
+    editorFenEl.addEventListener('change', applyEditorFen);
+    editorFenEl.addEventListener('keydown', (event) => { if (event.key === 'Enter') applyEditorFen(); });
+  }
   editorClearEl.addEventListener('click', () => {
     editor.board = engine.initialBoard().map((row) => row.map(() => null));
     renderEditor();
@@ -3057,13 +4443,13 @@
   editorToAnalysisEl.addEventListener('click', () => {
     playPosition = { board: engine.cloneBoard(editor.board), turn: editor.turn };
     playFromPositionEl.checked = true;
-    history.pushState({ rpsScreen: 'home' }, '', '?');
+    history.pushState({ rpsScreen: 'home' }, '', '/');
     showHome(false);
   });
 
   setupPieceDragging({
     boardEl,
-    orientationFn: () => myColor || 'blue',
+    orientationFn: () => boardOrientation(),
     getPiece: (sq) => state && state.board[sq.r][sq.c],
     canStart: (piece) => !!state && state.status === 'playing' && !state.spectating && piece.color === myColor && (canMoveNow() || premoveAllowed()),
     canClickTarget: () => !!selected || !!premove,
@@ -3079,7 +4465,7 @@
     boardEl: explorerBoardEl,
     orientationFn: () => 'blue',
     getPiece: (sq) => explorer.position && explorer.position.board[sq.r][sq.c],
-    canStart: (piece) => !!explorer.position && piece.color === explorer.position.turn,
+    canStart: (piece) => analysisCanEdit() && !!explorer.position && piece.color === explorer.position.turn,
     canClickTarget: () => !!explorer.selected,
     canStartEmpty: () => !!explorer.position && !!explorer.selected,
     onClick: (sq) => {
@@ -3181,6 +4567,31 @@
     },
   });
 
+  function routeParams() {
+    const params = new URLSearchParams(location.search);
+    const path = location.pathname.replace(/\/+$/, '') || '/';
+    const parts = path.split('/').filter(Boolean).map((part) => {
+      try { return decodeURIComponent(part); } catch (e) { return part; }
+    });
+    if (parts.length === 1) {
+      const views = { editor: 'editor', analysis: 'analysis', watch: 'watch', leaderboard: 'leaderboard', players: 'players' };
+      if (views[parts[0]]) params.set('view', views[parts[0]]);
+      else if (parts[0] === 'profile') params.set('view', 'profile');
+    } else if (parts.length === 2 && parts[0] === 'profile') {
+      params.set('view', 'profile');
+      params.set('player', parts[1]);
+    } else if (parts.length === 2 && parts[0] === 'rating-stats') {
+      params.set('view', 'rating-stats');
+      params.set('player', parts[1]);
+    } else if (parts.length === 2 && parts[0] === 'analysis') {
+      params.set('view', 'analysis');
+      params.set('analysis', parts[1]);
+    } else if (parts.length === 2 && (parts[0] === 'game' || parts[0] === 'spectate')) {
+      params.set(parts[0], parts[1]);
+    }
+    return params;
+  }
+
   function restoreGameRoute(params) {
     const spectating = params.has('spectate');
     const id = params.get(spectating ? 'spectate' : 'game');
@@ -3196,20 +4607,21 @@
   }
 
   window.addEventListener('popstate', (e) => {
-    const params = new URLSearchParams(location.search);
+    const params = routeParams();
     if (params.has('game') || params.has('spectate')) restoreGameRoute(params);
     else if (e.state && e.state.rpsScreen === 'editor') openEditor(false);
     else if (e.state && e.state.rpsScreen === 'analysis') {
       if (state && state.status === 'finished' && !state.spectating) {
         const start = state.startPosition || { board: engine.initialBoard(), turn: 'blue' };
-        openAnalysis(start.board, start.turn, false, state.history || []);
-      } else openAnalysis(null, 'blue', false);
+        openAnalysis(start.board, start.turn, false, state.history || [], { variant: state.variant });
+      } else openAnalysisRoute(params, false);
     }
     else if (e.state && e.state.rpsScreen === 'watch') { showScreen(watchEl); refreshActiveGames(); }
     else if (e.state && e.state.rpsScreen === 'players') { showScreen(playersEl); refreshPlayers(playersSearchEl.value); }
     else if (e.state && e.state.rpsScreen === 'leaderboard') { showScreen(leaderboardEl); refreshLeaderboards(); }
+    else if (e.state && e.state.rpsScreen === 'ratingStats') { openRatingStats(e.state.username, e.state.category); }
     else if (e.state && e.state.rpsScreen === 'profile') {
-      const username = e.state.username || new URLSearchParams(location.search).get('player');
+      const username = e.state.username || routeParams().get('player');
       if (username) loadPlayerProfile(username, false);
       else { showScreen(historyEl); loadHistory(); }
     }
@@ -3225,12 +4637,13 @@
   // Boot
   // ---------------------------------------------------------------------------
   (function boot() {
+    applyPreferences();
     renderNav();
     syncTimeControlUI();
     // Right-click-drag board arrows on the live board and the analysis board.
     setupArrowDrawing(boardEl, liveArrowsEl, liveArrows, () => myColor || 'blue');
     setupArrowDrawing(explorerBoardEl, explorerArrowsEl, explorerArrows, () => 'blue');
-    const params = new URLSearchParams(location.search);
+    const params = routeParams();
     const id = params.get('game');
     const spectateId = params.get('spectate');
     const view = params.get('view');
@@ -3248,7 +4661,7 @@
       gameStatusEl.textContent = 'Connecting…';
       connect();
     } else if (view === 'analysis') {
-      openAnalysis(null, 'blue', false);
+      openAnalysisRoute(params, false);
       connect();
     } else if (view === 'editor') {
       openEditor(false);
@@ -3256,6 +4669,11 @@
     } else if (view === 'watch') {
       showScreen(watchEl);
       connect();
+    } else if (view === 'rating-stats') {
+      const username = params.get('player');
+      const category = ['bullet', 'blitz', 'rapid', 'classical'].includes(params.get('category')) ? params.get('category') : 'bullet';
+      if (username) { ratingStatsReturnUser = username; openRatingStats(username, category, false); }
+      else showHome(false);
     } else if (view === 'players') {
       showScreen(playersEl);
       refreshPlayers('');

@@ -4,7 +4,7 @@ set -u
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 failed=0
 
-for test_file in test-engine.js test-ws.js test-phase2.js test-phase3.js test-phase4.js test-hardening.js; do
+for test_file in test-engine.js test-ws.js test-phase2.js test-phase3.js test-phase4.js test-hardening.js test-challenge.js test-leaderboard-rating.js test-game-session-isolation.js; do
   printf '\n===== %s =====\n' "$test_file"
   if ! node "$project_dir/$test_file"; then
     printf 'FAILED: %s\n' "$test_file"

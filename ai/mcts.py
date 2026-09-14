@@ -19,6 +19,7 @@ import numpy as np
 import torch
 
 from .encoding import encode_batch
+from .endgame import solve_endgame
 from .rules import GameState
 
 
@@ -280,7 +281,15 @@ def search_batch(
     # Search never consumes the public Move list. Keep exact repetition/clock
     # state while avoiding an unbounded history copy for every root and child.
     roots = [Node(state.copy(include_history=False)) for state in states]
-    nonterminal = [root for root in roots if not root.state.is_terminal()]
+    solved: dict[int, SearchResult] = {}
+    for index, state in enumerate(states):
+        result = solve_endgame(state, max_depth=12, piece_limit=2)
+        if result.outcome and result.action is not None:
+            policy = np.zeros(648, dtype=np.float32)
+            policy[result.action] = 1.0
+            solved[index] = SearchResult(result.action, policy)
+    nonterminal = [root for index, root in enumerate(roots)
+                   if index not in solved and not root.state.is_terminal()]
     if nonterminal:
         logits, values = evaluator.predict([root.state for root in nonterminal])
         for root, row, value in zip(nonterminal, logits, values):
@@ -295,7 +304,9 @@ def search_batch(
         leaves: list[Node] = []
         paths: list[list[Edge]] = []
         terminal_values: list[tuple[list[Edge], float]] = []
-        for root in roots:
+        for index, root in enumerate(roots):
+            if index in solved:
+                continue
             node = root
             path: list[Edge] = []
             while node.expanded and node.children:
@@ -323,7 +334,10 @@ def search_batch(
             _backup(path, value)
 
     results: list[SearchResult] = []
-    for root in roots:
+    for index, root in enumerate(roots):
+        if index in solved:
+            results.append(solved[index])
+            continue
         if algorithm == 'gumbel':
             results.append(SearchResult(_gumbel_selected_action(root, gumbel_value_scale, gumbel_maxvisit_init),
                                         _gumbel_policy_target(root, gumbel_value_scale, gumbel_maxvisit_init)))

@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS users (
   rating_classical REAL NOT NULL DEFAULT 1500,
   rd_classical REAL NOT NULL DEFAULT 350,
   vol_classical REAL NOT NULL DEFAULT 0.06,
+  rating_rps4200 REAL NOT NULL DEFAULT 1500,
+  rd_rps4200 REAL NOT NULL DEFAULT 350,
+  vol_rps4200 REAL NOT NULL DEFAULT 0.06,
   wins INTEGER NOT NULL DEFAULT 0,
   losses INTEGER NOT NULL DEFAULT 0,
   draws INTEGER NOT NULL DEFAULT 0,
@@ -62,11 +65,20 @@ CREATE TABLE IF NOT EXISTS games (
   reason TEXT,
   rated INTEGER NOT NULL DEFAULT 0,
   history TEXT NOT NULL DEFAULT '[]',
-  start_position TEXT
+  start_position TEXT,
+  variant TEXT NOT NULL DEFAULT 'standard'
 );
 
 CREATE INDEX IF NOT EXISTS idx_games_blue ON games(blue_user_id, finished_at DESC);
 CREATE INDEX IF NOT EXISTS idx_games_red ON games(red_user_id, finished_at DESC);
+
+-- A durable checkpoint for games still in progress. Finished games remain in
+-- games; this table restores live rooms after a deploy/restart.
+CREATE TABLE IF NOT EXISTS active_games (
+  id TEXT PRIMARY KEY,
+  snapshot TEXT NOT NULL,
+  saved_at INTEGER NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS positions (
   key TEXT PRIMARY KEY,
@@ -86,10 +98,34 @@ CREATE TABLE IF NOT EXISTS opening_moves (
 
 CREATE INDEX IF NOT EXISTS idx_opening_moves_position ON opening_moves(position_key);
 
+CREATE TABLE IF NOT EXISTS analysis_saves (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  base_board TEXT NOT NULL,
+  base_turn TEXT NOT NULL,
+  moves TEXT NOT NULL DEFAULT '[]',
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_analysis_saves_user ON analysis_saves(user_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS analysis_invites (
+  id TEXT PRIMARY KEY,
+  inviter_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  inviter_name TEXT NOT NULL,
+  target_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  target_name TEXT NOT NULL,
+  link TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  resolved_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_analysis_invites_target ON analysis_invites(target_user_id, status, created_at DESC);
+
 `);
 
 // Per-time-control rating categories (Lichess definitions).
-const CATEGORIES = ['bullet', 'blitz', 'rapid', 'classical'];
+const CATEGORIES = ['bullet', 'blitz', 'rapid', 'classical', 'rps4200'];
 
 // Add per-category rating columns to any pre-existing database.
 function migrate() {
@@ -105,6 +141,7 @@ function migrate() {
   }
   const gameCols = new Set(db.prepare('PRAGMA table_info(games)').all().map((c) => c.name));
   if (!gameCols.has('start_position')) db.prepare('ALTER TABLE games ADD COLUMN start_position TEXT').run();
+  if (!gameCols.has('variant')) db.prepare("ALTER TABLE games ADD COLUMN variant TEXT NOT NULL DEFAULT 'standard'").run();
 }
 migrate();
 
@@ -124,6 +161,17 @@ function verifyPassword(password, salt, expectedHash) {
 }
 
 const USERNAME_RE = /^[A-Za-z0-9_-]{2,20}$/;
+// Keep this deliberately small and explicit: usernames are public and are
+// shown to other players, in challenges, chat, and game history.
+const BANNED_USERNAME_WORDS = [
+  'fuck', 'shit', 'cunt', 'bitch', 'nigger', 'nigga', 'faggot', 'fag',
+  'retard', 'kike', 'spic', 'chink', 'whore', 'slut', 'rape', 'nazi',
+];
+
+function usernameContainsBannedWord(username) {
+  const compact = username.toLowerCase().replace(/[^a-z]/g, '');
+  return BANNED_USERNAME_WORDS.some((word) => compact.includes(word));
+}
 
 function publicUser(u) {
   const ratings = {};
@@ -151,6 +199,11 @@ function publicUser(u) {
 function createUser(username, password) {
   if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
     const err = new Error('Username must be 2-20 chars (letters, numbers, _ or -).');
+    err.code = 'BAD_USERNAME';
+    throw err;
+  }
+  if (usernameContainsBannedWord(username)) {
+    const err = new Error('That username is not allowed.');
     err.code = 'BAD_USERNAME';
     throw err;
   }
@@ -201,12 +254,12 @@ function topCategoriesForUser(userId) {
 }
 
 function listPlayers(search = '', limit = 50) {
-  const boundedLimit = Math.max(1, Math.min(50, Math.trunc(Number(limit) || 50)));
+  const boundedLimit = Math.max(1, Math.min(5000, Math.trunc(Number(limit) || 5000)));
   const term = String(search || '').trim().slice(0, 20);
   const escaped = term.replace(/[\\%_]/g, '\\$&');
   const rows = db.prepare(`
     SELECT id, username, wins, losses, draws,
-      rating_bullet, rating_blitz, rating_rapid, rating_classical
+      rating_bullet, rating_blitz, rating_rapid, rating_classical, rating_rps4200
     FROM users
     WHERE username LIKE ? ESCAPE '\\'
     ORDER BY username ASC
@@ -220,6 +273,7 @@ function listPlayers(search = '', limit = 50) {
       blitz: Math.round(row.rating_blitz),
       rapid: Math.round(row.rating_rapid),
       classical: Math.round(row.rating_classical),
+      rps4200: Math.round(row.rating_rps4200),
     },
     wins: row.wins,
     losses: row.losses,
@@ -247,6 +301,21 @@ function listLeaderboards(limit = 10) {
     }));
   }
   return result;
+}
+
+function ratingDistribution(category) {
+  assertCategory(category);
+  return db.prepare('SELECT rating_' + category + ' AS rating FROM users ORDER BY rating_' + category).all()
+    .map((row) => Math.round(row.rating));
+}
+
+function leaderboardRank(category, userId) {
+  assertCategory(category);
+  if (!userId) return null;
+  const row = db.prepare(`SELECT rating_${category} AS rating FROM users WHERE id = ?`).get(userId);
+  if (!row) return null;
+  const count = db.prepare(`SELECT COUNT(*) AS n FROM users WHERE rating_${category} > ?`).get(row.rating);
+  return Number(count.n) + 1;
 }
 
 function verifyCredentials(username, password) {
@@ -325,17 +394,43 @@ function saveGame(g) {
       blue_user_id, red_user_id, blue_name, red_name,
       blue_rating_before, red_rating_before,
       blue_rating_after, red_rating_after,
-      status, result, reason, rated, history
-      , start_position
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      status, result, reason, rated, history, start_position, variant
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     g.id, g.createdAt, g.finishedAt, g.tcInitial, g.tcIncrement,
     g.blueUserId, g.redUserId, g.blueName, g.redName,
     g.blueRatingBefore, g.redRatingBefore,
     g.blueRatingAfter, g.redRatingAfter,
     g.status, g.result, g.reason, g.rated ? 1 : 0, g.history,
-    g.startPosition ? JSON.stringify(g.startPosition) : null
+    g.startPosition ? JSON.stringify(g.startPosition) : null,
+    g.variant || 'standard'
   );
+}
+
+function saveActiveGame(snapshot) {
+  db.prepare(`
+    INSERT INTO active_games (id, snapshot, saved_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET snapshot = excluded.snapshot, saved_at = excluded.saved_at
+  `).run(snapshot.id, JSON.stringify(snapshot), Date.now());
+}
+
+function listActiveGames() {
+  return db.prepare('SELECT id, snapshot, saved_at FROM active_games ORDER BY saved_at ASC').all()
+    .map((row) => {
+      try {
+        const snapshot = JSON.parse(row.snapshot);
+        snapshot.savedAt = row.saved_at;
+        return snapshot;
+      } catch (e) {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function deleteActiveGame(id) {
+  db.prepare('DELETE FROM active_games WHERE id = ?').run(id);
 }
 
 function listGames(userId, limit = 50) {
@@ -364,6 +459,7 @@ function listGames(userId, limit = 50) {
     rated: !!r.rated,
     history: safeParse(r.history),
     startPosition: safeParse(r.start_position),
+    variant: r.variant || 'standard',
   }));
 }
 
@@ -394,6 +490,7 @@ function getGame(id) {
     rated: !!r.rated,
     history: safeParse(r.history),
     startPosition: safeParse(r.start_position),
+    variant: r.variant || 'standard',
   };
 }
 
@@ -440,12 +537,61 @@ function getOpening(key) {
   };
 }
 
+function saveAnalysis(userId, name, baseBoard, baseTurn, moves) {
+  const result = db.prepare('INSERT INTO analysis_saves (user_id, name, base_board, base_turn, moves, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(userId, name, JSON.stringify(baseBoard), baseTurn, JSON.stringify(moves), Date.now());
+  return { id: Number(result.lastInsertRowid), name, baseBoard, baseTurn, moves, createdAt: Date.now() };
+}
+
+function listAnalyses(userId) {
+  return db.prepare('SELECT * FROM analysis_saves WHERE user_id = ? ORDER BY created_at DESC').all(userId).map((row) => ({
+    id: row.id, name: row.name, baseBoard: safeParse(row.base_board), baseTurn: row.base_turn,
+    moves: safeParse(row.moves), createdAt: row.created_at,
+  }));
+}
+
+function deleteAnalysis(userId, analysisId) {
+  return db.prepare('DELETE FROM analysis_saves WHERE id = ? AND user_id = ?').run(Number(analysisId), userId).changes > 0;
+}
+
+function saveAnalysisInvite(invite) {
+  const id = invite.id || crypto.randomBytes(12).toString('hex');
+  const createdAt = invite.createdAt || Date.now();
+  db.prepare(`
+    INSERT INTO analysis_invites
+      (id, inviter_user_id, inviter_name, target_user_id, target_name, link, created_at, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+  `).run(id, invite.inviterUserId, invite.inviterName, invite.targetUserId, invite.targetName, invite.link, createdAt);
+  return { id, from: invite.inviterName, link: invite.link, createdAt };
+}
+
+function listAnalysisInvites(userId) {
+  return db.prepare(`
+    SELECT id, inviter_name, target_name, link, created_at
+    FROM analysis_invites
+    WHERE target_user_id = ? AND status = 'pending'
+    ORDER BY created_at DESC
+  `).all(userId).map((row) => ({
+    id: row.id, from: row.inviter_name, target: row.target_name,
+    link: row.link, createdAt: row.created_at,
+  }));
+}
+
+function resolveAnalysisInvite(id, targetUserId) {
+  return db.prepare(`
+    UPDATE analysis_invites SET status = 'dismissed', resolved_at = ?
+    WHERE id = ? AND target_user_id = ? AND status = 'pending'
+  `).run(Date.now(), id, targetUserId).changes > 0;
+}
+
 module.exports = {
   createUser,
   getUserById,
   getUserByUsername,
   listPlayers,
   listLeaderboards,
+  ratingDistribution,
+  leaderboardRank,
   verifyCredentials,
   createSession,
   getSessionUser,
@@ -455,11 +601,20 @@ module.exports = {
   CATEGORIES,
   incrementStats,
   saveGame,
+  saveActiveGame,
+  listActiveGames,
+  deleteActiveGame,
   listGames,
   listPublicGames,
   getGame,
   recordOpening,
   getOpening,
+  saveAnalysis,
+  listAnalyses,
+  deleteAnalysis,
+  saveAnalysisInvite,
+  listAnalysisInvites,
+  resolveAnalysisInvite,
   publicUser,
   topCategoriesForUser,
   USERNAME_RE,

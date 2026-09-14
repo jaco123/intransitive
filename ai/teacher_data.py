@@ -310,6 +310,15 @@ class TeacherDataset:
             raise ValueError('teacher batch_size must be positive')
         indices = self.validation_indices if validation else self.train_indices
         selected = indices[rng.integers(0, len(indices), size=batch_size)]
+        return self.batch(selected)
+
+    def batch(self, indices: np.ndarray | list[int]) -> tuple[np.ndarray, np.ndarray]:
+        """Encode a deterministic batch from the immutable snapshot index."""
+        selected = np.asarray(indices, dtype=np.int64)
+        if selected.ndim != 1 or not len(selected):
+            raise ValueError('teacher indices must be a non-empty one-dimensional array')
+        if np.any(selected < 0) or np.any(selected >= len(self.boards)):
+            raise IndexError('teacher index out of range')
         states = np.stack([encode_teacher_snapshot(self.boards[index].reshape(9, 9), int(self.turns[index]))
                            for index in selected]).astype(np.float32, copy=False)
         return states, self.values[selected].copy()

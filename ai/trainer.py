@@ -29,7 +29,7 @@ from .encoding import CHANNELS, LEGACY_CHANNELS
 from .mcts import NetworkEvaluator
 from .model import PolicyValueNet
 from .replay import ReplayBuffer
-from .selfplay import SelfPlayPool, arena, generate_self_play
+from .selfplay import SelfPlayPool, arena, generate_self_play, teacher_arena
 from .symmetry import augment_batch
 from .teacher_data import TeacherDataset
 
@@ -75,6 +75,7 @@ def _validate_config(config: dict) -> dict:
     required = {
         'seed', 'network_width', 'network_blocks', 'mcts_simulations', 'self_play_games',
         'self_play_batch_games', 'self_play_workers', 'temperature_plies', 'temperature', 'max_game_plies',
+        'mcts_simulations_initial', 'mcts_simulations_ramp_steps', 'arena_interval_iterations',
         'c_puct', 'dirichlet_alpha', 'root_noise_epsilon', 'search_algorithm',
         'gumbel_max_num_considered_actions', 'gumbel_scale', 'gumbel_value_scale',
         'gumbel_maxvisit_init', 'train_min_samples',
@@ -85,7 +86,10 @@ def _validate_config(config: dict) -> dict:
         'replay_max_bytes', 'checkpoint_keep', 'min_free_bytes', 'amp', 'symmetry_augmentation',
         'status_interval_seconds', 'log_max_bytes', 'teacher_data_enabled', 'teacher_data_dir',
         'teacher_batch_size', 'teacher_value_loss_weight', 'teacher_warmup_steps',
-        'teacher_max_records',
+        'teacher_max_records', 'teacher_vs_nnue', 'nnue_survival_objective',
+        'survival_horizon_plies',
+        'promotion_opponent',
+        'teacher_variant', 'teacher_switch_score', 'teacher_switch_required',
     }
     missing = sorted(required - config.keys())
     if missing:
@@ -106,12 +110,15 @@ def _validate_config(config: dict) -> dict:
     for name, minimum in {
         'seed': 0, 'network_width': 8, 'network_blocks': 1, 'mcts_simulations': 1,
         'self_play_games': 1, 'self_play_batch_games': 1, 'self_play_workers': 1, 'temperature_plies': 0,
+        'mcts_simulations_initial': 1, 'mcts_simulations_ramp_steps': 0, 'arena_interval_iterations': 1,
         'max_game_plies': 1, 'gumbel_max_num_considered_actions': 1,
         'train_min_samples': 1, 'train_batch_size': 1, 'train_epochs': 1,
         'arena_games': 2, 'arena_simulations': 1, 'replay_max_episodes': 1,
         'replay_max_samples': 1, 'replay_max_bytes': 1, 'checkpoint_keep': 2,
         'min_free_bytes': 0, 'teacher_batch_size': 1, 'teacher_warmup_steps': 0,
         'teacher_max_records': 1,
+        'survival_horizon_plies': 1,
+        'teacher_switch_required': 1,
     }.items():
         integer(name, minimum)
     for name, minimum, maximum in (
@@ -124,6 +131,7 @@ def _validate_config(config: dict) -> dict:
         ('promotion_threshold', 0.5, 1.0), ('status_interval_seconds', 0.1, None),
         ('log_max_bytes', 1024.0, None),
         ('teacher_value_loss_weight', 0.0, None),
+        ('teacher_switch_score', 0.5, 1.0),
     ):
         number(name, minimum, maximum)
     if config['search_algorithm'] != 'gumbel':
@@ -142,6 +150,14 @@ def _validate_config(config: dict) -> dict:
         raise ValueError('symmetry_augmentation must be boolean')
     if not isinstance(config['teacher_data_enabled'], bool):
         raise ValueError('teacher_data_enabled must be boolean')
+    if not isinstance(config['teacher_vs_nnue'], bool):
+        raise ValueError('teacher_vs_nnue must be boolean')
+    if not isinstance(config['nnue_survival_objective'], bool):
+        raise ValueError('nnue_survival_objective must be boolean')
+    if config['promotion_opponent'] not in ('incumbent', 'teacher'):
+        raise ValueError('promotion_opponent must be incumbent or teacher')
+    if config['teacher_variant'] not in ('simple', 'advanced'):
+        raise ValueError('teacher_variant must be simple or advanced')
     if not isinstance(config['teacher_data_dir'], str) or not config['teacher_data_dir']:
         raise ValueError('teacher_data_dir must be a non-empty path')
     return config
@@ -246,6 +262,8 @@ class Trainer:
         self.post_fix_game_length_min: int | None = None
         self.post_fix_game_length_max: int | None = None
         self.last_arena: dict = {}
+        self.teacher_variant = self.config.get('teacher_variant', 'simple')
+        self.teacher_beaten_streak = 0
         self.self_play_pool: SelfPlayPool | None = None
         self._restore()
         if not self.statistics_games:
@@ -317,6 +335,8 @@ class Trainer:
         self.post_fix_game_length_min = payload.get('post_fix_game_length_min')
         self.post_fix_game_length_max = payload.get('post_fix_game_length_max')
         self.last_arena = payload.get('last_arena', {})
+        self.teacher_variant = payload.get('teacher_variant', self.teacher_variant)
+        self.teacher_beaten_streak = int(payload.get('teacher_beaten_streak', 0))
         if migrated_representation:
             self.recovery_info = {**(self.recovery_info or {}), 'representation_migration': f'{LEGACY_CHANNELS}->{CHANNELS} channels'}
         restore_rng(payload.get('rng', {}))
@@ -362,6 +382,7 @@ class Trainer:
             'replay_episodes': len(self.replay.paths()), 'replay_samples': self.replay.sample_count(),
             'checkpoint': str(self.checkpoints.latest), 'promoted_checkpoint': str(self.checkpoints.promoted),
             'promoted_step': self.promoted_step, 'device': str(self.device),
+            'teacher_variant': self.teacher_variant, 'teacher_beaten_streak': self.teacher_beaten_streak,
             'cuda_available': torch.cuda.is_available(), 'gpu_name': torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
             'gpu_memory_allocated_bytes': torch.cuda.memory_allocated() if torch.cuda.is_available() else 0,
             'disk_free_bytes': usage.free, 'disk_total_bytes': usage.total, 'last_losses': self.last_losses,
@@ -400,6 +421,7 @@ class Trainer:
             'post_fix_game_length_min': self.post_fix_game_length_min,
             'post_fix_game_length_max': self.post_fix_game_length_max,
             'last_arena': self.last_arena,
+            'teacher_variant': self.teacher_variant, 'teacher_beaten_streak': self.teacher_beaten_streak,
             'config': self.config, 'rng': rng_state(), 'generator_state': self.rng.bit_generator.state,
         }
 
@@ -467,17 +489,87 @@ class Trainer:
                 'teacher_loss': total_teacher / updates, 'teacher_weight': total_teacher_weight / updates,
                 'teacher_batches': teacher_batches, 'loss': total_loss / updates, 'updates': updates}
 
+    def _teacher_validation(self) -> dict:
+        """Measure held-out teacher value fit without changing model or RNG state."""
+        if self.teacher is None:
+            return {}
+        indices = self.teacher.validation_indices[:min(4096, len(self.teacher.validation_indices))]
+        batch_size = min(256, len(indices))
+        total_squared_error = 0.0
+        total_correct = 0
+        total = 0
+        self.model.eval()
+        with torch.inference_mode():
+            for start in range(0, len(indices), batch_size):
+                states, targets = self.teacher.batch(indices[start:start + batch_size])
+                x = torch.from_numpy(states).to(self.device, non_blocking=True)
+                y = torch.from_numpy(targets).to(self.device, non_blocking=True)
+                with torch.autocast(device_type=self.device.type, dtype=torch.float16, enabled=self.amp):
+                    predicted = self.model(x)[1]
+                errors = (predicted.float() - y.float())
+                total_squared_error += float(torch.sum(errors * errors).cpu())
+                total_correct += int(torch.sum((predicted >= 0) == (y >= 0)).cpu())
+                total += len(targets)
+        return {
+            'teacher_validation_loss': total_squared_error / max(1, total),
+            'teacher_validation_sign_accuracy': total_correct / max(1, total),
+            'teacher_validation_samples': total,
+        }
+
     def _promote_or_retain(self) -> dict:
         candidate = NetworkEvaluator(self.model.eval(), self.device, self.amp)
         incumbent_payload = self.checkpoints.load_promoted()
         if incumbent_payload is None:
             self.promoted_step = self.optimizer_step
             return {'promoted': True, 'reason': 'initial_model', 'score': None}
+        common_args = (
+            int(self.config.get('arena_games', 4)),
+            int(self.config.get('arena_simulations', 24)), self.rng,
+            int(self.config.get('max_game_plies', 2000)), self.config['search_algorithm'],
+            self.config['gumbel_max_num_considered_actions'], lambda: self.stop_requested,
+            self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
+            self.config['arena_gumbel_scale'],
+        )
+        if self.config.get('promotion_opponent', 'incumbent') == 'teacher':
+            # The teacher arena has a different keyword ordering from the
+            # incumbent arena.  Keep these explicit so adding teacher-only
+            # search settings cannot silently shift the stop callback into a
+            # numeric parameter.
+            result = teacher_arena(
+                candidate,
+                int(self.config.get('arena_games', 4)),
+                int(self.config.get('arena_simulations', 24)),
+                self.rng,
+                max_game_plies=int(self.config.get('max_game_plies', 2000)),
+                search_algorithm=self.config['search_algorithm'],
+                max_num_considered_actions=self.config['gumbel_max_num_considered_actions'],
+                should_stop=lambda: self.stop_requested,
+                gumbel_value_scale=self.config['gumbel_value_scale'],
+                gumbel_maxvisit_init=self.config['gumbel_maxvisit_init'],
+                arena_gumbel_scale=self.config['arena_gumbel_scale'],
+                teacher_variant=self.teacher_variant,
+            )
+            promoted = not result.get('interrupted') and result['games'] == int(self.config['arena_games']) and result['score'] >= float(self.config.get('promotion_threshold', 0.55))
+            if promoted:
+                self.promoted_step = self.optimizer_step
+            beaten = (not result.get('interrupted') and result['games'] == int(self.config['arena_games'])
+                      and result['score'] >= float(self.config.get('teacher_switch_score', 0.65)))
+            switched = False
+            if self.teacher_variant == 'simple':
+                self.teacher_beaten_streak = self.teacher_beaten_streak + 1 if beaten else 0
+                if self.teacher_beaten_streak >= int(self.config.get('teacher_switch_required', 3)):
+                    self.teacher_variant = 'advanced'
+                    self.teacher_beaten_streak = 0
+                    switched = True
+            result.update({'promoted': promoted, 'incumbent_step': int(incumbent_payload.get('optimizer_step', 0)),
+                           'teacher_variant': self.teacher_variant, 'teacher_beaten_streak': self.teacher_beaten_streak,
+                           'teacher_switched': switched})
+            return result
         old_model = PolicyValueNet(**{key: incumbent_payload['model_config'][key] for key in ('width', 'blocks')}).to(self.device)
         old_model.load_state_dict(migrate_input_channels(incumbent_payload['model'], incumbent_payload.get('model_config', {}), old_model.config))
         old_model.eval()
-        result = arena(candidate, NetworkEvaluator(old_model, self.device, self.amp), int(self.config.get('arena_games', 4)),
-                       int(self.config.get('arena_simulations', 24)), self.rng, int(self.config.get('max_game_plies', 2000)),
+        result = arena(candidate, NetworkEvaluator(old_model, self.device, self.amp), *common_args[:2],
+                       self.rng, int(self.config.get('max_game_plies', 2000)),
                        self.config['search_algorithm'], self.config['gumbel_max_num_considered_actions'], lambda: self.stop_requested,
                        self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
                        self.config['arena_gumbel_scale'])
@@ -489,6 +581,16 @@ class Trainer:
         if self.device.type == 'cuda':
             torch.cuda.empty_cache()
         return result
+
+    def _self_play_simulations(self) -> int:
+        """Use cheap searches early, then smoothly restore full search quality."""
+        maximum = int(self.config['mcts_simulations'])
+        initial = min(maximum, int(self.config.get('mcts_simulations_initial', maximum)))
+        ramp = int(self.config.get('mcts_simulations_ramp_steps', 0))
+        if ramp <= 0 or self.optimizer_step >= ramp:
+            return maximum
+        fraction = self.optimizer_step / ramp
+        return max(initial, min(maximum, round(initial + (maximum - initial) * fraction)))
 
     def run_iteration(self) -> None:
         self._guard_disk()
@@ -508,14 +610,19 @@ class Trainer:
                 self.last_progress_at = time.time()
                 self._write_status('running', 'self-play in progress', self_play=progress)
 
+        self_play_simulations = self._self_play_simulations()
         episodes = generate_self_play(
-            evaluator, int(self.config['self_play_games']), int(self.config['mcts_simulations']),
+            evaluator, int(self.config['self_play_games']), self_play_simulations,
             int(self.config.get('self_play_batch_games', 4)), int(self.config.get('temperature_plies', 12)),
             float(self.config.get('temperature', 1.0)), self.rng, True, int(self.config.get('max_game_plies', 2000)),
             lambda: self.stop_requested, report_self_play, self.config['search_algorithm'],
             self.config['gumbel_max_num_considered_actions'], self.config['gumbel_scale'],
             self.config['gumbel_value_scale'], self.config['gumbel_maxvisit_init'],
-            workers, self.self_play_pool,
+            workers, self.self_play_pool, int(self.config.get('bootstrap_teacher_plies', 0)),
+            bool(self.config.get('teacher_vs_nnue', False)),
+            bool(self.config.get('nnue_survival_objective', False)),
+            int(self.config.get('survival_horizon_plies', 500)),
+            self.teacher_variant,
         )
         next_episode = max([int(path.stem.split('-')[1]) for path in self.replay.paths()] or [0]) + 1
         for episode in episodes:
@@ -540,15 +647,23 @@ class Trainer:
             self.game_length_max = episode.plies if self.game_length_max is None else max(self.game_length_max, episode.plies)
         states, policies, values = self.replay.load()
         self.last_losses = self._train(states, policies, values) if len(states) >= int(self.config.get('train_min_samples', 64)) else {}
+        if self.last_losses:
+            self.last_losses.update(self._teacher_validation())
         stopped = self.stop_requested
         if not stopped:
             self.iteration += 1
-        promotion = self._promote_or_retain() if self.last_losses and not stopped else {'promoted': False, 'reason': 'stop_requested' if stopped else 'replay_warming'}
+        arena_interval = int(self.config.get('arena_interval_iterations', 1))
+        run_arena = self.last_losses and not stopped and ((self.iteration + 1) % arena_interval == 0)
+        promotion = self._promote_or_retain() if run_arena else {
+            'promoted': False,
+            'reason': 'stop_requested' if stopped else ('replay_warming' if not self.last_losses else 'arena_interval'),
+        }
         self.last_arena = promotion if 'games' in promotion else self.last_arena
         payload = self._payload()
         checkpoint = self.checkpoints.save(payload, self.optimizer_step or self.iteration, promote=bool(promotion.get('promoted')))
         elapsed = max(time.monotonic() - started, 1e-6)
         metrics = {'games': len(episodes), 'positions': sum(episode.plies for episode in episodes),
+                   'mcts_simulations': self_play_simulations,
                    'games_per_second': len(episodes) / elapsed, 'positions_per_second': sum(episode.plies for episode in episodes) / elapsed,
                    'replay_samples': len(states), 'checkpoint': str(checkpoint), 'promotion': promotion,
                    'outcomes': dict(batch_outcomes), 'game_length': {

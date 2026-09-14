@@ -1,0 +1,6 @@
+The GameStart, LowTime, Victory, Defeat, and Draw audio files are sourced from
+the Lichess lila repository's public/sound/standard directory:
+https://github.com/lichess-org/lila/tree/master/public/sound/standard
+
+The GameStart file uses Lichess's Confirmation sound because the standard set
+does not contain a file named GameStart.

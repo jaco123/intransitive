@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Intransitive</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <!-- Top navigation -->
   <header id="nav">
     <div class="nav-inner">
       <div class="nav-left">
-        <a id="navBrand" class="nav-brand" href="?">Intransitive</a>
+        <a id="navBrand" class="nav-brand" href="/">Intransitive</a>
         <nav class="nav-links">
           <button id="playBtn" class="nav-link-btn">Play</button>
           <button id="analysisBtn" class="nav-link-btn">Analysis</button>
@@ -32,10 +32,19 @@
             <svg class="nav-profile-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 12a5 5 0 1 0-5-5 5 5 0 0 0 5 5zm0 2c-4.42 0-8 2.24-8 5v1h16v-1c0-2.76-3.58-5-8-5z"/></svg>
             <span id="navUsername"></span>
           </button>
+          <button id="mailBtn" class="nav-mail-btn" title="Inbox" aria-label="Inbox" aria-expanded="false">
+            <svg class="nav-mail-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 5h18a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2zm0 3v9h18V8l-9 5.5L3 8zm9 3.15L19.7 7H4.3L12 11.15z"/></svg>
+            <span id="mailCount" class="mail-count hidden">0</span>
+          </button>
           <button id="settingsBtn" class="nav-settings-btn" title="Settings" aria-label="Settings">
             <svg class="nav-settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.07-.98l2.11-1.65-2-3.46-2.49 1a7.3 7.3 0 0 0-1.7-.98L15 3h-4l-.35 2.93c-.61.25-1.18.58-1.7.98l-2.49-1-2 3.46 2.11 1.65c-.04.32-.08.65-.08.98s.03.66.08.98l-2.11 1.65 2 3.46 2.49-1c.52.4 1.09.73 1.7.98L11 21h4l.35-2.93a7.3 7.3 0 0 0 1.7-.98l2.49 1 2-3.46-2.11-1.65zM13 15.5A3.5 3.5 0 1 1 13 8a3.5 3.5 0 0 1 0 7.5z"/></svg>
           </button>
         </div>
+      </div>
+      <div id="mailPanel" class="mail-panel hidden" role="dialog" aria-label="Inbox">
+        <div class="mail-panel-head">Inbox</div>
+        <div id="challengeInbox" class="mail-list" aria-live="polite"></div>
+        <p id="mailEmpty" class="mail-empty">Your inbox is empty.</p>
       </div>
     </div>
   </header>
@@ -47,7 +56,6 @@
       <button id="returnToGame" type="button" class="btn small primary">Return to game</button>
       <button id="closeGameNotice" type="button" class="btn small">Close</button>
     </div>
-    <section id="challengeInbox" class="challenge-inbox hidden" aria-label="Challenges"></section>
     <main class="lobby">
       <div class="lobby__side">
         <div class="lobby__box">
@@ -62,15 +70,16 @@
             </div>
           </div>
         </div>
-
         <div class="lobby__box discord-box">
-          <div class="lobby__box__top"><span class="title">Come join us:</span></div>
+          <div class="lobby__box__top"><span class="title">Check out:</span></div>
           <div class="lobby__box__content">
             <a class="discord-link" href="https://discord.gg/8wUcgkRFRC" target="_blank" rel="noopener noreferrer">Discord</a>
+            <a class="discord-link youtube-link" href="https://www.youtube.com/@webgoatguy" target="_blank" rel="noopener noreferrer">webgoatguy on YouTube</a>
+            <a class="discord-link" href="https://rps.henhen1227.com/bots" target="_blank" rel="noopener noreferrer">Bots</a>
           </div>
         </div>
 
-        <div class="lobby__box">
+        <div class="lobby__box hidden" aria-hidden="true">
           <div class="lobby__box__top"><span class="title">Chat</span></div>
           <div class="lobby__box__content">
             <div id="chatLog" class="chat-log"></div>
@@ -80,8 +89,11 @@
             </div>
           </div>
         </div>
+        <section class="lobby-active-games" aria-label="Active games">
+          <div id="homeActiveGames" class="home-active-games"></div>
+          <p id="homeActiveGamesEmpty" class="lobby-empty">No active games.</p>
+        </section>
 
-        <section id="homeFeaturedGame" class="home-featured hidden" aria-label="Ongoing game"></section>
       </div>
 
       <div class="lobby__app">
@@ -90,6 +102,11 @@
           <div class="lpools" id="lobbyList"></div>
           <p id="lobbyEmpty" class="lobby-empty">No open games right now. Create a lobby game to appear here.</p>
         </div>
+        <section class="lobby-players-panel" aria-label="Players in lobby">
+          <h2>Players in lobby</h2>
+          <div id="lobbyPlayers" class="lobby-players-list"></div>
+          <span id="lobbyPlayersEmpty" class="muted">No other players online.</span>
+        </section>
       </div>
 
       <div class="lobby__table">
@@ -101,7 +118,7 @@
                 <label for="tcMinutes">Minutes per side</label>
                 <span class="tc-val" id="tcMinutesVal">5</span>
               </div>
-              <input type="range" id="tcMinutes" min="1" max="30" step="1" value="5" />
+              <input type="range" id="tcMinutes" min="1" max="31" step="1" value="5" />
 
               <div class="tc-row">
                 <label for="tcIncrement">Increment in seconds</label>
@@ -119,6 +136,21 @@
               <button class="tc-preset" data-category="rapid" data-min="10" data-inc="0">10+0</button>
               <button class="tc-preset" data-category="rapid" data-min="15" data-inc="10">15+10</button>
               <button class="tc-preset" data-category="classical" data-min="30" data-inc="0">30+0</button>
+              <button class="tc-preset" data-category="infinite" data-min="31" data-inc="0">Infinite</button>
+            </div>
+
+            <div class="variant-select-row">
+              <label class="field-label" for="variantSelect">Variant</label>
+              <select id="variantSelect" class="select">
+                <option value="standard">Standard</option>
+                <option value="rps4200">RPS4200</option>
+              </select>
+            </div>
+
+            <div class="color-choice" id="colorChoice" aria-label="Your color">
+              <button type="button" class="tc-preset" data-color-choice="blue">Blue</button>
+              <button type="button" class="tc-preset active" data-color-choice="random">Random</button>
+              <button type="button" class="tc-preset" data-color-choice="red">Red</button>
             </div>
 
             <div id="timeControlSummary" class="time-control-summary" aria-live="polite">
@@ -128,19 +160,33 @@
               <strong id="timeControlRating">—</strong>
             </div>
 
-            <div class="mode-toggle">
-              <button id="modeRated" class="mode-btn active">Rated</button>
-              <button id="modeCasual" class="mode-btn">Casual</button>
-            </div>
+            <label class="setting-switch rated-setting">
+              <span>Rated</span>
+              <input type="checkbox" id="modeRated" checked />
+              <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            </label>
+            <label class="setting-switch">
+              <span>Public chat</span>
+              <input type="checkbox" id="publicChat" />
+              <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+            </label>
 
             <div class="play-position-setting">
-              <label class="checkbox-label">
-                <input type="checkbox" id="playFromPosition" />
+              <label class="setting-switch">
                 <span>Play from position</span>
+                <input type="checkbox" id="playFromPosition" />
+                <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
               </label>
               <div id="playFromPositionPreview" class="position-preview hidden" aria-label="Position preview">
                 <div id="playPositionBoard" class="board"></div>
               </div>
+            </div>
+            <div id="privateGamePanel" class="private-game-panel hidden">
+              <label class="field-label" for="privateGameLink">Private game link</label>
+              <div class="join-row"><input id="privateGameLink" class="input" readonly /><button id="privateCopyLink" class="btn small">Copy</button></div>
+              <label class="field-label" for="privateOpponent">Challenge a player (optional)</label>
+              <div class="join-row"><input id="privateOpponent" class="input" placeholder="Player name" maxlength="20" autocomplete="off" /><button id="privateChallenge" class="btn small primary">OK</button></div>
+              <button id="privateCancel" class="btn small" type="button">Cancel private game</button>
             </div>
 
             <div class="lobby__start">
@@ -152,9 +198,8 @@
                 <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="12" cy="7.5" r="4"/><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5v.5H4v-.5z"/></g></svg>
                 <span>Create private game</span>
               </button>
-              <button class="button button-metal lobby__start__button" id="aiBtn">
-                <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 3h10a2 2 0 0 1 2 2v2h1a1 1 0 1 1 0 2h-1v2h1a1 1 0 1 1 0 2h-1v2a2 2 0 0 1-2 2h-2v2a1 1 0 1 1-2 0v-2H9v2a1 1 0 1 1-2 0v-2H5a2 2 0 0 1-2-2V9H2a1 1 0 1 1 0-2h1V5a2 2 0 0 1 2-2h2zm0 4a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm10 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2zM8 13h8v2H8v-2z"/></svg>
-                <span>Play against AI</span>
+              <button class="button button-metal lobby__start__button hidden" id="teacherBtn">
+                <span>Play against Teacher</span>
               </button>
             </div>
             <div id="queueStatus" class="queue-status hidden"></div>
@@ -187,6 +232,7 @@
         <button type="button" class="watch-filter" data-category="blitz"><span class="time-control-symbol" data-time-control="blitz" data-icon="&#xe008;" aria-hidden="true"></span> Blitz</button>
         <button type="button" class="watch-filter" data-category="rapid"><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</button>
         <button type="button" class="watch-filter" data-category="classical"><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</button>
+        <button type="button" class="watch-filter" data-category="rps4200"><span class="time-control-symbol" data-time-control="rps4200" data-icon="&#xe006;" aria-hidden="true"></span> RPS4200</button>
       </div>
       <div id="watchList" class="watch-list"></div>
       <p id="watchEmpty" class="history-empty">No active games right now.</p>
@@ -214,10 +260,11 @@
       <h1>Leaderboard</h1>
     </div>
     <section class="leaderboard-grid" aria-label="Leaderboards">
-      <section class="leaderboard-panel" data-category="bullet"><h2><span class="time-control-symbol" data-time-control="bullet" data-icon="&#xe032;" aria-hidden="true"></span> Bullet</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
-      <section class="leaderboard-panel" data-category="blitz"><h2><span class="time-control-symbol" data-time-control="blitz" data-icon="&#xe008;" aria-hidden="true"></span> Blitz</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
-      <section class="leaderboard-panel" data-category="rapid"><h2><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
-      <section class="leaderboard-panel" data-category="classical"><h2><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</h2><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="bullet"><h2><span class="time-control-symbol" data-time-control="bullet" data-icon="&#xe032;" aria-hidden="true"></span> Bullet</h2><div class="rating-distribution" data-distribution="bullet"></div><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="blitz"><h2><span class="time-control-symbol" data-time-control="blitz" data-icon="&#xe008;" aria-hidden="true"></span> Blitz</h2><div class="rating-distribution" data-distribution="blitz"></div><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="rapid"><h2><span class="time-control-symbol" data-time-control="rapid" data-icon="&#xe002;" aria-hidden="true"></span> Rapid</h2><div class="rating-distribution" data-distribution="rapid"></div><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="classical"><h2><span class="time-control-symbol" data-time-control="classical" data-icon="&#xe00a;" aria-hidden="true"></span> Classical</h2><div class="rating-distribution" data-distribution="classical"></div><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
+      <section class="leaderboard-panel" data-category="rps4200"><h2><span class="time-control-symbol" data-time-control="rps4200" data-icon="&#xe006;" aria-hidden="true"></span> RPS4200</h2><div class="rating-distribution" data-distribution="rps4200"></div><table><thead><tr><th>#</th><th>Player</th><th>Rating</th></tr></thead><tbody></tbody></table></section>
     </section>
   </div>
 
@@ -226,20 +273,22 @@
     <div class="game-layout">
       <div class="players-col">
         <div class="player top" id="opponentBar">
-          <button type="button" class="pname profile-link" id="opponentName">Red</button>
+          <div class="player-identity"><button type="button" class="pname profile-link" id="opponentName">Red</button><span class="player-rating-info" id="opponentRatingInfo"></span></div>
           <span class="clock-wrap">
             <span class="grace hidden" id="opponentGrace"></span>
             <span class="clock" id="opponentClock">5:00</span>
           </span>
         </div>
 
-        <div class="board-wrap">
-          <div id="board" class="board"></div>
-          <svg id="liveArrows" class="arrows-layer" viewBox="0 0 100 100"></svg>
+        <div class="board-with-captured">
+          <div id="capturedPieces" class="captured-pieces captured-left" aria-label="Captured pieces"></div>
+          <div class="board-wrap">
+            <div id="board" class="board"></div>
+            <svg id="liveArrows" class="arrows-layer" viewBox="0 0 100 100"></svg>
+          </div>
         </div>
-
         <div class="player bottom" id="playerBar">
-          <span class="pname" id="playerName">Blue</span>
+          <div class="player-identity"><button type="button" class="pname" id="playerName">Blue</button><span class="player-rating-info" id="playerRatingInfo"></span></div>
           <span class="clock-wrap">
             <span class="grace hidden" id="playerGrace"></span>
             <span class="clock" id="playerClock">5:00</span>
@@ -250,8 +299,10 @@
       <aside class="side">
         <div class="side-head">
           <span id="gameMode" class="game-mode hidden"></span>
+          <span id="gameTimeControl" class="game-time-control"></span>
           <div id="gameStatus" class="gamestatus">Waiting…</div>
         </div>
+        <div id="ratingPreview" class="rating-preview hidden" aria-live="polite"></div>
 
         <div class="link-block">
           <label class="field-label">Invite link</label>
@@ -269,11 +320,14 @@
           <button class="icon-btn" type="button" data-move-action="last" aria-label="Jump to last move"><span class="move-nav-icon" data-icon="&#xe034;" aria-hidden="true"></span></button>
           <button class="icon-btn" type="button" data-settings-target="gameMoveSettings" aria-label="Settings"><span class="move-nav-icon" data-icon="&#xe005;" aria-hidden="true"></span></button>
         </div>
-        <div class="move-settings hidden" id="gameMoveSettings"><label><input type="checkbox" data-coordinates-board="board" checked /> Show coordinates</label></div>
+        <div class="move-settings hidden" id="gameMoveSettings">
+          <label><input type="checkbox" data-coordinates-board="board" checked /> Show coordinates</label>
+          <label><input type="checkbox" id="gameFlipBoard" /> Flip board</label>
+        </div>
         <ol id="moves" class="moves"></ol>
 
         <div class="game-chat">
-          <div class="movelist-label">Chat</div>
+          <div class="movelist-label" id="gameChatLabel">Chat</div>
           <div id="gameChatLog" class="chat-log game-chat-log"></div>
           <div class="chat-input-row">
             <input id="gameChatInput" class="input" placeholder="Chat with your opponent…" maxlength="500" autocomplete="off" />
@@ -299,9 +353,15 @@
           <button id="offerDraw" class="icon-btn" title="Offer draw" aria-label="Offer draw">
             <svg viewBox="0 0 640 512" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M323.4 85.2l-96.8 78.4c-16.1 13-19.2 36.4-7 53.1c12.9 17.8 38 21.3 55.3 7.8l99.3-77.2c7-5.4 17-4.2 22.5 2.8s4.2 17-2.8 22.5l-20.9 16.2L512 316.8V128h-.7l-3.9-2.5L434.8 79c-15.3-9.8-33.2-15-51.4-15c-21.8 0-43 7.5-60 21.2zm22.8 124.4l-51.7 40.2C263 274.4 217.3 268 193.7 235.6c-22.2-30.5-16.6-73.1 12.7-96.8l83.2-67.3c-11.6-4.9-24.1-7.4-36.8-7.4C234 64 215.7 69.6 200 80l-72 48V352h28.2l91.4 83.4c19.6 17.9 49.9 16.5 67.8-3.1c5.5-6.1 9.2-13.2 11.1-20.6l17 15.6c19.5 17.9 49.9 16.6 67.8-2.9c4.5-4.9 7.8-10.6 9.9-16.5c19.4 13 45.8 10.3 62.1-7.5c17.9-19.5 16.6-49.9-2.9-67.8l-134.2-123zM16 128c-8.8 0-16 7.2-16 16V352c0 17.7 14.3 32 32 32H64c17.7 0 32-14.3 32-32V128H16zM48 320a16 16 0 1 1 0 32 16 16 0 1 1 0-32zM544 128V352c0 17.7 14.3 32 32 32h32c17.7 0 32-14.3 32-32V144c0-8.8-7.2-16-16-16H544zm32 208a16 16 0 1 1 32 0 16 16 0 1 1 -32 0z"/></svg>
           </button>
+          <button id="takeback" class="icon-btn" title="Request takeback" aria-label="Request takeback"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 9a7 7 0 1 1 2 7"/><path d="M5 4v5h5"/></svg></button>
           <button id="abort" class="icon-btn hidden" title="Abort game" aria-label="Abort game">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 6l12 12"/><path d="M18 6L6 18"/></svg>
           </button>
+        </div>
+        <div id="takebackActions" class="takeback-actions hidden">
+          <span id="takebackText">Opponent requested a takeback</span>
+          <button id="acceptTakeback" class="takeback-yes" type="button" aria-label="Accept takeback" title="Accept takeback">✓</button>
+          <button id="declineTakeback" class="takeback-no" type="button" aria-label="Decline takeback" title="Decline takeback">×</button>
         </div>
 
         <div id="waitingActions" class="waiting-actions hidden">
@@ -320,7 +380,8 @@
         </div>
 
         <div class="actions" id="finishedActions">
-          <button id="rematch" class="btn primary hidden">Rematch</button>
+          <button id="rematch" class="btn hidden">Rematch</button>
+          <button id="spectateRematch" class="btn hidden">Spectate rematch</button>
           <button id="newGame" class="btn hidden">New game</button>
           <button id="finishedAnalysis" class="btn hidden">Analysis board</button>
         </div>
@@ -331,48 +392,75 @@
   <!-- My games / history -->
   <div id="history" class="screen hidden">
     <div class="screen-head">
-      <button id="historyBack" class="btn small" aria-label="Back" title="Back"><span class="back-arrow" aria-hidden="true">‹</span></button>
       <h1>My games</h1>
       <button id="profileLogout" class="btn small profile-logout">Log out</button>
     </div>
     <div id="profilePanel" class="profile-panel"></div>
     <div class="profile-layout">
-      <div id="profileHistory" class="history-list"></div>
       <aside id="profileRatings" class="profile-ratings-side" aria-label="Ratings"></aside>
+      <div class="profile-history-column">
+        <div id="profileGameFilters" class="profile-game-filters">
+          <div class="profile-filter-search">
+            <label for="profileOpponentSearch">Opponent</label>
+            <input id="profileOpponentSearch" class="input" placeholder="Search username" aria-label="Opponent name" />
+          </div>
+          <div class="profile-filter-search">
+            <label for="profileSort">Sort</label>
+            <select id="profileSort" class="input" aria-label="Sort games"><option value="time">Newest first</option><option value="rating">Opponent rating</option></select>
+          </div>
+          <fieldset class="profile-filter-options">
+            <legend>Game type</legend>
+            <label><input type="checkbox" name="profileType" value="rated" checked /> Rated</label>
+            <label><input type="checkbox" name="profileType" value="casual" checked /> Casual</label>
+          </fieldset>
+          <fieldset class="profile-filter-options profile-filter-speeds">
+            <legend>Time control</legend>
+            <label><input type="checkbox" name="profileSpeed" value="bullet" checked /> Bullet</label>
+            <label><input type="checkbox" name="profileSpeed" value="blitz" checked /> Blitz</label>
+            <label><input type="checkbox" name="profileSpeed" value="rapid" checked /> Rapid</label>
+            <label><input type="checkbox" name="profileSpeed" value="classical" checked /> Classical</label>
+            <label><input type="checkbox" name="profileSpeed" value="infinite" checked /> Infinite</label>
+          </fieldset>
+          <fieldset class="profile-filter-options">
+            <legend>Variant</legend>
+            <label><input type="checkbox" name="profileVariant" value="standard" checked /> Standard</label>
+            <label><input type="checkbox" name="profileVariant" value="rps4200" checked /> RPS4200</label>
+          </fieldset>
+          <fieldset class="profile-filter-options">
+            <legend>Result</legend>
+            <label><input type="checkbox" name="profileResult" value="win" checked /> Win</label>
+            <label><input type="checkbox" name="profileResult" value="draw" checked /> Draw</label>
+            <label><input type="checkbox" name="profileResult" value="loss" checked /> Loss</label>
+            <label><input type="checkbox" name="profileResult" value="playing" checked /> Playing</label>
+          </fieldset>
+          <div class="profile-filter-range">
+            <span>Date</span>
+            <input id="profileDateFrom" class="input" type="date" aria-label="From date" />
+            <span aria-hidden="true">–</span>
+            <input id="profileDateTo" class="input" type="date" aria-label="To date" />
+          </div>
+          <div class="profile-filter-range">
+            <span>Opponent rating</span>
+            <input id="profileRatingMin" class="input" type="number" min="0" placeholder="Min" aria-label="Minimum opponent rating" />
+            <span aria-hidden="true">–</span>
+            <input id="profileRatingMax" class="input" type="number" min="0" placeholder="Max" aria-label="Maximum opponent rating" />
+          </div>
+          <div class="profile-filter-range">
+            <span>Moves</span>
+            <input id="profileMovesMin" class="input" type="number" min="0" placeholder="Min" aria-label="Minimum moves" />
+            <span aria-hidden="true">–</span>
+            <input id="profileMovesMax" class="input" type="number" min="0" placeholder="Max" aria-label="Maximum moves" />
+          </div>
+          <button id="profileFiltersClear" class="btn small" type="button">Clear filters</button>
+        </div>
+        <div id="profileHistory" class="history-list"></div>
+      </div>
     </div>
-    <div id="historyList" class="history-list"></div>
   </div>
 
-  <!-- Replay -->
-  <div id="replay" class="screen hidden">
-    <div class="screen-head">
-      <button id="replayBack" class="btn small" aria-label="Back to games" title="Back to games"><span class="back-arrow" aria-hidden="true">‹</span></button>
-      <h1 id="replayTitle">Game</h1>
-    </div>
-    <div class="game-layout">
-      <div class="players-col">
-        <div class="board-wrap">
-          <div id="replayBoard" class="board"></div>
-        </div>
-      </div>
-      <aside class="side">
-        <div id="replayResult" class="gamestatus"></div>
-        <div class="move-nav" id="replayMoveNav" aria-label="Move navigation">
-          <button class="icon-btn" type="button" data-move-action="first" aria-label="Jump to first move"><span class="move-nav-icon" data-icon="&#xe035;" aria-hidden="true"></span></button>
-          <button class="icon-btn" type="button" data-move-action="prev" aria-label="Previous move"><span class="move-nav-icon" data-icon="&#xe027;" aria-hidden="true"></span></button>
-          <button class="icon-btn" type="button" data-move-action="next" aria-label="Next move"><span class="move-nav-icon" data-icon="&#xe026;" aria-hidden="true"></span></button>
-          <button class="icon-btn" type="button" data-move-action="last" aria-label="Jump to last move"><span class="move-nav-icon" data-icon="&#xe034;" aria-hidden="true"></span></button>
-          <button class="icon-btn" type="button" data-settings-target="replayMoveSettings" aria-label="Settings"><span class="move-nav-icon" data-icon="&#xe005;" aria-hidden="true"></span></button>
-        </div>
-        <div class="move-settings hidden" id="replayMoveSettings"><label><input type="checkbox" data-coordinates-board="replayBoard" checked /> Show coordinates</label></div>
-        <div class="movelist-label">Moves</div>
-        <ol id="replayMoves" class="moves"></ol>
-        <div class="actions">
-          <button id="replayPrev" class="btn">‹ Prev</button>
-          <button id="replayNext" class="btn">Next ›</button>
-        </div>
-      </aside>
-    </div>
+  <div id="ratingStats" class="screen hidden">
+    <div class="screen-head"><button id="ratingStatsBack" class="btn small" aria-label="Back">‹</button><h1>Rating statistics</h1></div>
+    <section id="ratingStatsContent" class="rating-stats-card"></section>
   </div>
 
   <!-- Analysis (opening explorer) -->
@@ -383,9 +471,24 @@
     </div>
     <div class="game-layout">
       <div class="players-col">
-        <div class="board-wrap">
-          <div id="explorerBoard" class="board"></div>
-          <svg id="explorerArrows" class="arrows-layer" viewBox="0 0 100 100"></svg>
+        <div id="analysisTopPlayer" class="player analysis-player hidden">
+          <span id="analysisTopName">Red</span>
+          <span id="analysisTopClock" class="clock">—</span>
+        </div>
+        <div class="board-with-captured">
+          <div id="analysisCapturedPieces" class="captured-pieces captured-left" aria-label="Captured pieces"></div>
+          <div class="board-wrap">
+            <div id="explorerBoard" class="board"></div>
+            <svg id="explorerArrows" class="arrows-layer" viewBox="0 0 100 100"></svg>
+          </div>
+        </div>
+        <div id="analysisBottomPlayer" class="player analysis-player hidden">
+          <span id="analysisBottomName">Blue</span>
+          <span id="analysisBottomClock" class="clock">—</span>
+        </div>
+        <div class="analysis-data">
+          <div><label for="analysisFen">FEN</label><input id="analysisFen" class="input" autocomplete="off" /></div>
+          <div><label for="analysisPgn">PGN</label><input id="analysisPgn" class="input" autocomplete="off" /></div>
         </div>
       </div>
       <aside class="side">
@@ -396,9 +499,26 @@
           <button class="icon-btn" type="button" data-move-action="last" aria-label="Jump to last move"><span class="move-nav-icon" data-icon="&#xe034;" aria-hidden="true"></span></button>
           <button class="icon-btn" type="button" data-settings-target="explorerMoveSettings" aria-label="Settings"><span class="move-nav-icon" data-icon="&#xe005;" aria-hidden="true"></span></button>
         </div>
+        <div class="analysis-invite">
+          <button id="analysisInvite" class="btn">Invite</button>
+          <button id="analysisSave" class="btn">Save analysis</button>
+          <button id="analysisSaved" class="btn">Saved analysis</button>
+          <label class="analysis-toggle-row"><span>Sync users</span><button id="analysisSyncUsers" class="toggle-btn" type="button" aria-label="Sync users" aria-pressed="false"><span class="switch-track"><span class="switch-thumb"></span></span></button></label>
+          <label class="analysis-toggle-row"><span>Owner moves only</span><button id="analysisOwnerOnly" class="toggle-btn" type="button" aria-label="Owner moves only" aria-pressed="false"><span class="switch-track"><span class="switch-thumb"></span></span></button></label>
+          <div id="analysisInvitePanel" class="hidden">
+            <div class="join-row"><input id="analysisInviteLink" class="input" readonly /><button id="analysisCopyInvite" class="btn small">Copy</button></div>
+            <div class="join-row"><input id="analysisInviteUser" class="input" placeholder="Username" /><button id="analysisSendInvite" class="btn small primary">Send</button></div>
+          </div>
+          <div id="analysisSavePanel" class="hidden"><div class="join-row"><input id="analysisSaveName" class="input" maxlength="80" placeholder="Analysis name" /><button id="analysisSaveConfirm" class="btn small primary">Save</button></div></div>
+          <div id="analysisSavedPanel" class="hidden"></div>
+        </div>
         <div class="move-settings hidden" id="explorerMoveSettings"><label><input type="checkbox" data-coordinates-board="explorerBoard" checked /> Show coordinates</label></div>
         <div class="movelist-label" id="explorerHistoryLabel">Game moves</div>
         <div id="explorerHistory" class="moves explorer-list" role="list"></div>
+        <div id="analysisContextMenu" class="analysis-context-menu hidden" role="menu">
+          <button type="button" data-analysis-context-action="main" role="menuitem"><span aria-hidden="true">✓</span> Make main line</button>
+          <button type="button" data-analysis-context-action="delete" role="menuitem"><span aria-hidden="true">🗑</span> Delete from here</button>
+        </div>
         <div class="movelist-label" id="explorerOpeningLabel">Opening moves</div>
         <ol id="explorerMoves" class="moves explorer-list"></ol>
       </aside>
@@ -417,6 +537,9 @@
           <div id="editorPaletteTop" class="editor-palette" aria-label="Red pieces"></div>
           <div id="editorBoard" class="board"></div>
           <div id="editorPaletteBottom" class="editor-palette" aria-label="Blue pieces"></div>
+        </div>
+        <div class="analysis-data editor-data">
+          <div><label for="editorFen">FEN</label><input id="editorFen" class="input" autocomplete="off" aria-label="Board FEN" /></div>
         </div>
       </div>
       <aside class="side">
@@ -441,7 +564,7 @@
   <!-- Auth modal -->
   <div id="authModal" class="modal hidden">
     <div class="modal-backdrop" data-close></div>
-    <div class="modal-card">
+    <div class="modal-card auth-card">
       <button id="authClose" class="modal-close" aria-label="Close">×</button>
       <div class="auth-tabs">
         <button id="tabLogin" class="auth-tab active">Log in</button>
@@ -463,10 +586,19 @@
     <div class="modal-card settings-card">
       <button id="settingsClose" class="modal-close" aria-label="Close settings">×</button>
       <h2 id="settingsTitle">Settings</h2>
-      <label class="field-label" for="soundVolume">Sound volume</label>
+      <label class="setting-switch"><span>Light mode</span><input id="lightMode" type="checkbox" /><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+      <label class="setting-switch"><span>Blindfold mode</span><input id="blindfoldMode" type="checkbox" /><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+      <label class="setting-switch"><span>Animations</span><input id="pieceAnimations" type="checkbox" /><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+      <label class="setting-switch"><span>Flip board when Red</span><input id="flipBoardOnRed" type="checkbox" checked /><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+      <label class="setting-switch"><span>Automatically spectate rematch</span><input id="autoSpectateRematch" type="checkbox" /><span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span></label>
+      <label class="field-label" for="boardTheme">Board colors</label>
+      <select id="boardTheme" class="input"><option value="default">Classic</option><option value="light">Light</option><option value="white">White</option><option value="blue">Blue</option><option value="green">Green</option></select>
+      <label class="field-label" for="pieceStyle">Piece design</label>
+      <select id="pieceStyle" class="input"><option value="classic">Classic</option><option value="flat">Geometric</option><option value="outline">Hand-drawn</option><option value="mono">Badge</option><option value="shapes">Shapes</option></select>
+      <label class="field-label" for="soundVolume">Volume</label>
       <div class="settings-volume-row">
-        <input id="soundVolume" type="range" min="0" max="1" step="0.05" value="0.75" aria-label="Sound volume" />
-        <output id="soundVolumeValue" for="soundVolume">75%</output>
+        <input id="soundVolume" type="range" min="0" max="1" step="0.05" value="0.5" aria-label="Volume" />
+        <output id="soundVolumeValue" for="soundVolume">50%</output>
       </div>
     </div>
   </div>
@@ -488,7 +620,7 @@
     </div>
   </div>
 
-  <script src="engine.js"></script>
-  <script src="app.js"></script>
+  <script src="/engine.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>

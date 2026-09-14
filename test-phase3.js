@@ -97,8 +97,7 @@ async function main() {
   const aMatched = await alice.waitFor('queueMatched');
   const bMatched = await bob.waitFor('queueMatched');
   assert.strictEqual(aMatched.gameId, bMatched.gameId, 'both matched into the same game');
-  assert.strictEqual(aMatched.color, 'blue');
-  assert.strictEqual(bMatched.color, 'red');
+  assert.notStrictEqual(aMatched.color, bMatched.color, 'matched players must receive opposite colors');
   pass('accepting a seek pairs both players into one game');
 
   const aState = await alice.waitFor('state');

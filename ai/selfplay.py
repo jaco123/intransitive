@@ -10,9 +10,10 @@ import numpy as np
 import torch
 
 from .encoding import encode_state
+from .heuristic_teacher import choose_action_variant, hardcoded_move_score
 from .mcts import NetworkEvaluator, choose_from_policy, search_batch
 from .model import PolicyValueNet
-from .rules import BLUE, GameState
+from .rules import BLUE, RED, GameState
 
 
 @dataclass
@@ -30,42 +31,89 @@ def _value_for_player(state: GameState, player: int) -> float:
     return 1.0 if state.winner == player else -1.0
 
 
+def _value_for_record(state: GameState, player: int, teacher_side: int | None,
+                      survival_objective: bool, survival_horizon_plies: int) -> float:
+    if not survival_objective or teacher_side is None or player == teacher_side:
+        return _value_for_player(state, player)
+    progress = min(1.0, max(0.0, len(state.history) / max(1, survival_horizon_plies)))
+    survival = 2.0 * progress - 1.0
+    return float(np.clip(survival + 0.15 * _value_for_player(state, player), -1.0, 1.0))
+
+
 def _generate_self_play_single(
     evaluator: NetworkEvaluator, games: int, simulations: int, batch_games: int,
     temperature_plies: int, temperature: float, rng: np.random.Generator,
     root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
     search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4, gumbel_scale: float = 1.0,
     gumbel_value_scale: float = 0.1, gumbel_maxvisit_init: float = 50.0,
+    bootstrap_teacher_plies: int = 0, teacher_vs_nnue: bool = False,
+    game_index_offset: int = 0, survival_objective: bool = False,
+    survival_horizon_plies: int = 500, teacher_variant: str = 'simple',
 ) -> list[Episode]:
     """Advance several games in lockstep so leaf evaluations are GPU-batched."""
     episodes: list[Episode] = []
     remaining = int(games)
     while remaining:
         count = min(remaining, max(1, int(batch_games)))
+        batch_start = game_index_offset + (int(games) - remaining)
         active = [GameState() for _ in range(count)]
-        records: list[list[tuple[np.ndarray, np.ndarray, int]]] = [[] for _ in active]
+        teacher_sides = [BLUE if (batch_start + index) % 2 == 0 else -BLUE for index in range(count)]
+        records: list[list[tuple[np.ndarray, np.ndarray, int, float]]] = [[] for _ in active]
         ply = 0
         while active:
             if should_stop is not None and should_stop():
                 return episodes
-            results = search_batch(active, evaluator, simulations, add_noise=root_noise, rng=rng,
-                                   algorithm=search_algorithm, max_num_considered_actions=max_num_considered_actions,
-                                   gumbel_scale=gumbel_scale, gumbel_value_scale=gumbel_value_scale,
-                                   gumbel_maxvisit_init=gumbel_maxvisit_init)
+            search_indices = [index for index, state in enumerate(active)
+                              if not (teacher_vs_nnue and state.turn == teacher_sides[index])]
+            if teacher_vs_nnue:
+                search_results = {}
+                if search_indices:
+                    searched = search_batch(
+                        [active[index] for index in search_indices], evaluator, simulations,
+                        add_noise=root_noise, rng=rng, algorithm=search_algorithm,
+                        max_num_considered_actions=max_num_considered_actions,
+                        gumbel_scale=gumbel_scale, gumbel_value_scale=gumbel_value_scale,
+                        gumbel_maxvisit_init=gumbel_maxvisit_init)
+                    search_results = dict(zip(search_indices, searched))
+            elif ply < bootstrap_teacher_plies:
+                search_results = {}
+            else:
+                search_results = dict(enumerate(search_batch(
+                    active, evaluator, simulations, add_noise=root_noise, rng=rng,
+                    algorithm=search_algorithm, max_num_considered_actions=max_num_considered_actions,
+                    gumbel_scale=gumbel_scale, gumbel_value_scale=gumbel_value_scale,
+                    gumbel_maxvisit_init=gumbel_maxvisit_init)))
             next_active: list[GameState] = []
-            next_records: list[list[tuple[np.ndarray, np.ndarray, int]]] = []
-            for state, result, record in zip(active, results, records):
+            next_records: list[list[tuple[np.ndarray, np.ndarray, int, float]]] = []
+            next_teacher_sides: list[int] = []
+            for index, (state, record) in enumerate(zip(active, records)):
                 player = state.turn
-                record.append((encode_state(state), result.policy, player))
-                if search_algorithm == 'gumbel':
-                    action = result.action
+                if index not in search_results:
+                    teacher_action = choose_action_variant(state, teacher_variant).action
+                    teacher_policy = np.zeros(648, dtype=np.float32)
+                    teacher_policy[teacher_action] = 1.0
+                    action = teacher_action
+                    policy = teacher_policy
+                else:
+                    result = search_results[index]
+                    policy = result.policy
+                    if search_algorithm == 'gumbel':
+                        action = result.action
+                    else:
+                        action = choose_from_policy(result.policy, temperature if ply < temperature_plies else 0.0, rng)
                     if action is None:
                         raise RuntimeError('non-terminal Gumbel search returned no action')
-                else:
-                    action = choose_from_policy(result.policy, temperature if ply < temperature_plies else 0.0, rng)
+                record.append((encode_state(state), policy, player, hardcoded_move_score(state, int(action))))
                 state.play(action)
                 if state.is_terminal():
-                    values = np.asarray([_value_for_player(state, side) for _, _, side in record], dtype=np.float32)
+                    teacher_side = teacher_sides[index] if teacher_vs_nnue else None
+                    values = np.asarray([_value_for_record(
+                        state, side, teacher_side, survival_objective, survival_horizon_plies)
+                        for _, _, side, shaping in record], dtype=np.float32)
+                    values = np.asarray([
+                        np.clip(value + 0.20 * shaping, -1.0, 1.0)
+                        for value, (_, _, _, shaping) in zip(values, record)
+                    ], dtype=np.float32)
                     episodes.append(Episode(
                         np.stack([item[0] for item in record]).astype(np.float32),
                         np.stack([item[1] for item in record]).astype(np.float32),
@@ -75,7 +123,8 @@ def _generate_self_play_single(
                 else:
                     next_active.append(state)
                     next_records.append(record)
-            active, records = next_active, next_records
+                    next_teacher_sides.append(teacher_sides[index])
+            active, records, teacher_sides = next_active, next_records, next_teacher_sides
             ply += 1
             if progress is not None:
                 progress({'active_games': len(active), 'completed_games': len(episodes), 'ply': ply})
@@ -103,7 +152,9 @@ def _persistent_worker_entry(index, command_queue, result_queue, stop_event) -> 
             try:
                 (games, seed, next_model_config, model_state, device_name, simulations, batch_games,
                  temperature_plies, temperature, root_noise, max_game_plies, search_algorithm,
-                 max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init) = command
+                 max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init,
+                 bootstrap_teacher_plies, teacher_vs_nnue, game_index_offset,
+                 survival_objective, survival_horizon_plies, teacher_variant) = command
                 if model is None or model_config != next_model_config:
                     model = PolicyValueNet(**{key: next_model_config[key] for key in ('width', 'blocks')})
                     model_config = dict(next_model_config)
@@ -120,7 +171,8 @@ def _persistent_worker_entry(index, command_queue, result_queue, stop_event) -> 
                     evaluator, games, simulations, batch_games, temperature_plies, temperature,
                     np.random.default_rng(seed), root_noise, max_game_plies, stop_event.is_set,
                     report, search_algorithm, max_num_considered_actions, gumbel_scale,
-                    gumbel_value_scale, gumbel_maxvisit_init,
+                    gumbel_value_scale, gumbel_maxvisit_init, bootstrap_teacher_plies,
+                    teacher_vs_nnue, game_index_offset, survival_objective, survival_horizon_plies, teacher_variant,
                 )
                 result_queue.put(('done', index, episodes))
             except BaseException as error:
@@ -160,7 +212,9 @@ class SelfPlayPool:
         temperature_plies: int, temperature: float, rng: np.random.Generator,
         root_noise: bool, max_game_plies: int, should_stop, progress, search_algorithm: str,
         max_num_considered_actions: int, gumbel_scale: float, gumbel_value_scale: float,
-        gumbel_maxvisit_init: float,
+        gumbel_maxvisit_init: float, bootstrap_teacher_plies: int = 0,
+        teacher_vs_nnue: bool = False, survival_objective: bool = False,
+        survival_horizon_plies: int = 500, teacher_variant: str = 'simple',
     ) -> list[Episode]:
         if self._closed:
             raise RuntimeError('self-play pool is closed')
@@ -190,11 +244,14 @@ class SelfPlayPool:
         command_args = (evaluator.model.config, model_state, str(evaluator.device), simulations,
                         batch_games, temperature_plies, temperature, root_noise, max_game_plies,
                         search_algorithm, max_num_considered_actions, gumbel_scale,
-                        gumbel_value_scale, gumbel_maxvisit_init)
+                        gumbel_value_scale, gumbel_maxvisit_init, bootstrap_teacher_plies,
+                        teacher_vs_nnue, survival_objective, survival_horizon_plies, teacher_variant)
         try:
             self._stop_event.clear()
+            offset = 0
             for index, count in enumerate(counts):
-                self._commands[index].put((count, seeds[index], *command_args))
+                self._commands[index].put((count, seeds[index], *command_args[:16], offset, *command_args[16:]))
+                offset += count
             while len(completed) < worker_count:
                 if should_stop is not None and should_stop():
                     self._stop_event.set()
@@ -263,13 +320,16 @@ def _generate_self_play_processes(
     temperature_plies: int, temperature: float, rng: np.random.Generator,
     root_noise: bool, max_game_plies: int, should_stop, progress, search_algorithm: str,
     max_num_considered_actions: int, gumbel_scale: float, gumbel_value_scale: float,
-    gumbel_maxvisit_init: float, workers: int,
+    gumbel_maxvisit_init: float, workers: int, bootstrap_teacher_plies: int = 0,
+    teacher_vs_nnue: bool = False, survival_objective: bool = False,
+    survival_horizon_plies: int = 500, teacher_variant: str = 'simple',
 ) -> list[Episode]:
     """Run a bounded pool for callers that do not retain one between iterations."""
     with SelfPlayPool(workers, str(evaluator.device)) as pool:
         return pool.run(evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
                         root_noise, max_game_plies, should_stop, progress, search_algorithm,
-                        max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init)
+                        max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init,
+                        bootstrap_teacher_plies, teacher_vs_nnue, survival_objective, survival_horizon_plies, teacher_variant)
 
 
 def generate_self_play(
@@ -278,7 +338,9 @@ def generate_self_play(
     root_noise: bool = True, max_game_plies: int = 2000, should_stop=None, progress=None,
     search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4, gumbel_scale: float = 1.0,
     gumbel_value_scale: float = 0.1, gumbel_maxvisit_init: float = 50.0,
-    workers: int = 1, actor_pool: SelfPlayPool | None = None,
+    workers: int = 1, actor_pool: SelfPlayPool | None = None, bootstrap_teacher_plies: int = 0,
+    teacher_vs_nnue: bool = False, survival_objective: bool = False,
+    survival_horizon_plies: int = 500, teacher_variant: str = 'simple',
 ) -> list[Episode]:
     """Generate lockstep GPU batches, optionally using isolated CPU actors."""
     games = int(games)
@@ -290,6 +352,7 @@ def generate_self_play(
             evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
             root_noise, max_game_plies, should_stop, progress, search_algorithm,
             max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init,
+            bootstrap_teacher_plies, teacher_vs_nnue, 0, survival_objective, survival_horizon_plies, teacher_variant,
         )
     if workers > games:
         raise ValueError('self-play workers cannot exceed games')
@@ -300,11 +363,14 @@ def generate_self_play(
             evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
             root_noise, max_game_plies, should_stop, progress, search_algorithm,
             max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init,
+            bootstrap_teacher_plies, teacher_vs_nnue, survival_objective, survival_horizon_plies, teacher_variant,
         )
     return _generate_self_play_processes(
         evaluator, games, simulations, batch_games, temperature_plies, temperature, rng,
         root_noise, max_game_plies, should_stop, progress, search_algorithm,
         max_num_considered_actions, gumbel_scale, gumbel_value_scale, gumbel_maxvisit_init, workers,
+        bootstrap_teacher_plies, teacher_vs_nnue,
+        survival_objective, survival_horizon_plies, teacher_variant,
     )
 
 
@@ -313,7 +379,7 @@ def play_arena_game(
     simulations: int, rng: np.random.Generator, max_game_plies: int = 2000,
     search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
     gumbel_value_scale: float = 0.1, gumbel_maxvisit_init: float = 50.0,
-    gumbel_scale: float = 0.0,
+    gumbel_scale: float = 0.0, teacher_variant: str = 'simple',
 ) -> str:
     state = GameState()
     while not state.is_terminal():
@@ -366,3 +432,72 @@ def arena(
     score = (wins + 0.5 * draws) / max(1, completed)
     return {'games': completed, 'pairs': completed // 2, 'wins': wins, 'draws': draws, 'losses': losses, 'score': score,
             'interrupted': bool(should_stop is not None and should_stop())}
+
+
+def play_teacher_arena_game(
+    candidate: NetworkEvaluator, candidate_color: int, simulations: int,
+    rng: np.random.Generator, max_game_plies: int = 2000,
+    search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
+    gumbel_value_scale: float = 0.1, gumbel_maxvisit_init: float = 50.0,
+    gumbel_scale: float = 0.0, teacher_variant: str = 'simple',
+) -> str:
+    """Play one evaluation game with the deterministic bootstrap teacher."""
+    state = GameState()
+    while not state.is_terminal():
+        if state.turn == candidate_color:
+            result = search_batch(
+                [state], candidate, simulations, add_noise=False, rng=rng,
+                algorithm=search_algorithm,
+                max_num_considered_actions=max_num_considered_actions,
+                gumbel_scale=gumbel_scale,
+                gumbel_value_scale=gumbel_value_scale,
+                gumbel_maxvisit_init=gumbel_maxvisit_init,
+            )[0]
+            action = result.action
+        else:
+            action = choose_action_variant(state, teacher_variant).action
+        if action is None:
+            raise RuntimeError('arena player returned no legal action')
+        state.play(int(action))
+        if state.ply_count > max_game_plies:
+            raise RuntimeError('teacher arena exceeded configured safety horizon')
+    return 'draw' if state.status == 'draw' else ('candidate' if state.winner == candidate_color else 'teacher')
+
+
+def teacher_arena(
+    candidate: NetworkEvaluator, games: int, simulations: int,
+    rng: np.random.Generator, max_game_plies: int = 2000,
+    search_algorithm: str = 'gumbel', max_num_considered_actions: int = 4,
+    should_stop=None, gumbel_value_scale: float = 0.1,
+    gumbel_maxvisit_init: float = 50.0, arena_gumbel_scale: float = 1.0,
+    teacher_variant: str = 'simple',
+) -> dict:
+    """Evaluate a candidate against the current teacher, alternating colors."""
+    if int(games) < 2 or int(games) % 2:
+        raise ValueError('teacher arena games must be a positive even number')
+    wins = draws = losses = completed = 0
+    for _ in range(int(games) // 2):
+        if should_stop is not None and should_stop():
+            break
+        pair_seed = int(rng.integers(0, np.iinfo(np.int64).max, dtype=np.int64))
+        for candidate_color in (BLUE, RED):
+            pair_rng = np.random.default_rng(pair_seed)
+            result = play_teacher_arena_game(
+                candidate, candidate_color, simulations, pair_rng, max_game_plies,
+                search_algorithm, max_num_considered_actions, gumbel_value_scale,
+                gumbel_maxvisit_init, arena_gumbel_scale, teacher_variant,
+            )
+            completed += 1
+            if result == 'draw':
+                draws += 1
+            elif result == 'candidate':
+                wins += 1
+            else:
+                losses += 1
+    score = (wins + 0.5 * draws) / max(1, completed)
+    return {
+        'games': completed, 'pairs': completed // 2, 'wins': wins,
+        'draws': draws, 'losses': losses, 'score': score,
+        'opponent': 'teacher',
+        'interrupted': bool(should_stop is not None and should_stop()),
+    }
