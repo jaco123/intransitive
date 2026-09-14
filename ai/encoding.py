@@ -61,27 +61,6 @@ def encode_state(state: GameState) -> np.ndarray:
     return planes
 
 
-def encode_teacher_snapshot(board: np.ndarray, turn: int) -> np.ndarray:
-    """Encode a position without inventing unavailable path history.
-
-    Teacher FEN records contain only a board and side to move.  The current
-    board is therefore placed in the newest board plane, while older boards,
-    the halfmove clock, and repetition planes remain zero (unknown).  This is
-    deliberately different from constructing a ``GameState`` and pretending
-    that the snapshot began a fresh game.
-    """
-    board = np.asarray(board)
-    if board.shape != (SIZE, SIZE):
-        raise ValueError('teacher board must be 9x9')
-    if turn not in (1, -1):
-        raise ValueError('teacher turn must be blue or red')
-    values = np.asarray((1, 2, 3, -1, -2, -3), dtype=board.dtype)
-    planes = np.zeros((CHANNELS, SIZE, SIZE), dtype=np.float32)
-    planes[:6] = np.equal(board[None, ...], values[:, None, None]).astype(np.float32)
-    planes[HISTORY_STEPS * 6] = 1.0 if turn == BLUE else -1.0
-    return planes
-
-
 def encode_batch(states: list[GameState]) -> np.ndarray:
     if not states:
         return np.empty((0, CHANNELS, SIZE, SIZE), dtype=np.float32)

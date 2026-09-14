@@ -3,7 +3,8 @@
 The Gumbel path follows DeepMind mctx's Full Gumbel MuZero structure: legal
 root actions are sampled without replacement with Gumbel-Top-k, simulations
 are allocated by sequential halving, unvisited root Q values are completed by
-the mixed value estimate, and the resulting improved policy is trained.
+the mixed value estimate, and the resulting improved policy is used to select
+the move.
 Interior nodes use the deterministic completed-policy selection rule. Nodes
 are never transposition-merged because repetition and the halfmove clock are
 path-dependent.
@@ -203,7 +204,7 @@ def _select_gumbel_root(node: Node, value_scale: float = 0.1, maxvisit_init: flo
 
 def _gumbel_selected_action(root: Node, value_scale: float = 0.1,
                             maxvisit_init: float = 50.0) -> int | None:
-    """Return mctx's executed root action, separate from its train target."""
+    """Return the executed root action, separate from its policy target."""
     if not root.children:
         return None
     edges = list(root.children.values())
@@ -258,7 +259,7 @@ def _gumbel_policy_target(root: Node, value_scale: float = 0.1, maxvisit_init: f
 
 @dataclass(frozen=True)
 class SearchResult:
-    """The action to execute and the distinct policy target for training."""
+    """The action to execute and the distinct policy target."""
 
     action: int | None
     policy: np.ndarray

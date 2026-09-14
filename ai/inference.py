@@ -17,16 +17,57 @@ import numpy as np
 import torch
 
 from .checkpoint import CheckpointManager
+from .encoding import CHANNELS, LEGACY_CHANNELS
 from .mcts import NetworkEvaluator, search_batch
 from .model import PolicyValueNet
 from .rules import BLUE, RED, GameState, encode_action
-from .trainer import load_config, migrate_input_channels
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path('/home/ubuntu/intransitive-ai-data')
 CHECKPOINT_DIR = DATA_DIR / 'checkpoints'
 PROMOTED_PATH = CHECKPOINT_DIR / 'promoted.pt'
 REQUEST_ID = re.compile(r'^[A-Za-z0-9_-]{1,80}$')
+
+
+def _reject_duplicate_json_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f'duplicate config key: {key}')
+        result[key] = value
+    return result
+
+
+def load_config(path: Path) -> dict:
+    """Load only the configuration needed by the promoted runtime model."""
+    with path.open(encoding='utf-8') as source:
+        config = json.load(source, object_pairs_hook=_reject_duplicate_json_keys)
+    if not isinstance(config, dict):
+        raise ValueError('AI config must be a JSON object')
+    required = (
+        'network_width', 'network_blocks', 'mcts_simulations', 'amp',
+        'search_algorithm',
+        'gumbel_max_num_considered_actions', 'gumbel_value_scale',
+        'gumbel_maxvisit_init',
+    )
+    missing = [key for key in required if key not in config]
+    if missing:
+        raise ValueError(f'AI config is missing: {", ".join(missing)}')
+    return config
+
+
+def migrate_input_channels(model_state: dict, saved_config: dict, expected: dict) -> dict:
+    """Zero-pad only the new rule-derived observation planes for old models."""
+    if saved_config == expected:
+        return model_state
+    compatible = all(saved_config.get(key) == expected.get(key) for key in ('width', 'blocks', 'action_count'))
+    stem_weight = model_state.get('stem.0.weight')
+    if not (compatible and saved_config.get('in_channels') == LEGACY_CHANNELS and expected['in_channels'] == CHANNELS and stem_weight is not None):
+        raise RuntimeError(f'checkpoint model config {saved_config} does not match {expected}')
+    padding = torch.zeros((stem_weight.shape[0], CHANNELS - LEGACY_CHANNELS, *stem_weight.shape[2:]), dtype=stem_weight.dtype)
+    migrated = dict(model_state)
+    migrated['stem.0.weight'] = torch.cat((stem_weight, padding), dim=1)
+    return migrated
 
 
 def reply(payload: dict) -> None:
@@ -38,7 +79,7 @@ def load_promoted() -> tuple[NetworkEvaluator, dict]:
     config = load_config(ROOT / 'config.json')
     if PROMOTED_PATH.parent.resolve() != CHECKPOINT_DIR.resolve() or not PROMOTED_PATH.is_file():
         raise RuntimeError('the promoted AI checkpoint is unavailable')
-    manager = CheckpointManager(CHECKPOINT_DIR, config['checkpoint_keep'])
+    manager = CheckpointManager(CHECKPOINT_DIR)
     payload = manager.load_promoted()
     if not isinstance(payload, dict) or not isinstance(payload.get('model'), dict):
         raise RuntimeError('the promoted AI checkpoint is invalid')

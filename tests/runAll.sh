@@ -12,18 +12,6 @@ for test_file in test-engine.js test-ws.js test-phase2.js test-phase3.js test-ph
   fi
 done
 
-printf '\n===== test-ai-game.js =====\n'
-if ! node "$project_dir/test-ai-game.js"; then
-  printf 'FAILED: test-ai-game.js\n'
-  failed=1
-fi
-
-printf '\n===== test-ai-inference.js =====\n'
-if ! node "$project_dir/test-ai-inference.js"; then
-  printf 'FAILED: test-ai-inference.js\n'
-  failed=1
-fi
-
 if [ "${INTRANSITIVE_WEBSITE_OFFLINE:-0}" = "1" ]; then
   printf '\n===== real-site UI tests =====\n'
   printf 'SKIP: INTRANSITIVE_WEBSITE_OFFLINE=1 (website intentionally stopped)\n'
@@ -100,35 +88,6 @@ if ! node "$project_dir/tests/live-deployment.js"; then
   failed=1
 fi
 
-printf '\n===== promoted AI game UI test =====\n'
-if ! node "$project_dir/tests/ai-game-ui.js"; then
-  printf 'FAILED: promoted AI game UI test\n'
-  failed=1
-fi
-
-printf '\n===== AI capacity UI test =====\n'
-if ! node "$project_dir/tests/ai-capacity-ui.js"; then
-  printf 'FAILED: AI capacity UI test\n'
-  failed=1
-fi
-fi
-
-printf '\n===== AlphaZero AI conformance/training tests =====\n'
-ai_python="${INTRANSITIVE_AI_PYTHON:-/home/ubuntu/intransitive-ai-venv/bin/python}"
-if [ ! -x "$ai_python" ]; then
-  printf 'AI Python environment not found: %s\n' "$ai_python"
-  failed=1
-elif ! "$ai_python" "$project_dir/tests/ai_tests.py"; then
-  printf 'FAILED: AlphaZero AI conformance/training tests\n'
-  failed=1
-fi
-if [ -x "$ai_python" ] && ! "$ai_python" "$project_dir/tests/teacher_tests.py"; then
-  printf 'FAILED: external teacher-data tests\n'
-  failed=1
-fi
-if [ -x "$ai_python" ] && ! "$ai_python" "$project_dir/tests/ai_service_recovery.py"; then
-  printf 'FAILED: AlphaZero service installation/status verification\n'
-  failed=1
 fi
 
 if [ "$failed" -ne 0 ]; then

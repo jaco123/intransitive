@@ -1,8 +1,8 @@
 """A high-throughput mirror of engine.js, with conformance tests against it.
 
 The website's engine.js is authoritative.  This module intentionally contains
-only rule mechanics, not evaluation features: the trainer must learn from
-self-play rather than from hand-authored positional knowledge.
+only rule mechanics, not evaluation features: the runtime evaluator supplies
+positional estimates separately.
 """
 
 from __future__ import annotations

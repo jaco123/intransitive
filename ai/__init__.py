@@ -1,4 +1,4 @@
-"""AlphaZero-style self-play training for the canonical Intransitive rules."""
+"""Neural-network inference support for the canonical Intransitive rules."""
 
 from .encoding import ACTION_COUNT, decode_action, encode_action, encode_state
 from .rules import GameState, initial_board
