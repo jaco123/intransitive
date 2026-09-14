@@ -77,7 +77,6 @@
   const gameLinkEl = $('gameLink');
   const createBtn = $('createBtn');
   const aiBtn = $('aiBtn');
-  const teacherBtn = $('teacherBtn');
   const joinBtn = $('joinBtn');
   const joinInput = $('joinInput');
   const tcMinutesEl = $('tcMinutes');
@@ -3774,19 +3773,6 @@ let inboxAudioContext = null;
     if (t) pending.session = t;
     // Keep an existing game connection when returning to the lobby so the
     // server can reject a duplicate AI-game request on the same socket.
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(pending));
-      pending = null;
-    } else {
-      connect();
-    }
-  });
-
-  teacherBtn.addEventListener('click', () => {
-    homeErrorEl.classList.add('hidden');
-    pending = { type: 'createAI', aiType: 'teacher', timeControl: parseTimeControl(), variant: selectedVariant(), publicChat: !!(publicChatEl && publicChatEl.checked) };
-    const t = sessionToken();
-    if (t) pending.session = t;
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify(pending));
       pending = null;

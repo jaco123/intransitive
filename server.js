@@ -14,7 +14,6 @@ const db = require('./db.js');
 const rating = require('./rating.js');
 const { buildRatingPreview, roundedDelta } = require('./rating-preview.js');
 const aiInference = require('./ai-inference.js');
-const heuristicTeacher = require('./heuristic-teacher.js');
 
 const ROOT = __dirname;
 const PORT = process.env.PORT || 8090;
@@ -198,7 +197,6 @@ function newGame(timeControl, casual, startPosition, options = {}) {
     rematchOffer: null,     // color that offered a rematch
     spectators: new Set(),  // spectator WebSockets
     aiGame: !!options.aiGame,
-    aiType: options.aiType || null,
     aiColor: options.aiColor || null,
     aiPending: false,
     aiOperation: null,
@@ -329,9 +327,9 @@ function seatFor(user, ws, tc, variant = 'standard') {
   return makeSeat(user, ws, variant === 'rps4200' ? 'rps4200' : timeControlCategory(tc));
 }
 
-function aiSeat(tc, aiType = 'neural', variant = 'standard') {
+function aiSeat(tc, variant = 'standard') {
   return makeSeat(null, null, variant === 'rps4200' ? 'rps4200' : timeControlCategory(tc), {
-    ai: true, username: aiType === 'teacher' ? 'Bootstrap Teacher' : 'Intransitive AI',
+    ai: true, username: 'Intransitive AI',
   });
 }
 
@@ -537,7 +535,6 @@ function snapshot(g, color, spectating) {
     takebackBlocked: takebackBlockedState(g),
     rematchOffer: g.rematchOffer || null,
     computer: !!g.aiGame,
-    aiType: g.aiType || null,
     aiThinking: !!g.aiPending,
     aiError: g.aiError || null,
   };
@@ -943,31 +940,6 @@ function requestAiMove(g) {
   if (!g.aiGame || g.status !== 'playing' || g.aiPending || g.game.turn !== g.aiColor) return;
   g.aiPending = true;
   g.aiError = null;
-  if (g.aiType === 'teacher') {
-    setImmediate(() => {
-      if (games.get(g.id) !== g || g.status !== 'playing' || !g.aiPending) return;
-      try {
-        const move = heuristicTeacher.chooseMove(g.game);
-        const result = g.game.move(move.fromC, move.fromR, move.toC, move.toR);
-        if (!result.ok) throw new Error('teacher returned an illegal move');
-        g.aiPending = false;
-        g.clocks.redMs += g.timeControl.increment * 1000;
-        const recordedMove = g.game.history[g.game.history.length - 1];
-        if (recordedMove) { recordedMove.color = 'red'; recordedMove.clockAfterMs = Math.max(0, Math.round(g.clocks.redMs)); }
-        if (g.game.status !== 'playing') {
-          if (g.game.status === 'draw') finishGame(g, 'draw', g.game.drawReason);
-          else finishGame(g, g.game.winner, engine.getWinner(g.game.board) ? 'goal' : 'noMoves');
-        } else {
-          g.clocks.running = g.game.turn;
-          g.clocks.lastTick = Date.now();
-          broadcastState(g);
-        }
-      } catch (error) {
-        failAiMove(g, 'Teacher move failed. You can retry.');
-      }
-    });
-    return;
-  }
   const requestSerial = ++g.aiRequestSerial;
   const request = {
     history: aiHistory(g),
@@ -1618,8 +1590,7 @@ function handleCreateAi(ws, msg) {
     send(ws, { type: 'error', message: 'You are already in an AI game. Return to that game before starting another.' });
     return;
   }
-  const aiType = msg.aiType === 'teacher' ? 'teacher' : 'neural';
-  if (aiType === 'neural' && aiGames.size >= MAX_AI_GAMES) {
+  if (aiGames.size >= MAX_AI_GAMES) {
     send(ws, { type: 'error', message: 'AI games are at capacity. Please try again shortly.' });
     return;
   }
@@ -1627,12 +1598,12 @@ function handleCreateAi(ws, msg) {
   const g = newGame(msg.timeControl, true, undefined, {
     variant: normalizeVariant(msg.variant),
     publicChat: msg.publicChat === true,
-    aiGame: true, aiType, aiColor: 'red', persistHistory: false,
+    aiGame: true, aiColor: 'red', persistHistory: false,
   });
   games.set(g.id, g);
   aiGames.add(g);
   g.blue = seatFor(user, ws, g.timeControl, g.variant);
-  g.red = aiSeat(g.timeControl, aiType, g.variant);
+  g.red = aiSeat(g.timeControl, g.variant);
   slotBySocket.set(ws, { gameId: g.id, color: 'blue' });
   send(ws, { type: 'created', gameId: g.id, color: 'blue', token: g.blue.token });
   startGame(g);
