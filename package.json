@@ -17,5 +17,9 @@
   },
   "devDependencies": {
     "playwright": "^1.55.1"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true,
+    "fsevents@2.3.2": true
   }
 }
