@@ -161,6 +161,7 @@
   const analysisFenEl = $('analysisFen');
   const analysisPgnEl = $('analysisPgn');
   const analysisInviteEl = $('analysisInvite');
+  const analysisBoardEditorEl = $('analysisBoardEditor');
   const analysisSaveEl = $('analysisSave');
   const analysisSavedEl = $('analysisSaved');
   const analysisSavePanelEl = $('analysisSavePanel');
@@ -169,6 +170,7 @@
   const analysisSavedPanelEl = $('analysisSavedPanel');
   const analysisSyncUsersEl = $('analysisSyncUsers');
   const analysisOwnerOnlyEl = $('analysisOwnerOnly');
+  const settingsLogoutEl = $('settingsLogout');
   const analysisInvitePanelEl = $('analysisInvitePanel');
   const analysisInviteLinkEl = $('analysisInviteLink');
   const analysisCopyInviteEl = $('analysisCopyInvite');
@@ -320,7 +322,26 @@
     loadSerial: 0,
   };
   let analysisRoomId = null;
+  let analysisJoinedRoomId = null;
   let analysisRoomOwner = false;
+  let analysisShared = false;
+
+  function analysisOwnerTokenForRoom() {
+    if (!analysisRoomId) return null;
+    try { return localStorage.getItem('rps_analysis_owner_' + analysisRoomId) || null; } catch (e) { return null; }
+  }
+
+  function rememberAnalysisOwnerToken(token) {
+    if (!analysisRoomId || typeof token !== 'string' || !token) return;
+    try { localStorage.setItem('rps_analysis_owner_' + analysisRoomId, token); } catch (e) {}
+  }
+
+  function joinAnalysisRoom() {
+    if (!analysisRoomId || !ws || ws.readyState !== WebSocket.OPEN || analysisJoinedRoomId === analysisRoomId) return;
+    const ownerToken = analysisOwnerTokenForRoom();
+    ws.send(JSON.stringify({ type: 'analysisJoin', analysisId: analysisRoomId, ...(ownerToken ? { ownerToken } : {}) }));
+    analysisJoinedRoomId = analysisRoomId;
+  }
   let analysisSyncUsers = false;
   let analysisOwnerOnly = false;
   let analysisSavedContextItem = null;
@@ -333,14 +354,19 @@
     type: 'rock',
     turn: 'blue',
     orientation: 'blue',
-    tool: { kind: 'piece', color: 'blue', type: 'rock' },
+    tool: { kind: 'cursor' },
   };
   let editorCursorPoint = null;
   let playPosition = null;  // { board, turn } while Play from position is enabled
 
   function loadPreferences() {
-    try { return { light: false, blindfold: false, animations: false, flipOnRed: true, autoSpectateRematch: false, boardTheme: 'default', pieceStyle: 'classic', ...JSON.parse(localStorage.getItem(PREF_KEY) || '{}') }; }
-    catch (e) { return { light: false, blindfold: false, animations: false, flipOnRed: true, autoSpectateRematch: false, boardTheme: 'default', pieceStyle: 'classic' }; }
+    const defaults = { light: false, blindfold: false, animations: false, flipOnRed: true, autoSpectateRematch: false, boardTheme: 'default', pieceStyle: 'classic' };
+    try {
+      const saved = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
+      if (saved.pieceStyle === 'original') saved.pieceStyle = 'rounded';
+      if (saved.pieceStyle === 'immortal') saved.pieceStyle = 'mythic';
+      return { ...defaults, ...saved };
+    } catch (e) { return defaults; }
   }
   function savePreferences() { try { localStorage.setItem(PREF_KEY, JSON.stringify(preferences)); } catch (e) {} }
   function applyPreferences() {
@@ -348,7 +374,7 @@
     document.body.classList.toggle('blindfold-mode', !!preferences.blindfold);
     document.body.classList.toggle('no-piece-animations', !preferences.animations);
     for (const theme of ['default', 'light', 'white', 'blue', 'green']) document.body.classList.toggle('board-theme-' + theme, preferences.boardTheme === theme);
-    for (const style of ['classic', 'flat', 'outline', 'mono', 'shapes']) document.body.classList.toggle('piece-style-' + style, preferences.pieceStyle === style);
+    for (const style of ['classic', 'rounded', 'mythic', 'flat', 'outline', 'mono', 'shapes']) document.body.classList.toggle('piece-style-' + style, preferences.pieceStyle === style);
     if (lightModeEl) lightModeEl.checked = !!preferences.light;
     if (blindfoldModeEl) blindfoldModeEl.checked = !!preferences.blindfold;
     if (pieceAnimationsEl) pieceAnimationsEl.checked = !!preferences.animations;
@@ -396,6 +422,21 @@
     const style = preferences && preferences.pieceStyle ? preferences.pieceStyle : 'classic';
     const open = '<svg class="piece-svg-' + style + '" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">';
 
+    // Classic uses the credited SVG asset set from intransitive-assets.
+    if (style === 'classic') {
+      const assetColor = color === 'red' ? 'red' : 'blue';
+      const assetType = ['rock', 'paper', 'scissors'].includes(type) ? type : 'rock';
+      const assetScaleClass = assetType === 'rock' ? ' piece-img-rock' : assetType === 'scissors' ? ' piece-img-scissors' : '';
+      return '<img draggable="false" class="piece-img' + assetScaleClass + ' piece-svg-classic" src="/assets/pieces/classic/' + assetColor + '_' + assetType + '.svg" alt="" aria-hidden="true">';
+    }
+
+    if (style === 'mythic') {
+      const assetColor = color === 'red' ? 'red' : 'blue';
+      const assetType = ['rock', 'paper', 'scissors'].includes(type) ? type : 'rock';
+      return '<img draggable="false" class="piece-img' + (assetType === 'rock' ? ' piece-img-rock' : '') + ' piece-svg-mythic" src="/assets/pieces/immortal/' + assetColor + '_' + assetType + '.webp" alt="" aria-hidden="true">';
+    }
+
+    // The former built-in default is retained as Rounded.
     // Each selectable style has its own geometry. Player colour remains the
     // primary fill in every set so a design change never obscures ownership.
     if (style === 'flat') {
@@ -1352,9 +1393,15 @@ let inboxAudioContext = null;
         return;
       }
       if (!config.canStart(piece, sq, e)) {
+        // Invalid sources (opponent pieces, wrong-turn pieces, or locked
+        // analysis pieces) must not start a native or custom drag.
+        e.preventDefault();
         if (config.canClickTarget && config.canClickTarget(sq, piece, e)) {
           beginPieceDrag(config, sq, piece,
             config.boardEl.querySelector(`.sq[data-c="${sq.c}"][data-r="${sq.r}"]`), e, 'target');
+          // A target may still be clicked to complete a move, but it must
+          // never create a draggable piece or drag ghost of its own.
+          activePieceDrag.clickOnly = true;
         }
         return;
       }
@@ -1393,6 +1440,7 @@ let inboxAudioContext = null;
     }
     const d = activePieceDrag;
     if (!d) return;
+    if (d.clickOnly) return;
     if (d.painting) {
       const target = squareFromBoardPoint(e.clientX, e.clientY, d.config.boardEl, d.config.orientationFn());
       if (!target) {
@@ -1426,6 +1474,7 @@ let inboxAudioContext = null;
     }
     if (!d.moved && (d.piece || d.sourceKind === 'paint') && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) > 5) {
       d.moved = true;
+      if (d.config.onDragStart && d.sq) d.config.onDragStart(d.sq, d.piece);
       d.ghost = document.createElement('div');
       d.ghost.className = 'drag-ghost';
       d.ghost.innerHTML = d.piece ? pieceSvg(d.piece.type, d.piece.color) : (d.config.ghostMarkup ? d.config.ghostMarkup() : '');
@@ -1469,7 +1518,8 @@ let inboxAudioContext = null;
     if (d.ghost) d.ghost.remove();
     const target = squareFromBoardPoint(e.clientX, e.clientY, d.config.boardEl, d.config.orientationFn());
     const sameSquare = d.moved && d.sq && target && d.sq.c === target.c && d.sq.r === target.r;
-    if (sameSquare) d.config.onClick(d.sq, d.piece, d.sourceKind, d.wasSelected);
+    if (sameSquare && d.config.onSameSquare) d.config.onSameSquare(d.sq, d.piece, d.sourceKind);
+    else if (sameSquare) d.config.onClick(d.sq, d.piece, d.sourceKind, d.wasSelected);
     else if (d.moved) d.config.onDrop(d.sq, target, d.piece, d.sourceKind);
     else d.config.onClick(d.sq, d.piece, d.sourceKind, d.wasSelected);
   });
@@ -1506,7 +1556,8 @@ let inboxAudioContext = null;
       const session = sessionToken();
       if (session) ws.send(JSON.stringify({ type: 'identify', session }));
       ws.send(JSON.stringify({ type: 'presence', screen: currentScreenName }));
-      if (analysisRoomId) ws.send(JSON.stringify({ type: 'analysisJoin', analysisId: analysisRoomId }));
+      analysisJoinedRoomId = null;
+      joinAnalysisRoom();
       if (pending) {
         ws.send(JSON.stringify(pending));
         pending = null;
@@ -1514,6 +1565,7 @@ let inboxAudioContext = null;
     };
     ws.onmessage = (ev) => handleMessage(JSON.parse(ev.data));
     ws.onclose = () => {
+      analysisJoinedRoomId = null;
       if (reconnectTimer) return;
       if (gameId && myToken) {
         gameStatusEl.textContent = 'Disconnected — reconnecting…';
@@ -1635,6 +1687,10 @@ let inboxAudioContext = null;
         seeks = msg.seeks || [];
         renderLobbyPlayers(msg.lobbyPlayers || []);
         renderLobby();
+        // The websocket identifies the current user before broadcasting this
+        // lobby update. Refresh the directory then so the Active group does
+        // not wait for the five-second polling interval.
+        if (currentScreenName === 'players') refreshPlayers(playersSearchEl.value);
         break;
 
       case 'challengeList':
@@ -1706,7 +1762,7 @@ let inboxAudioContext = null;
           };
           analysisInvites = [normalized, ...analysisInvites.filter((item) => item.id !== normalized.id)];
           renderChallengeInbox();
-          notifyMail((normalized.from || 'A player') + ' invited you to a study.');
+          notifyMail((normalized.from || 'A player') + ' invited you to an analysis.');
         }
         break;
       }
@@ -1716,18 +1772,21 @@ let inboxAudioContext = null;
         analysisSyncUsers = !!msg.syncUsers;
         analysisOwnerOnly = !!msg.ownerMovesOnly;
         analysisRoomOwner = !!msg.owner;
+        analysisShared = !!msg.shared;
+        if (msg.ownerToken) rememberAnalysisOwnerToken(msg.ownerToken);
         updateAnalysisCollaborationControls();
         break;
 
       case 'analysisState': {
         if (msg.analysisId !== analysisRoomId || !analysisSyncUsers || !Array.isArray(msg.moves) || msg.moves.length > 2000) break;
-        const validMoves = msg.moves.every((move) => move && [move.fromC, move.fromR, move.toC, move.toR]
+        const remoteMoves = msg.moves.map((move) => typeof move === 'string' ? parseMoveString(move) : move);
+        const validMoves = remoteMoves.length === msg.moves.length && remoteMoves.every((move) => move && [move.fromC, move.fromR, move.toC, move.toR]
           .every((value) => Number.isInteger(value) && value >= 0 && value < SIZE));
         if (!validMoves) break;
         suppressNextAnalysisBroadcast = true;
         applyingRemoteAnalysis = true;
         try {
-          openAnalysis(msg.baseBoard, msg.baseTurn, false, msg.moves, { variant: msg.variant }, msg.analysisId, true);
+          openAnalysis(msg.baseBoard, msg.baseTurn, false, remoteMoves, { variant: msg.variant }, msg.analysisId, true);
         } catch (error) {
           console.warn('Could not apply synchronized analysis state.', error);
         } finally {
@@ -2108,6 +2167,7 @@ let inboxAudioContext = null;
   function showHome(updateUrl = true) {
     if (updateUrl) history.pushState({ rpsScreen: 'home' }, '', '/');
     showScreen(homeEl);
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'lobbyRefresh' }));
     renderPositionPreview();
     renderInGameNotice();
     refreshSessionUser();
@@ -2212,7 +2272,7 @@ let inboxAudioContext = null;
         const item = document.createElement('div');
         item.className = 'mail-item';
         item.dataset.analysisInviteId = invite.id;
-        item.innerHTML = '<span><strong>' + escapeHtml(invite.from || 'A player') + '</strong> invited you to a study.</span>' +
+        item.innerHTML = '<span><strong>' + escapeHtml(invite.from || 'A player') + '</strong> invited you to an analysis.</span>' +
           '<button type="button" class="btn small primary" data-analysis-invite-action="open">Open</button>';
         challengeInboxEl.appendChild(item);
         continue;
@@ -2315,17 +2375,27 @@ let inboxAudioContext = null;
     return variantSelectEl && variantSelectEl.value === 'rps4200' ? 'rps4200' : 'standard';
   }
 
+  const INCREMENT_VALUES = Array.from({ length: 16 }, (_, index) => index).concat([20, 25, 30]);
+  function incrementValue() {
+    const index = Math.max(0, Math.min(INCREMENT_VALUES.length - 1, Number(tcIncrementEl.value) || 0));
+    return INCREMENT_VALUES[index];
+  }
+  function incrementIndex(value) {
+    const index = INCREMENT_VALUES.indexOf(Number(value));
+    return index >= 0 ? index : 0;
+  }
+
   function parseTimeControl() {
     const minutes = Number(tcMinutesEl.value);
     return {
       initial: minutes >= 31 ? 0 : minutes * 60,
-      increment: Number(tcIncrementEl.value),
+      increment: incrementValue(),
     };
   }
 
   function syncTimeControlUI() {
     const min = tcMinutesEl.value;
-    const inc = tcIncrementEl.value;
+    const inc = String(incrementValue());
     tcMinutesValEl.textContent = Number(min) >= 31 || Number(min) === 0 ? 'Infinite' : min;
     tcIncrementValEl.textContent = inc;
     for (const b of tcPresetsEl.querySelectorAll('.tc-preset')) {
@@ -2390,6 +2460,7 @@ let inboxAudioContext = null;
       navUserEl.classList.add('hidden');
       if (mailPanelEl) mailPanelEl.classList.add('hidden');
     }
+    if (settingsLogoutEl) settingsLogoutEl.classList.toggle('hidden', !(s && s.user));
     renderTimeControlSummary();
   }
 
@@ -3087,13 +3158,23 @@ let inboxAudioContext = null;
   }
 
   function updateAnalysisCollaborationControls() {
+    const syncRow = analysisSyncUsersEl && analysisSyncUsersEl.closest('.analysis-toggle-row');
+    const ownerRow = analysisOwnerOnlyEl && analysisOwnerOnlyEl.closest('.analysis-toggle-row');
+    if (syncRow) syncRow.classList.toggle('hidden', !analysisShared);
+    if (ownerRow) ownerRow.classList.toggle('hidden', !analysisShared);
     if (analysisSyncUsersEl) {
       analysisSyncUsersEl.classList.toggle('active', analysisSyncUsers);
       analysisSyncUsersEl.setAttribute('aria-pressed', String(analysisSyncUsers));
+      analysisSyncUsersEl.disabled = !analysisRoomOwner;
+      analysisSyncUsersEl.setAttribute('aria-disabled', String(!analysisRoomOwner));
+      analysisSyncUsersEl.title = analysisRoomOwner ? '' : 'Only the creator can change this setting';
     }
     if (analysisOwnerOnlyEl) {
       analysisOwnerOnlyEl.classList.toggle('active', analysisOwnerOnly);
       analysisOwnerOnlyEl.setAttribute('aria-pressed', String(analysisOwnerOnly));
+      analysisOwnerOnlyEl.disabled = !analysisRoomOwner;
+      analysisOwnerOnlyEl.setAttribute('aria-disabled', String(!analysisRoomOwner));
+      analysisOwnerOnlyEl.title = analysisRoomOwner ? '' : 'Only the creator can change this setting';
     }
   }
 
@@ -3110,7 +3191,7 @@ let inboxAudioContext = null;
 
   function openAnalysis(baseBoard, turn, pushHistory = true, gameHistory = [], gameContext = null, roomId = null, remote = false) {
     gameHistory = Array.isArray(gameHistory) ? gameHistory.slice() : [];
-    explorer.baseBoard = baseBoard || null;
+    explorer.baseBoard = baseBoard ? engine.cloneBoard(baseBoard) : null;
     explorer.baseTurn = turn || 'blue';
     explorer.variant = gameContext && gameContext.variant === 'rps4200' ? 'rps4200' : 'standard';
     explorer.nodes = new Map();
@@ -3126,7 +3207,8 @@ let inboxAudioContext = null;
     explorer.gameContext = gameContext;
     analysisRoomId = roomId || analysisRoomId || Math.random().toString(36).slice(2, 14);
     analysisRoomOwner = !remote;
-    if (!remote) { analysisSyncUsers = false; analysisOwnerOnly = false; }
+    analysisShared = false;
+    if (!remote) { analysisSyncUsers = true; analysisOwnerOnly = false; }
     updateAnalysisCollaborationControls();
     if (explorer.gameContext) explorer.gameContext.mainLeafId = node.id;
     explorerArrows.length = 0;
@@ -3134,7 +3216,10 @@ let inboxAudioContext = null;
     showScreen(explorerEl);
     // Render the supplied game history immediately; the opening request then
     // enriches the same position with statistics without blanking the view.
-    const start = baseBoard ? engine.cloneBoard(baseBoard) : defaultBoardForVariant(explorer.variant);
+    const start = explorer.baseBoard ? engine.cloneBoard(explorer.baseBoard) : defaultBoardForVariant(explorer.variant);
+    // RPS4200 has a randomized initial position. Keep the exact generated
+    // position so navigation, invitations, and reloads all refer to this game.
+    if (!explorer.baseBoard && explorer.variant === 'rps4200') explorer.baseBoard = engine.cloneBoard(start);
     let board = start;
     let currentTurn = explorer.baseTurn;
     for (const move of gameHistory) {
@@ -3143,7 +3228,7 @@ let inboxAudioContext = null;
     }
     explorer.position = { key: engine.boardToString(board) + ':' + currentTurn[0], board, turn: currentTurn };
     renderExplorer();
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'analysisJoin', analysisId: analysisRoomId }));
+    joinAnalysisRoom();
     loadExplorer();
   }
 
@@ -3182,9 +3267,24 @@ let inboxAudioContext = null;
   }
 
   function openEditor(pushHistory = true) {
+    editor.tool = { kind: 'cursor' };
     if (pushHistory) history.pushState({ rpsScreen: 'editor' }, '', '/editor');
     showScreen(editorEl);
     renderEditor();
+  }
+
+  function updateAnalysisRoute() {
+    if (!analysisRoomId || !explorer.position || !explorerEl || explorerEl.classList.contains('hidden')) return;
+    const params = new URLSearchParams();
+    if (explorer.baseBoard) params.set('board', engine.boardToString(explorer.baseBoard));
+    if (explorer.baseTurn === 'red') params.set('turn', 'red');
+    if (explorer.variant === 'rps4200') params.set('variant', 'rps4200');
+    const moves = (explorer.path || []).slice(0, explorer.step);
+    if (moves.length) params.set('moves', moves.join(','));
+    const path = '/analysis/' + encodeURIComponent(analysisRoomId);
+    const target = path + (params.toString() ? '?' + params.toString() : '');
+    const current = location.pathname + location.search;
+    if (current !== target) history.replaceState({ rpsScreen: 'analysis' }, '', target);
   }
 
   function renderExplorer() {
@@ -3222,9 +3322,11 @@ let inboxAudioContext = null;
     const pgn = renderAnalysisPgn();
     if (analysisFenEl) analysisFenEl.value = fen;
     if (analysisPgnEl) analysisPgnEl.value = pgn || '...';
+    updateAnalysisRoute();
     if (analysisInviteLinkEl) {
       const analysisPath = '/analysis/' + encodeURIComponent(analysisRoomId || '');
-      analysisInviteLinkEl.value = location.origin + analysisPath + '?board=' + encodeURIComponent(engine.boardToString((explorer.baseBoard || defaultBoardForVariant(explorer.variant)))) + '&turn=' + encodeURIComponent(explorer.baseTurn) + '&variant=' + encodeURIComponent(explorer.variant) + '&moves=' + encodeURIComponent((explorer.path || []).join(','));
+      const inviteBoard = explorer.baseBoard || defaultBoardForVariant(explorer.variant);
+      analysisInviteLinkEl.value = location.origin + analysisPath + '?board=' + encodeURIComponent(engine.boardToString(inviteBoard)) + '&turn=' + encodeURIComponent(explorer.baseTurn) + '&variant=' + encodeURIComponent(explorer.variant) + '&moves=' + encodeURIComponent((explorer.path || []).slice(0, explorer.step).join(','));
     }
     broadcastAnalysisState();
   }
@@ -3490,9 +3592,9 @@ let inboxAudioContext = null;
         statEl.innerHTML =
           '<span class="stat-wrap">' +
             '<span class="stat-percentages">' +
-              '<span class="stat-percent win" data-center="' + (winPct / 2) + '">' + formatExplorerPercent(winPct) + '</span>' +
-              '<span class="stat-percent draw" data-center="' + (winPct + drawPct / 2) + '">' + formatExplorerPercent(drawPct) + '</span>' +
-              '<span class="stat-percent loss" data-center="' + (winPct + drawPct + lossPct / 2) + '">' + formatExplorerPercent(lossPct) + '</span>' +
+              (winPct > 0 ? '<span class="stat-percent win" data-center="' + (winPct / 2) + '">' + formatExplorerPercent(winPct) + '</span>' : '') +
+              (drawPct > 0 ? '<span class="stat-percent draw" data-center="' + (winPct + drawPct / 2) + '">' + formatExplorerPercent(drawPct) + '</span>' : '') +
+              (lossPct > 0 ? '<span class="stat-percent loss" data-center="' + (winPct + drawPct + lossPct / 2) + '">' + formatExplorerPercent(lossPct) + '</span>' : '') +
             '</span>' +
             '<span class="stat-bar">' +
               '<span class="seg win" style="flex:' + winPct + ' 1 0"></span>' +
@@ -3738,7 +3840,7 @@ let inboxAudioContext = null;
     const b = e.target.closest('.tc-preset');
     if (!b) return;
     tcMinutesEl.value = b.dataset.min;
-    tcIncrementEl.value = b.dataset.inc;
+    tcIncrementEl.value = String(incrementIndex(b.dataset.inc));
     syncTimeControlUI();
   });
   modeRatedEl.addEventListener('change', () => setRatedMode(modeRatedEl.checked));
@@ -3982,6 +4084,7 @@ let inboxAudioContext = null;
     mailBtn.setAttribute('aria-expanded', 'false');
   });
   profileLogoutEl.addEventListener('click', logout);
+  if (settingsLogoutEl) settingsLogoutEl.addEventListener('click', logout);
   authCloseEl.addEventListener('click', closeAuth);
   settingsCloseEl.addEventListener('click', closeSettings);
   soundVolumeEl.addEventListener('input', () => setSoundVolume(soundVolumeEl.value));
@@ -4093,6 +4196,13 @@ let inboxAudioContext = null;
 
   // Analysis (opening explorer) + board editor events
   analysisBtn.addEventListener('click', () => openAnalysis(null, 'blue'));
+  if (analysisBoardEditorEl) analysisBoardEditorEl.addEventListener('click', () => {
+    if (!explorer.position) return;
+    editor.board = engine.cloneBoard(explorer.position.board);
+    editor.turn = explorer.position.turn;
+    editor.orientation = 'blue';
+    openEditor();
+  });
   analysisInviteEl.addEventListener('click', () => {
     analysisInvitePanelEl.classList.toggle('hidden');
     if (analysisInvitePanelEl.classList.contains('hidden')) return;
@@ -4160,6 +4270,7 @@ let inboxAudioContext = null;
     ws.send(JSON.stringify({ type: 'analysisInvite', targetUsername: username, link: analysisInviteLinkEl.value, session: sessionToken() }));
   });
   analysisSyncUsersEl.addEventListener('click', () => {
+    if (!analysisRoomOwner) return;
     analysisSyncUsers = !analysisSyncUsers;
     updateAnalysisCollaborationControls();
     if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'analysisSettings', analysisId: analysisRoomId, syncUsers: analysisSyncUsers, ownerMovesOnly: analysisOwnerOnly }));
@@ -4453,10 +4564,21 @@ let inboxAudioContext = null;
     canClickTarget: () => !!selected || !!premove,
     canStartEmpty: () => !!state && state.status === 'playing' && !state.spectating && (canMoveNow() || premoveAllowed()),
     getWasSelected: (sq) => !!(selected && selected.c === sq.c && selected.r === sq.r),
+    onDragStart: (sq) => { selectPiece(sq.c, sq.r); render(); },
+    onSameSquare: (sq) => { selectPiece(sq.c, sq.r); render(); },
     onClick: (sq, piece, sourceKind, wasSelected) => handleClick(sq.c, sq.r, sq.c, sq.r, wasSelected),
     onDrop: (from, target) => {
+      // A drag to any non-source square ends the current selection first.
+      // This also removes stale legal-move dots before validating the drop.
+      clearSelection();
+      render();
       if (target) tryPlayMove(from.c, from.r, target.c, target.r);
-      else { clearSelection(); render(); }
+      // Keep an invalid release from leaving indicators from the drag-start
+      // render behind if another board event ran during pointerup.
+      if (!target || !isLegalTarget(from.c, from.r, target.c, target.r)) {
+        clearSelection();
+        boardEl.querySelectorAll('.mv-dot').forEach((dot) => dot.remove());
+      }
     },
   });
   setupPieceDragging({
@@ -4466,6 +4588,8 @@ let inboxAudioContext = null;
     canStart: (piece) => analysisCanEdit() && !!explorer.position && piece.color === explorer.position.turn,
     canClickTarget: () => !!explorer.selected,
     canStartEmpty: () => !!explorer.position && !!explorer.selected,
+    onDragStart: (sq) => { explorer.selected = sq; renderExplorer(); },
+    onSameSquare: (sq) => { explorer.selected = sq; renderExplorer(); },
     onClick: (sq) => {
       if (!explorer.position) return;
       const piece = explorer.position.board[sq.r][sq.c];

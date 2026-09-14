@@ -1,0 +1,15 @@
+<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+  <!-- Created with SVG-edit - https://github.com/SVG-Edit/svgedit-->
+  <g class="layer">
+    <title>Layer 1</title>
+    <g id="scissor-half-1" transform="rotate(-25 26.6285 32.0071) matrix(1 0 0 1 18.3785 7.25706)">
+      <path fill="#b6752b" stroke="#191006" stroke-width="1.5" d="m 16.05 9.9 l 0 39.6 c -3.98 -1.5 -2.655 -26.5 -3.85 -39.6 l 3.85 0 z" id="blade-1" stroke-linejoin="round"/>
+      <path fill="#d9a05e" stroke="#191006" stroke-width="2" d="m 0 9.9 a 3.96 3.3 90 0 0 16.5 0 a 3.96 3.3 90 0 0 -16.5 0 m 4.75 0 a 3.5 5.15 0 0 1 7 0 a 3.5 5.15 0 0 1 -7 0 z" id="handle-1" stroke-linejoin="round"/>
+    </g>
+    <g id="scissor-half-2" transform="matrix(-0.906308 -0.422618 -0.422618 0.906308 55.2989 13.0555)">
+      <path fill="#b6752b" stroke="#191006" stroke-width="1.5" d="m 16.05 9.9 l 0 39.6 c -3.98 -1.5 -2.655 -26.5 -3.85 -39.6 l 3.85 0 z" id="blade-2" stroke-linejoin="round"/>
+      <path fill="#d9a05e" stroke="#191006" stroke-width="2" d="m 0 9.9 a 3.96 3.3 90 0 0 16.5 0 a 3.96 3.3 90 0 0 -16.5 0 m 4.75 0 a 3.5 5.15 0 0 1 7 0 a 3.5 5.15 0 0 1 -7 0 z" id="handle-2" stroke-linejoin="round"/>
+    </g>
+    <circle fill="#e2b683" stroke="#191006" stroke-width="0.75" cx="32" cy="28.75" r="1.5" id="pivot-point"/>
+  </g>
+</svg>

@@ -1,0 +1,12 @@
+<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+  <!-- Created with SVG-edit - https://github.com/SVG-Edit/svgedit-->
+  <g class="layer">
+    <title>Layer 1</title>
+    <path fill="#4f9be8" stroke="#040f1b" stroke-width="3" d="m16.18,20.82l11.18,-11.18l20.45,0l0,44.73l-31.63,0l0,-33.54z" id="paper-outline" stroke-linejoin="round"/>
+    <path fill="#1a70c7" stroke="#040f1b" stroke-width="3" d="m16.18,20.82l11.18,0l0,-11.18z" id="paper-fold" stroke-linejoin="round"/>
+    <line fill="none" stroke="#040f1b" stroke-width="3" stroke-linecap="round" x1="24" y1="28" x2="40" y2="28" id="line-1"/>
+    <line fill="none" stroke="#040f1b" stroke-width="3" stroke-linecap="round" x1="24" y1="34" x2="40" y2="34" id="line-2"/>
+    <line fill="none" stroke="#040f1b" stroke-width="3" stroke-linecap="round" x1="24" y1="40" x2="40" y2="40" id="line-3"/>
+    <line fill="none" stroke="#040f1b" stroke-width="3" stroke-linecap="round" x1="24" y1="46" x2="40" y2="46" id="line-4"/>
+  </g>
+</svg>

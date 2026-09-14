@@ -24,6 +24,7 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.svg': 'image/svg+xml',
   '.json': 'application/json',
+  '.webp': 'image/webp',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
   '.mp3': 'audio/mpeg',
@@ -43,6 +44,7 @@ const PUBLIC_ASSETS = new Map([
   ['/profile', 'index.html'],
   ['/rating-stats', 'index.html'],
   ['/watch', 'index.html'],
+  ['/about', 'about.html'],
   ['/engine.js', 'engine.js'],
   ['/app.js', 'app.js'],
   ['/style.css', 'style.css'],
@@ -59,6 +61,19 @@ const PUBLIC_ASSETS = new Map([
   ['/sound/Defeat.mp3', 'sound/Defeat.mp3'],
   ['/sound/Draw.mp3', 'sound/Draw.mp3'],
 ]);
+
+for (const assetColor of ['black', 'white', 'blue', 'orange', 'red']) {
+  for (const assetType of ['rock', 'paper', 'scissors']) {
+    const assetPath = '/assets/pieces/classic/' + assetColor + '_' + assetType + '.svg';
+    PUBLIC_ASSETS.set(assetPath, 'assets/pieces/classic/' + assetColor + '_' + assetType + '.svg');
+  }
+}
+for (const assetColor of ['blue', 'red']) {
+  for (const assetType of ['rock', 'paper', 'scissors']) {
+    const assetPath = '/assets/pieces/immortal/' + assetColor + '_' + assetType + '.webp';
+    PUBLIC_ASSETS.set(assetPath, 'assets/pieces/immortal/' + assetColor + '_' + assetType + '.webp');
+  }
+}
 
 const DEFAULT_TIMECONTROL = { initial: 300, increment: 3 }; // 5+3, in seconds
 const OTHER = { blue: 'red', red: 'blue' };
@@ -80,7 +95,7 @@ const clients = new Set();        // all open WebSocket connections (for lobby b
 const userBySocket = new WeakMap();
 const presenceBySocket = new WeakMap();
 const challenges = new Map();      // challengeId -> pending direct challenge
-const analysisInvites = new Map(); // inviteId -> pending study invitation
+const analysisInvites = new Map(); // inviteId -> pending analysis invitation
 const analysisRooms = new Map();   // analysisId -> shared analysis room
 let seekSeq = 0;
 let guestSeq = 0;
@@ -373,25 +388,45 @@ function notifyUser(userId, message) {
   }
 }
 
+function sendAnalysisSettings(ws, id, room) {
+  send(ws, {
+    type: 'analysisSettings',
+    analysisId: id,
+    syncUsers: room.syncUsers,
+    ownerMovesOnly: room.ownerMovesOnly,
+    owner: room.owner === ws,
+    shared: room.members.size > 1,
+    ownerToken: room.owner === ws ? room.ownerToken : undefined,
+  });
+}
+
+function broadcastAnalysisSettings(id, room) {
+  for (const member of room.members) sendAnalysisSettings(member, id, room);
+}
+
 function handleAnalysisJoin(ws, msg) {
   const id = typeof msg.analysisId === 'string' ? msg.analysisId.slice(0, 64) : '';
   if (!id) return;
   let room = analysisRooms.get(id);
   if (!room) {
-    room = { owner: ws, members: new Set(), state: null, syncUsers: false, ownerMovesOnly: false };
+    room = { owner: ws, ownerToken: randomToken(), members: new Set(), state: null, syncUsers: true, ownerMovesOnly: false };
     analysisRooms.set(id, room);
+  } else if (typeof msg.ownerToken === 'string' && msg.ownerToken === room.ownerToken) {
+    // The original creator may reconnect or open another tab. Invited users
+    // never receive this token, so they cannot claim creator permissions.
+    room.owner = ws;
   }
   room.members.add(ws);
-  if (room.state && room.syncUsers) send(ws, { type: 'analysisState', analysisId: id, ...room.state, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly });
-  send(ws, { type: 'analysisSettings', analysisId: id, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly, owner: room.owner === ws });
+  if (room.state && room.syncUsers) send(ws, { type: 'analysisState', analysisId: id, ...room.state, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly, shared: room.members.size > 1 });
+  broadcastAnalysisSettings(id, room);
 }
 
 function handleAnalysisSettings(ws, msg) {
   const room = analysisRooms.get(msg.analysisId);
-  if (!room || !room.members.has(ws)) return;
+  if (!room || !room.members.has(ws) || room.owner !== ws) return;
   if (typeof msg.syncUsers === 'boolean') room.syncUsers = msg.syncUsers;
-  if (room.owner === ws && typeof msg.ownerMovesOnly === 'boolean') room.ownerMovesOnly = msg.ownerMovesOnly;
-  for (const member of room.members) send(member, { type: 'analysisSettings', analysisId: msg.analysisId, syncUsers: room.syncUsers, ownerMovesOnly: room.ownerMovesOnly, owner: room.owner === member });
+  if (typeof msg.ownerMovesOnly === 'boolean') room.ownerMovesOnly = msg.ownerMovesOnly;
+  broadcastAnalysisSettings(msg.analysisId, room);
 }
 
 function handleAnalysisState(ws, msg) {
@@ -1474,10 +1509,9 @@ function handleClose(ws) {
 function leaveAnalysisRooms(ws) {
   for (const [id, room] of analysisRooms) {
     room.members.delete(ws);
-    if (room.owner === ws) {
-      room.owner = room.members.values().next().value || null;
-      if (!room.owner) analysisRooms.delete(id);
-    }
+    if (room.owner === ws) room.owner = null;
+    if (room.members.size) broadcastAnalysisSettings(id, room);
+    if (!room.members.size) analysisRooms.delete(id);
   }
 }
 
@@ -2072,6 +2106,7 @@ wss.on('connection', (ws) => {
         broadcastLobby();
         break;
       }
+      case 'lobbyRefresh': sendLobby(ws); break;
       case 'create': handleCreate(ws, msg); break;
       case 'join': handleJoin(ws, msg); break;
       case 'spectate': handleSpectate(ws, msg); break;

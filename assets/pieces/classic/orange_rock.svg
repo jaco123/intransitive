@@ -1,0 +1,10 @@
+<svg width="64" height="64" xmlns="http://www.w3.org/2000/svg" xmlns:svg="http://www.w3.org/2000/svg">
+  <!-- Created with SVG-edit - https://github.com/SVG-Edit/svgedit-->
+  <g class="layer">
+    <title>Layer 1</title>
+    <path fill="#d9a05e" stroke="none" d="m14.4,35.36a2.2,2.2 90 0 1 35.2,0a3.56,2.2 0 0 1 -35.2,0z" id="rock-background" stroke-linejoin="round"/>
+    <path fill="#b6752b" stroke="none" d="M 14.4 35.36 q 17.6 10.874 35.2 0 a 3.56 2.2 0 0 1 -35.2 0" id="shadow"/>
+    <path fill="none" stroke="#191006" stroke-width="3" d="m14.4,35.36a2.2,2.2 90 0 1 35.2,0a3.56,2.2 0 0 1 -35.2,0z" id="rock-outline" stroke-linejoin="round"/>
+    <path fill="none" stroke="#191006" stroke-width="2" d="m18.8,35.36a13.2,13.2 90 0 1 13.2,-13.2l0,0" id="highlight" stroke-linecap="round"/>
+  </g>
+</svg>

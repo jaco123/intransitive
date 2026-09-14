@@ -78,6 +78,7 @@
             <a class="discord-link" href="https://rps.henhen1227.com/bots" target="_blank" rel="noopener noreferrer">Bots</a>
             <a class="discord-link" href="https://rps2encyclopedia.netlify.app/" target="_blank" rel="noopener noreferrer">Opening Encyclopedia</a>
             <a class="discord-link" href="https://wilsonfwang.com/rps-chess" target="_blank" rel="noopener noreferrer">Engine analysis</a>
+            <a class="discord-link" href="/about">About section</a>
           </div>
         </div>
 
@@ -126,18 +127,21 @@
                 <label for="tcIncrement">Increment in seconds</label>
                 <span class="tc-val" id="tcIncrementVal">3</span>
               </div>
-              <input type="range" id="tcIncrement" min="0" max="15" step="1" value="3" />
+              <input type="range" id="tcIncrement" min="0" max="18" step="1" value="3" />
             </div>
 
             <div class="tc-presets" id="tcPresets">
               <button class="tc-preset" data-category="bullet" data-min="1" data-inc="0">1+0</button>
+              <button class="tc-preset" data-category="bullet" data-min="2" data-inc="1">2+1</button>
               <button class="tc-preset" data-category="blitz" data-min="3" data-inc="0">3+0</button>
               <button class="tc-preset" data-category="blitz" data-min="3" data-inc="2">3+2</button>
               <button class="tc-preset" data-category="blitz" data-min="5" data-inc="0">5+0</button>
               <button class="tc-preset" data-category="blitz" data-min="5" data-inc="3">5+3</button>
               <button class="tc-preset" data-category="rapid" data-min="10" data-inc="0">10+0</button>
+              <button class="tc-preset" data-category="rapid" data-min="10" data-inc="5">10+5</button>
               <button class="tc-preset" data-category="rapid" data-min="15" data-inc="10">15+10</button>
               <button class="tc-preset" data-category="classical" data-min="30" data-inc="0">30+0</button>
+              <button class="tc-preset" data-category="classical" data-min="30" data-inc="30">30+30</button>
               <button class="tc-preset" data-category="infinite" data-min="31" data-inc="0">Infinite</button>
             </div>
 
@@ -194,7 +198,7 @@
             <div class="lobby__start">
               <button class="button button-metal lobby__start__button" id="queueBtn">
                 <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="9" cy="7.5" r="3"/><circle cx="16.5" cy="9" r="2.3"/><path d="M2.5 19.5c0-3.3 2.9-5.5 6.5-5.5s6.5 2.2 6.5 5.5v.5h-13v-.5z"/><path d="M15.5 13.9c2.6.3 4.5 2.3 4.5 4.9v.7h-4"/></g></svg>
-                <span id="queueBtnLabel">Create lobby game</span>
+                <span id="queueBtnLabel">Create lobby<br />game</span>
               </button>
               <button class="button button-metal lobby__start__button" id="createBtn">
                 <svg class="lobby__start__icon" viewBox="0 0 24 24" aria-hidden="true"><g fill="currentColor"><circle cx="12" cy="7.5" r="4"/><path d="M4 20.5c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5v.5H4v-.5z"/></g></svg>
@@ -499,16 +503,17 @@
           <div class="analysis-settings-actions">
             <button id="analysisInvite" class="btn">Invite</button>
             <button id="analysisSave" class="btn">Save analysis</button>
-            <button id="analysisSaved" class="btn">Saved analysis</button>
+            <button id="analysisSaved" class="btn">Saved analyses</button>
+            <button id="analysisBoardEditor" class="btn">Board editor</button>
           </div>
-          <label class="analysis-toggle-row"><span>Sync users</span><button id="analysisSyncUsers" class="toggle-btn" type="button" aria-label="Sync users" aria-pressed="false"><span class="switch-track"><span class="switch-thumb"></span></span></button></label>
+          <label class="analysis-toggle-row"><span>Sync users</span><button id="analysisSyncUsers" class="toggle-btn active" type="button" aria-label="Sync users" aria-pressed="true"><span class="switch-track"><span class="switch-thumb"></span></span></button></label>
           <label class="analysis-toggle-row"><span>Owner moves only</span><button id="analysisOwnerOnly" class="toggle-btn" type="button" aria-label="Owner moves only" aria-pressed="false"><span class="switch-track"><span class="switch-thumb"></span></span></button></label>
           <label class="analysis-toggle-row"><span>Show coordinates</span><button id="analysisCoordinates" class="toggle-btn active" type="button" data-coordinates-board="explorerBoard" aria-label="Show coordinates" aria-pressed="true"><span class="switch-track"><span class="switch-thumb"></span></span></button></label>
           <div id="analysisInvitePanel" class="hidden">
             <div class="join-row"><input id="analysisInviteLink" class="input" readonly /><button id="analysisCopyInvite" class="btn small">Copy</button></div>
-            <div class="join-row"><input id="analysisInviteUser" class="input" placeholder="Username" /><button id="analysisSendInvite" class="btn small primary">Send</button></div>
+            <div class="join-row"><input id="analysisInviteUser" class="input" placeholder="Username" /><button id="analysisSendInvite" class="btn small">Send</button></div>
           </div>
-          <div id="analysisSavePanel" class="hidden"><div class="join-row"><input id="analysisSaveName" class="input" maxlength="80" placeholder="Analysis name" /><button id="analysisSaveConfirm" class="btn small primary">Save</button></div></div>
+          <div id="analysisSavePanel" class="hidden"><div class="join-row"><input id="analysisSaveName" class="input" maxlength="80" placeholder="Analysis name" /><button id="analysisSaveConfirm" class="btn small">Save</button></div></div>
           <div id="analysisSavedPanel" class="hidden"></div>
         </div>
         <div class="movelist-label" id="explorerHistoryLabel">Game moves</div>
@@ -592,12 +597,13 @@
       <label class="field-label" for="boardTheme">Board colors</label>
       <select id="boardTheme" class="input"><option value="default">Classic</option><option value="light">Light</option><option value="white">White</option><option value="blue">Blue</option><option value="green">Green</option></select>
       <label class="field-label" for="pieceStyle">Piece design</label>
-      <select id="pieceStyle" class="input"><option value="classic">Classic</option><option value="flat">Geometric</option><option value="outline">Hand-drawn</option><option value="mono">Badge</option><option value="shapes">Shapes</option></select>
+      <select id="pieceStyle" class="input"><option value="classic">Classic</option><option value="mythic">Mythic</option><option value="rounded">Rounded</option><option value="flat">Geometric</option><option value="outline">Hand-drawn</option><option value="mono">Badge</option><option value="shapes">Shapes</option></select>
       <label class="field-label" for="soundVolume">Volume</label>
       <div class="settings-volume-row">
         <input id="soundVolume" type="range" min="0" max="1" step="0.05" value="0.5" aria-label="Volume" />
         <output id="soundVolumeValue" for="soundVolume">50%</output>
       </div>
+      <button id="settingsLogout" type="button" class="btn danger settings-logout hidden">Log out</button>
     </div>
   </div>
 
