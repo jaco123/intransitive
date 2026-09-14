@@ -1753,7 +1753,6 @@ input[type="range"]::-moz-range-thumb {
 .stat-bar .seg.win { background: #4a86f7; }
 .stat-bar .seg.draw { background: #9b9b9b; }
 .stat-bar .seg.loss { background: #d64545; }
-.stat-bar .seg.unknown { background: #6f7785; }
 .stat-text {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1810,3 +1809,135 @@ input[type="range"]::-moz-range-thumb {
 .analysis-toggle-row .toggle-btn.active .switch-track { background: var(--primary); }
 .analysis-toggle-row .toggle-btn.active .switch-thumb { transform: translateX(18px); background: #fff; }
 .rating-stat-player-name { margin: 8px 0 0; text-align: center; color: var(--text-bright); font-family: var(--font-mono); font-weight: 700; }
+
+/* Analysis layout and statistics refinements. */
+#explorer .side {
+  width: min(44vw, 620px);
+  flex: 0 1 620px;
+  gap: 6px;
+  padding: var(--s3);
+}
+#explorer .analysis-settings {
+  display: grid;
+  gap: 6px;
+  padding: 6px 8px;
+}
+#explorer .analysis-settings-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+#explorer .analysis-settings-actions .btn {
+  min-width: 0;
+  padding: 7px 8px;
+  font-size: 12px;
+}
+#explorer .analysis-settings .join-row { gap: 5px; }
+#explorer .analysis-settings #analysisSavedPanel {
+  display: grid;
+  gap: 4px;
+}
+#explorer .analysis-settings .analysis-toggle-row { padding: 1px 0; }
+#explorer .moves.explorer-list {
+  min-height: 0;
+  max-height: 230px;
+}
+#explorer .moves li,
+#explorer .analysis-move-row {
+  min-height: 27px;
+  line-height: 27px;
+}
+#explorer .moves .num,
+#explorer .analysis-move-row .num {
+  border-right: 1px solid var(--border);
+}
+#explorer .moves li.explorer-move {
+  grid-template-columns: 2.8em minmax(150px, 1fr) minmax(260px, 2fr);
+}
+#explorer .moves li.explorer-move .move {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.move-frequency {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+#explorer .moves li.explorer-move .stat {
+  justify-content: stretch;
+  min-width: 0;
+}
+.stat-wrap {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 220px;
+  gap: 2px;
+}
+.stat-percentages {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 13px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1;
+  text-align: center;
+}
+.stat-percent {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: clip;
+}
+.stat-percent.win { color: #72a6ff; }
+.stat-percent.draw { color: #c0c0c0; }
+.stat-percent.loss { color: #ef6a6a; }
+#explorer .stat-bar {
+  min-width: 0;
+  height: 12px;
+}
+#explorer .stat-text { min-width: 3.2em; }
+
+@media (max-width: 1100px) {
+  #explorer .game-layout { flex-direction: column; align-items: center; }
+  #explorer .players-col { width: min(92vw, 620px); }
+  #explorer .side {
+    width: min(92vw, 620px);
+    flex: 0 1 auto;
+  }
+}
+@media (max-width: 560px) {
+  #explorer .moves li.explorer-move {
+    grid-template-columns: 2.8em minmax(120px, 1fr) minmax(150px, 1.3fr);
+  }
+  #explorer .moves li.explorer-move .stat { padding: 0 5px; gap: 4px; }
+  .stat-wrap { min-width: 120px; }
+  .stat-percentages { font-size: 9px; }
+}
+
+/* Keep the Game moves panel at its maximum size. */
+#explorerHistory.moves.explorer-list {
+  height: 230px;
+  min-height: 230px;
+  max-height: 230px;
+}
+
+/* Keep every result percentage readable above its corresponding bar segment. */
+#explorer .stat-percentages {
+  position: relative;
+  display: block;
+  height: 14px;
+  overflow: visible;
+}
+#explorer .stat-percent {
+  position: absolute;
+  top: 0;
+  width: max-content;
+  min-width: 0;
+  overflow: visible;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}

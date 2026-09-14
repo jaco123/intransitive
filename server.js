@@ -1450,7 +1450,6 @@ function handleClose(ws) {
   if (!slot) return;
   const g = games.get(slot.gameId);
   if (!g) return;
-
   // Directly-created games are private while waiting for the invited player.
   // Removing them on disconnect prevents a stale invite URL from becoming a
   // playable game later. Public seeks live in `queue` and are handled above.
@@ -2130,6 +2129,11 @@ function restoreActiveGames() {
     try {
       const g = hydrateActiveGame(saved);
       if (!g.id || !g.blue || !g.red) throw new Error('incomplete active game snapshot');
+      g.pausedForRestart = false;
+      g.clocks.running = g.resumeRunning || g.game.turn;
+      g.resumeRunning = null;
+      g.clocks.lastTick = Date.now();
+      g.ticker = setInterval(() => tick(g), TICK_MS);
       games.set(g.id, g);
     } catch (error) {
       console.error('Discarding invalid active game snapshot:', saved && saved.id, error.message);

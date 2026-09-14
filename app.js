@@ -1756,6 +1756,7 @@ let inboxAudioContext = null;
       case 'state':
         if (gameId && gameId !== msg.gameId) break;
         if (!gameId) activateGameChat(msg.gameId);
+        const previousHistoryLength = state && Array.isArray(state.history) ? state.history.length : null;
         state = msg;
         gameId = msg.gameId;
         myColor = msg.color;
@@ -1776,7 +1777,8 @@ let inboxAudioContext = null;
           lastMoveKey = null;
           pendingAnimationKey = null;
         }
-        if (msg.status !== 'playing' || msg.turn !== myColor) clearSelection();
+        const historyChanged = previousHistoryLength !== null && Array.isArray(msg.history) && msg.history.length !== previousHistoryLength;
+        if (msg.status !== 'playing' || msg.turn !== myColor || historyChanged) clearSelection();
         if (msg.status !== 'playing') premove = null;
         updateLink();
         const gameRoute = new URLSearchParams(location.search).has('game') || new URLSearchParams(location.search).has('spectate');
@@ -3399,6 +3401,31 @@ let inboxAudioContext = null;
     analysisBottomClockEl.textContent = clockText(blueMs);
   }
 
+  function formatExplorerPercent(value) {
+    if (!Number.isFinite(value) || value <= 0) return '0%';
+    if (value < 10) return value.toFixed(1) + '%';
+    return Math.round(value) + '%';
+  }
+
+  function layoutExplorerResultLabels(percentagesEl) {
+    if (!percentagesEl) return;
+    const labels = Array.from(percentagesEl.querySelectorAll('.stat-percent'));
+    const width = percentagesEl.clientWidth;
+    if (!width || !labels.length) return;
+    const gap = 4;
+    const halfWidths = labels.map((label) => label.getBoundingClientRect().width / 2);
+    const desired = labels.map((label) => width * (Number(label.dataset.center) || 0) / 100);
+    const positions = desired.map((center, i) => Math.max(halfWidths[i], Math.min(width - halfWidths[i], center)));
+    for (let i = 1; i < positions.length; i++) {
+      positions[i] = Math.max(positions[i], positions[i - 1] + halfWidths[i - 1] + halfWidths[i] + gap);
+    }
+    const rightOverflow = positions[positions.length - 1] + halfWidths[halfWidths.length - 1] - width;
+    if (rightOverflow > 0) positions.forEach((_, i) => { positions[i] -= rightOverflow; });
+    const leftOverflow = halfWidths[0] - positions[0];
+    if (leftOverflow > 0) positions.forEach((_, i) => { positions[i] += leftOverflow; });
+    labels.forEach((label, i) => { label.style.left = (positions[i] / width * 100) + '%'; });
+  }
+
   function renderExplorerMoves() {
     explorerMovesEl.innerHTML = '';
     explorerOpeningLabelEl.classList.remove('hidden');
@@ -3422,8 +3449,12 @@ let inboxAudioContext = null;
 
     const rows = allMoves.map((m) => {
       const s = moveStringFor(m);
-      const st = stats.get(s) || { move: s, games: 0, wins: 0, draws: 0, losses: 0 };
-      return { move: s, fromC: m.fromC, fromR: m.fromR, toC: m.toC, toR: m.toR, capture: m.capture, games: st.games, wins: st.wins, draws: st.draws, losses: st.losses };
+      const st = stats.get(s) || {};
+      const games = Number(st.games) || 0;
+      const wins = Number(st.wins) || 0;
+      const draws = Number(st.draws) || 0;
+      const losses = Number(st.losses) || 0;
+      return { move: s, fromC: m.fromC, fromR: m.fromR, toC: m.toC, toR: m.toR, capture: m.capture, games, wins, draws, losses };
     });
 
     // Sort: played moves first (by games desc), then unplayed moves in square order.
@@ -3445,7 +3476,8 @@ let inboxAudioContext = null;
 
       const moveEl = document.createElement('span');
       moveEl.className = 'move';
-      moveEl.textContent = row.move;
+      const moveFrequency = explorer.totalGames > 0 ? (row.games / explorer.totalGames) * 100 : 0;
+      moveEl.innerHTML = escapeHtml(row.move) + '<small class="move-frequency">' + formatExplorerPercent(moveFrequency) + '</small>';
       li.appendChild(moveEl);
 
       const statEl = document.createElement('span');
@@ -3455,13 +3487,18 @@ let inboxAudioContext = null;
         const winPct = (row.wins / total) * 100;
         const drawPct = (row.draws / total) * 100;
         const lossPct = (row.losses / total) * 100;
-        const unknownPct = Math.max(0, 100 - winPct - drawPct - lossPct);
         statEl.innerHTML =
-          '<span class="stat-bar" title="' + row.games + ' games: ' + row.wins + ' wins, ' + row.draws + ' draws, ' + row.losses + ' losses' + (unknownPct > 0 ? ', unfinished or unclassified' : '') + '">' +
-            '<span class="seg win" style="flex:' + winPct + ' 1 0"></span>' +
-            '<span class="seg draw" style="flex:' + drawPct + ' 1 0"></span>' +
-            '<span class="seg loss" style="flex:' + lossPct + ' 1 0"></span>' +
-            '<span class="seg unknown" style="flex:' + unknownPct + ' 1 0"></span>' +
+          '<span class="stat-wrap">' +
+            '<span class="stat-percentages">' +
+              '<span class="stat-percent win" data-center="' + (winPct / 2) + '">' + formatExplorerPercent(winPct) + '</span>' +
+              '<span class="stat-percent draw" data-center="' + (winPct + drawPct / 2) + '">' + formatExplorerPercent(drawPct) + '</span>' +
+              '<span class="stat-percent loss" data-center="' + (winPct + drawPct + lossPct / 2) + '">' + formatExplorerPercent(lossPct) + '</span>' +
+            '</span>' +
+            '<span class="stat-bar">' +
+              '<span class="seg win" style="flex:' + winPct + ' 1 0"></span>' +
+              '<span class="seg draw" style="flex:' + drawPct + ' 1 0"></span>' +
+              '<span class="seg loss" style="flex:' + lossPct + ' 1 0"></span>' +
+            '</span>' +
           '</span>' +
           '<span class="stat-text">' + row.games + '</span>';
       } else {
@@ -3470,6 +3507,7 @@ let inboxAudioContext = null;
       li.appendChild(statEl);
 
       explorerMovesEl.appendChild(li);
+      layoutExplorerResultLabels(statEl.querySelector('.stat-percentages'));
     }
   }
 
@@ -3746,7 +3784,6 @@ let inboxAudioContext = null;
   privateCancelBtn.addEventListener('click', () => {
     cancelPrivateGame();
   });
-
   joinBtn.addEventListener('click', () => {
     homeErrorEl.classList.add('hidden');
     const id = extractGameId(joinInput.value);
@@ -3866,7 +3903,6 @@ let inboxAudioContext = null;
   cancelPrivateGameBtn.addEventListener('click', () => {
     cancelPrivateGame();
   });
-
   if (spectateRematchBtn) spectateRematchBtn.addEventListener('click', () => {
     if (spectatorRematchGameId) spectateGame(spectatorRematchGameId);
   });
@@ -3995,11 +4031,22 @@ let inboxAudioContext = null;
     const action = button.dataset.moveAction;
     stepAnalysis(action === 'first' || action === 'prev' ? -1 : 1, action === 'first' || action === 'last');
   });
-  document.querySelectorAll('[data-coordinates-board]').forEach((input) => {
-    input.addEventListener('change', () => {
-      const board = document.getElementById(input.dataset.coordinatesBoard);
-      if (board) board.classList.toggle('hide-coordinates', !input.checked);
-    });
+  document.querySelectorAll('[data-coordinates-board]').forEach((control) => {
+    const board = document.getElementById(control.dataset.coordinatesBoard);
+    if (!board) return;
+    const setShown = (shown) => {
+      board.classList.toggle('hide-coordinates', !shown);
+      if (control.matches('button')) {
+        control.classList.toggle('active', shown);
+        control.setAttribute('aria-pressed', String(shown));
+      }
+    };
+    if (control.matches('input')) {
+      control.addEventListener('change', () => setShown(control.checked));
+    } else {
+      setShown(!board.classList.contains('hide-coordinates'));
+      control.addEventListener('click', () => setShown(board.classList.contains('hide-coordinates')));
+    }
   });
 
   // In-game move list: click to jump, wheel to step through moves.
@@ -4020,6 +4067,9 @@ let inboxAudioContext = null;
   }, { passive: false });
 
   // Left/right arrow keys navigate moves in-game and in analysis.
+  window.addEventListener('resize', () => {
+    document.querySelectorAll('#explorer .stat-percentages').forEach(layoutExplorerResultLabels);
+  });
   window.addEventListener('keydown', (e) => {
     if (e.target && e.target.closest && e.target.closest('input, textarea, select')) return;
     if (e.altKey || e.ctrlKey || e.metaKey) return;
@@ -4140,7 +4190,7 @@ let inboxAudioContext = null;
   const openGamePlayerProfile = (color) => {
     if (!state || !state.players[color]) return;
     const player = state.players[color];
-    if (!player.guest && player.name) loadPlayerProfile(player.name);
+    if (!player.guest && !player.ai && player.name) loadPlayerProfile(player.name);
   };
   playerNameEl.addEventListener('click', () => {
     if (state && state.spectating) openGamePlayerProfile(myColor || 'blue');

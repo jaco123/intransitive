@@ -55,11 +55,12 @@ function importGame(source, index, now) {
     history.push(recorded);
   }
 
-  let result = sourceResult(source.result);
-  let reason = result ? 'imported' : 'imported-unfinished';
-  if (game.status === 'blue_won') { result = 'blue'; reason = 'goal'; }
-  else if (game.status === 'red_won') { result = 'red'; reason = 'goal'; }
-  else if (game.status === 'draw') { result = 'draw'; reason = game.drawReason || 'draw'; }
+  // Only source games with an explicit result belong in the database.
+  // Imported move lists use different terminal rules, so there is no
+  // fallback result and no result-less game import path.
+  const result = sourceResult(source.result);
+  if (!result) return { skipped: true, historyLength: 0, sourceMoves: sourceMoves.length };
+  const reason = 'imported';
   const id = 'imp_' + crypto.createHash('sha256').update(JSON.stringify(source)).digest('hex').slice(0, 20);
   const createdAt = now - (sourceGames.length - index) * 1000;
   const finishedAt = Math.min(now, createdAt + Math.max(1000, Math.min(1800000, history.length * 1000)));
@@ -76,12 +77,12 @@ function importGame(source, index, now) {
 
 const importAll = db.transaction(() => {
   const now = Date.now();
-  const stats = { rows: 0, moves: 0, unfinished: 0, truncated: 0 };
+  const stats = { rows: 0, moves: 0, skipped: 0, truncated: 0 };
   sourceGames.forEach((source, index) => {
     const imported = importGame(source, index, now);
+    if (imported.skipped) { stats.skipped++; return; }
     stats.rows++;
     stats.moves += imported.historyLength;
-    if (!imported.result) stats.unfinished++;
     if (imported.historyLength < imported.sourceMoves) stats.truncated++;
   });
   return stats;
